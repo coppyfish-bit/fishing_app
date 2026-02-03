@@ -184,20 +184,56 @@ if df is not None:
                         fish_place = row.get('場所', '不明')
                         fish_lure = row.get('ルアー', '-')
 
+                        # --- 修正版：どんな写真でも文字を上に載せる設定 ---
                         overlay_html = f"""
-                        <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.3); margin-bottom: 25px; font-family: sans-serif;">
-                            <img src="data:image/jpeg;base64,{b64_img}" style="width: 100%; display: block;">
-                            <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.9)); color: white; padding: 20px 15px;">
-                                <div style="font-size: 1.4em; font-weight: bold; margin-bottom: 5px;">
-                                    {fish_name} <span style="font-size: 0.8em;">{fish_size}cm</span>
-                                </div>
-                                <div style="font-size: 0.9em; opacity: 0.8; line-height: 1.4;">
-                                    📅 {fish_date} <br>
+                        <style>
+                            .container {{
+                                position: relative;
+                                width: 100%;
+                                font-family: sans-serif;
+                                margin-bottom: 20px;
+                            }}
+                            .fish-image {{
+                                width: 100%;
+                                display: block;
+                                border-radius: 15px;
+                                box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+                            }}
+                            .overlay-content {{
+                                position: absolute;
+                                bottom: 0;
+                                left: 0;
+                                right: 0;
+                                background: linear-gradient(transparent, rgba(0,0,0,0.85));
+                                color: white;
+                                padding: 25px 15px 15px 15px;
+                                border-radius: 0 0 15px 15px;
+                            }}
+                            .title {{
+                                font-size: 24px;
+                                font-weight: bold;
+                                margin-bottom: 5px;
+                                text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+                            }}
+                            .info {{
+                                font-size: 14px;
+                                opacity: 0.9;
+                                line-height: 1.5;
+                            }}
+                        </style>
+                        <div class="container">
+                            <img src="data:image/jpeg;base64,{b64_img}" class="fish-image">
+                            <div class="overlay-content">
+                                <div class="title">{fish_name} {fish_size}cm</div>
+                                <div class="info">
+                                    📅 {fish_date}<br>
                                     📍 {fish_place} / 🎣 {fish_lure}
                                 </div>
                             </div>
                         </div>
                         """
+                        # 枠の高さを自動調整させるため、少し余裕を持たせるか、スクロールバーを消す
+                        st.components.v1.html(overlay_html, height=500, scrolling=False)
                         st.components.v1.html(overlay_html, height=450)
                         
                     except Exception as e:
@@ -913,6 +949,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
