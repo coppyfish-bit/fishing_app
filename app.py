@@ -34,6 +34,15 @@ def load_data_from_gs():
         df["全長_cm"] = pd.to_numeric(df["全長_cm"], errors='coerce')
     # df["場所"] = df["場所"].fillna("未設定")  # 必要なら追加
     return df
+    # --- 計算用の安全な関数を追加 ---
+def calc_elapsed_v2(r):
+    try:
+        # datetimeと直前の満潮_時刻が両方存在し、かつ計算可能な場合のみ実行
+        if pd.notna(r['datetime']) and pd.notna(r['直前の満潮_時刻']):
+            return (r['datetime'] - r['直前の満潮_時刻']).total_seconds() / 60 % 744
+    except:
+        pass
+    return 0 # エラーや空データの場合は0を返す
 
 def save_all(df, m_df):
     # スプレッドシートを更新（上書き）
@@ -815,6 +824,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
