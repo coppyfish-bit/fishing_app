@@ -283,10 +283,31 @@ if df is not None:
         if stats_df.empty:
             st.info("統計用の釣果データがまだありません。")
         else:
+           else:
+            # --- ここから書き換え ---
+            # 1. 計算の前に日付型へ強制変換（スプレッドシートからの読み込み対策）
+            stats_df['datetime'] = pd.to_datetime(stats_df['datetime'], errors='coerce')
+            # 潮汐データがない行でもエラーにならないよう、存在する列だけ変換
+            if '直前の満潮_時刻' in stats_df.columns:
+                stats_df['直前の満潮_時刻'] = pd.to_datetime(stats_df['直前の満潮_時刻'], errors='coerce')
+
+            # 2. .dt.month などの処理を安全に行う
             stats_df['月'] = stats_df['datetime'].dt.month
             stats_df['潮時ステップ'] = stats_df.apply(calc_tide_step, axis=1)
-            stats_df['elapsed_mins'] = stats_df.apply(lambda r: (r['datetime'] - r['直前の満潮_時刻']).total_seconds()/60 % 744, axis=1)
-            
+
+            # 3. エラーが出ていた計算式（空データや型違いをガードする）
+            def calc_elapsed(r):
+                try:
+                    # 両方の時刻が存在する場合のみ計算
+                    if pd.notna(r['datetime']) and pd.notna(r['直前の満潮_時刻']):
+                        return (r['datetime'] - r['直前の満潮_時刻']).total_seconds() / 60 % 744
+                except:
+                    pass
+                return 0
+
+            stats_df['elapsed_mins'] = stats_df.apply(calc_elapsed, axis=1)
+            # --- ここまで書き換え ---
+
             selected_p = st.selectbox("分析ターゲットを選択", ["すべての場所"] + place_options, key="final_refined_report_p")
             f_df = stats_df if selected_p == "すべての場所" else stats_df[stats_df["場所"] == selected_p]
 
@@ -791,6 +812,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
