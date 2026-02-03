@@ -12,22 +12,31 @@ import base64
 import requests
 
 def get_image_for_display(file_val):
-    """URLならURLを、ファイル名ならパスを、何もないならNoneを返す"""
-    if pd.isna(file_val) or str(file_val) == "":
+    if pd.isna(file_val) or str(file_val).strip() == "":
         return None
-    
-    val_str = str(file_val)
-    
-    # GoogleドライブのURLだった場合
+    val_str = str(file_val).strip()
+
+    # GoogleドライブのURL判定
     if "drive.google.com" in val_str:
+        file_id = ""
         try:
             if "/d/" in val_str:
-                fid = val_str.split('/d/')[1].split('/')[0]
-            else:
-                fid = val_str.split('id=')[1].split('&')[0]
-            return f"https://lh3.googleusercontent.com/u/0/d/{fid}"
+                file_id = val_str.split('/d/')[1].split('/')[0]
+            elif "id=" in val_str:
+                file_id = val_str.split('id=')[1].split('&')[0]
+            
+            if file_id:
+                # プレビュー用URLを作成（これが一番安定して表示されます）
+                return f"https://drive.google.com/uc?export=view&id={file_id}"
         except:
-            return val_str
+            return None
+
+    # ローカルファイル判定（今までの images フォルダ用）
+    local_path = os.path.join(PHOTO_DIR, val_str)
+    if os.path.exists(local_path):
+        return local_path
+    
+    return None
             
     # 普通のファイル名だった場合（GitHub内の images フォルダを探す）
     local_path = os.path.join(PHOTO_DIR, val_str)
@@ -126,15 +135,14 @@ if df is not None:
             with st.container(border=True):
                 c1, c2 = st.columns([1, 2])
                 with c1:
-                    # 実際にシートから何を読み込んでいるか画面に出して確認
-                    val_in_sheet = row["filename"] 
-                    st.write(f"読み込み中: {val_in_sheet}") # ←これを入れてください
-                    
-                    img_source = get_image_for_display(val_in_sheet)
+                    img_source = get_image_for_display(row["filename"])
                     if img_source:
+                        # 確実に表示するため、エラーが起きたら警告を出す設定
                         st.image(img_source, use_container_width=True)
                     else:
-                        st.info("画像なし")
+                        st.info("画像URLまたはファイルが見つかりません")
+                        # デバッグ用（あとで消してOK）
+                        # st.write(f"判定されたソース: {img_source}")
                 with c2:
                     with st.form(key=f"edit_{idx}"):
                         f_fish = st.text_input("魚種", value=row["魚種"])
@@ -892,6 +900,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
