@@ -150,7 +150,7 @@ if df is not None:
         suzuki_df = df[(df["場所"] == target_place) & (df["魚種"].str.contains("スズキ|シーバス", na=False))].copy()
         
         if not suzuki_df.empty:
-suzuki_df['elapsed_mins'] = suzuki_df.apply(calc_elapsed_v2, axis=1)
+　　　　　　 suzuki_df['elapsed_mins'] = suzuki_df.apply(calc_elapsed_v2, axis=1)
             suzuki_df['elapsed_mins'] = suzuki_df.apply(lambda r: (r['datetime'] - r['直前の満潮_時刻']).total_seconds()/60 % 744, axis=1)
             x_curve = np.linspace(0, 720, 100)
             y_curve = np.cos(2 * np.pi * x_curve / 720) * 130 + 180
@@ -812,6 +812,7 @@ suzuki_df['elapsed_mins'] = suzuki_df.apply(calc_elapsed_v2, axis=1)
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
