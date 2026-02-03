@@ -50,7 +50,7 @@ def save_all(df, m_df):
 log_mtime = os.path.getmtime(LOG_CSV) if os.path.exists(LOG_CSV) else 0
 master_mtime = os.path.getmtime(MASTER_CSV) if os.path.exists(MASTER_CSV) else 0
 
-df = load_data(LOG_CSV, log_mtime)
+df = load_data_from_gs()
 m_df = load_master(MASTER_CSV, master_mtime)
 
 if df is not None:
@@ -792,4 +792,5 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
