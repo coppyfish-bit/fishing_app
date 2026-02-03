@@ -124,12 +124,11 @@ if df is not None:
                 with c1:
                     img_source = get_image_for_display(row["filename"])
                     if img_source:
-                        # 確実に表示するため、エラーが起きたら警告を出す設定
+                        # 画像の下にURLを直接表示して、クリックできるか確認する
                         st.image(img_source, use_container_width=True)
+                        st.caption(f"[画像リンク]({img_source})") 
                     else:
-                        st.info("画像URLまたはファイルが見つかりません")
-                        # デバッグ用（あとで消してOK）
-                        # st.write(f"判定されたソース: {img_source}")
+                        st.info("画像が見つかりません")
                 with c2:
                     with st.form(key=f"edit_{idx}"):
                         f_fish = st.text_input("魚種", value=row["魚種"])
@@ -887,6 +886,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
