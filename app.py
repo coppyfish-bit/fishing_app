@@ -154,93 +154,51 @@ if df is not None:
         available_cols = [c for c in ["datetime", "場所", "魚種", "全長_cm", "潮名", "天気", "ルアー"] if c in df.columns]
         st.dataframe(df[available_cols].sort_values("datetime", ascending=False), use_container_width=True, hide_index=True)
 
-    with tab3:
-        st.header("釣果ギャラリー")
+    # --- タブ3：ギャラリー表示（データ満載版） ---
+        for index, row in filtered_df.iterrows():
+            img_source = get_image_for_display(row["filename"])
+            
+            # 基本データの取得
+            fish_name = row.get('魚種', '不明')
+            fish_size = row.get('全長_cm', '-')
+            fish_date = row.get('datetime', '-')
+            fish_place = row.get('場所', '不明')
 
-        if df.empty:
-            st.info("データがありません。登録タブからデータを追加してください。")
-        else:
-            filtered_df = df.iloc[::-1]
-
-            for index, row in filtered_df.iterrows():
-                # 実際の列名「filename」を使用
-                img_source = get_image_for_display(row["filename"])
-                
+            with st.container(border=True):
                 if img_source:
-                    try:
-                        if str(img_source).startswith("http"):
-                            response = requests.get(img_source, timeout=10)
-                            img_data = response.content
-                        else:
-                            with open(img_source, "rb") as f:
-                                img_data = f.read()
-                        
-                        b64_img = base64.b64encode(img_data).decode()
-                        
-                        # --- 列名を実際のデータに合わせて修正 ---
-                        fish_name = row.get('魚種', '不明')
-                        fish_size = row.get('全長_cm', '-')
-                        fish_date = row.get('datetime', '-')
-                        fish_place = row.get('場所', '不明')
-                        fish_lure = row.get('ルアー', '-')
+                    st.image(img_source, use_container_width=True)
+                    
+                    # 1. メイン情報
+                    st.markdown(f"### {fish_name} {fish_size}cm")
+                    st.caption(f"📅 {fish_date} 📍 {fish_place}")
 
-                        # --- 修正版：どんな写真でも文字を上に載せる設定 ---
-                        overlay_html = f"""
-                        <style>
-                            .container {{
-                                position: relative;
-                                width: 100%;
-                                font-family: sans-serif;
-                                margin-bottom: 20px;
-                            }}
-                            .fish-image {{
-                                width: 100%;
-                                display: block;
-                                border-radius: 15px;
-                                box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-                            }}
-                            .overlay-content {{
-                                position: absolute;
-                                bottom: 0;
-                                left: 0;
-                                right: 0;
-                                background: linear-gradient(transparent, rgba(0,0,0,0.85));
-                                color: white;
-                                padding: 25px 15px 15px 15px;
-                                border-radius: 0 0 15px 15px;
-                            }}
-                            .title {{
-                                font-size: 24px;
-                                font-weight: bold;
-                                margin-bottom: 5px;
-                                text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-                            }}
-                            .info {{
-                                font-size: 14px;
-                                opacity: 0.9;
-                                line-height: 1.5;
-                            }}
-                        </style>
-                        <div class="container">
-                            <img src="data:image/jpeg;base64,{b64_img}" class="fish-image">
-                            <div class="overlay-content">
-                                <div class="title">{fish_name} {fish_size}cm</div>
-                                <div class="info">
-                                    📅 {fish_date}<br>
-                                    📍 {fish_place} / 🎣 {fish_lure}
-                                </div>
-                            </div>
-                        </div>
-                        """
-                        # 枠の高さを自動調整させるため、少し余裕を持たせるか、スクロールバーを消す
-                        st.components.v1.html(overlay_html, height=500, scrolling=False)
-                        st.components.v1.html(overlay_html, height=450)
-                        
-                    except Exception as e:
-                        st.error(f"画像の表示に失敗しました: {e}")
+                    # 2. 気象条件（2列でコンパクトに表示）
+                    st.markdown("---")
+                    st.markdown("**🌡️ 気象コンディション**")
+                    w1, w2, w3 = st.columns(3)
+                    w1.metric("気温", f"{row.get('気温', '-')}℃")
+                    w2.metric("風速", f"{row.get('風速', '-')}m/s", row.get('風向', ''))
+                    w3.metric("天気", f"{row.get('天気', '-')}")
+
+                    # 3. 潮汐データ（タイドグラフの代わりになる詳細数値）
+                    st.markdown("**🌊 潮汐・タイドデータ**")
+                    t1, t2 = st.columns(2)
+                    with t1:
+                        st.write(f"**潮名:** {row.get('潮名', '-')}")
+                        st.write(f"**月齢:** {row.get('月齢', '-')}")
+                        st.write(f"**フェーズ:** {row.get('潮位フェーズ', '-')}")
+                    with t2:
+                        st.write(f"**満潮:** {row.get('直前の満潮_時刻', '-')}")
+                        st.write(f"**干潮:** {row.get('直前の干潮_時刻', '-')}")
+                        st.write(f"**潮位:** {row.get('潮位_cm', '-')} cm")
+
+                    # 4. 備考・ルアー
+                    if pd.notna(row.get('備考')):
+                        st.info(f"📝 {row.get('備考')}")
+                    st.caption(f"🎣 使用ルアー: {row.get('ルアー', '-')}")
+
                 else:
-                    st.warning(f"画像なし: {row.get('魚種', '不明')} ({row.get('datetime', '-')})")
-                    st.divider()
+                    st.warning(f"画像が見つかりません: {fish_name}")
                     
     # --- タブ4: 攻略メモリー ---
     with tab4:
@@ -949,6 +907,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
