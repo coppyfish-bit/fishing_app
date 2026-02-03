@@ -283,7 +283,6 @@ if df is not None:
         if stats_df.empty:
             st.info("統計用の釣果データがまだありません。")
         else:
-           else:
             # --- ここから書き換え ---
             # 1. 計算の前に日付型へ強制変換（スプレッドシートからの読み込み対策）
             stats_df['datetime'] = pd.to_datetime(stats_df['datetime'], errors='coerce')
@@ -812,6 +811,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
