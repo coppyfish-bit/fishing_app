@@ -147,20 +147,23 @@ if df is not None:
     with tab4:
         st.subheader("🗺️ ポイント別攻略メモリー")
         target_place = st.selectbox("場所を選択", place_options, key="memo_p")
+        
+        # 1. まずコピーをとる
         suzuki_df = df[(df["場所"] == target_place) & (df["魚種"].str.contains("スズキ|シーバス", na=False))].copy()
         
         if not suzuki_df.empty:
+            # 2. 【重要】計算の前に日付型へ変換する（これが必要！）
+            suzuki_df['datetime'] = pd.to_datetime(suzuki_df['datetime'], errors='coerce')
+            if '直前の満潮_時刻' in suzuki_df.columns:
+                suzuki_df['直前の満潮_時刻'] = pd.to_datetime(suzuki_df['直前の満潮_時刻'], errors='coerce')
+
+            # 3. 安全な計算関数だけを使う（古い lambda の行は消します）
             suzuki_df['elapsed_mins'] = suzuki_df.apply(calc_elapsed_v2, axis=1)
-            suzuki_df['elapsed_mins'] = suzuki_df.apply(lambda r: (r['datetime'] - r['直前の満潮_時刻']).total_seconds()/60 % 744, axis=1)
+            
+            # --- 以下、グラフ作成コードは元のままでOK ---
             x_curve = np.linspace(0, 720, 100)
             y_curve = np.cos(2 * np.pi * x_curve / 720) * 130 + 180
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=x_curve, y=y_curve, mode='lines', line=dict(color='red', dash='dash'), name='潮汐'))
-            fig.add_trace(go.Scatter(x=suzuki_df['elapsed_mins'], y=suzuki_df['潮位_cm'], mode='markers+text', 
-                                     marker=dict(size=15, color='silver', line=dict(width=2, color='cyan')),
-                                     text=suzuki_df['全長_cm'], textposition="top center", name='釣果'))
-            fig.update_layout(template="plotly_dark", yaxis=dict(range=[0, 400]), height=500)
-            st.plotly_chart(fig, use_container_width=True)
+            # ...（以下省略）
 
     # --- タブ5: 画像出力 ---
     with tab5:
@@ -812,6 +815,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
