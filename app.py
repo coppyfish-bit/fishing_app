@@ -126,8 +126,11 @@ if df is not None:
             with st.container(border=True):
                 c1, c2 = st.columns([1, 2])
                 with c1:
-                    # ここの字下げ（スペース4つ分）が重要です！
-                    img_source = get_image_for_display(row["filename"])
+                    # 実際にシートから何を読み込んでいるか画面に出して確認
+                    val_in_sheet = row["filename"] 
+                    st.write(f"読み込み中: {val_in_sheet}") # ←これを入れてください
+                    
+                    img_source = get_image_for_display(val_in_sheet)
                     if img_source:
                         st.image(img_source, use_container_width=True)
                     else:
@@ -889,6 +892,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
