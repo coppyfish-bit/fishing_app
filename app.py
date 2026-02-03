@@ -18,12 +18,17 @@ def get_image_for_display(file_val):
     val_str = str(file_val).strip()
 
     if "drive.google.com" in val_str:
-        # 共有いただいたURLからID「10PKvg8VaK3jSE6NRvBEN4fFcI-j9yWai」を抜き出す
         match = re.search(r'[-\w]{25,}', val_str)
         if match:
             file_id = match.group(0)
-            # プレビュー表示用のURLを生成
-            return f"https://drive.google.com/uc?id={file_id}"
+            # 【ここを修正】uc?id= ではなく thumbnail リンクを使用します
+            # sz=w1000 とすることで、高画質な画像を取得できます
+            return f"https://drive.google.com/thumbnail?id={file_id}&sz=w1000"
+    
+    local_path = os.path.join(PHOTO_DIR, val_str)
+    if os.path.exists(local_path):
+        return local_path
+    return None
     
     # URLでない場合はローカルフォルダを探す
     local_path = os.path.join(PHOTO_DIR, val_str)
@@ -886,6 +891,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
