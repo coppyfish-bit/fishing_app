@@ -50,7 +50,7 @@ log_mtime = os.path.getmtime(LOG_CSV) if os.path.exists(LOG_CSV) else 0
 master_mtime = os.path.getmtime(MASTER_CSV) if os.path.exists(MASTER_CSV) else 0
 
 df = load_data_from_gs()
-m_df = pd.read_csv("group_place_master.csv"))
+m_df = pd.read_csv("group_place_master.csv")
 
 if df is not None:
     # 61行目：ここを if の中に入れるか、if の外に出すか確認してください
@@ -791,6 +791,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
