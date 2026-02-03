@@ -5,3 +5,5 @@ plotly
 Pillow
 kaleido
 statsmodels
+st-gsheets-connection
+gspread
