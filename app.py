@@ -17,21 +17,22 @@ MASTER_CSV = "group_place_master.csv"
 PHOTO_DIR = "input_photos"
 
 # --- 2. スプレッドシート連携の設定 ---
-# スプレッドシートのURL（「リンクを知っている全員が閲覧・編集可」に設定したもの）
-# ※ここをご自身のシートURLに書き換えてください
 SHEET_URL = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_FcoS8gFFyE/"
+
+# 【重要！】この一行が抜けているか、関数の「中」に入っていませんか？
+# 関数の「外」に置いておく必要があります。
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=600)
 def load_data_from_gs():
-    # worksheet="シート1" を消して、自動認識に任せます
-    df = conn.read(spreadsheet=SHEET_URL)
+    # ここで conn を使います
+    df = conn.read(spreadsheet=SHEET_URL) 
     
-    # 日付や数値の型変換（これまでの処理を継続）
     if "datetime" in df.columns:
         df["datetime"] = pd.to_datetime(df["datetime"], errors='coerce')
     if "全長_cm" in df.columns:
         df["全長_cm"] = pd.to_numeric(df["全長_cm"], errors='coerce')
-    df["場所"] = df["場所"].fillna("未設定")
+    # df["場所"] = df["場所"].fillna("未設定")  # 必要なら追加
     return df
 
 def save_all(df, m_df):
@@ -790,6 +791,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
