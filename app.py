@@ -10,6 +10,8 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import base64
 import requests
+from io import BytesIO
+import base64
 import re
 
 def get_image_for_display(file_val):
@@ -891,6 +893,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
