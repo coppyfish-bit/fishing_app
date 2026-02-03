@@ -154,37 +154,60 @@ if df is not None:
         available_cols = [c for c in ["datetime", "場所", "魚種", "全長_cm", "潮名", "天気", "ルアー"] if c in df.columns]
         st.dataframe(df[available_cols].sort_values("datetime", ascending=False), use_container_width=True, hide_index=True)
 
-    # --- タブ3: ギャラリー ---
-    # ギャラリー表示部分の書き換え例
-        for index, row in filtered_df.iterrows():
-            img_source = get_image_for_display(row["filename"])
-            
-            if img_source:
-                try:
-                    # URLまたはパスから画像を読み込む
-                    if str(img_source).startswith("http"):
-                        response = requests.get(img_source)
-                        img_data = response.content
-                    else:
-                        with open(img_source, "rb") as f:
-                            img_data = f.read()
-                    
-                    # Base64変換（オーバーレイ表示に必要）
-                    b64_img = base64.b64encode(img_data).decode()
-                    
-                    # 精密データオーバーレイのHTML
-                    overlay_html = f"""
-                    <div style="position: relative; width: 100%; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.3); margin-bottom: 20px;">
-                        <img src="data:image/jpeg;base64,{b64_img}" style="width: 100%; display: block;">
-                        <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.8)); color: white; padding: 15px; font-family: sans-serif;">
-                            <div style="font-size: 1.2em; font-weight: bold;">{row['fish_type']} {row['size']}cm</div>
-                            <div style="font-size: 0.8em; opacity: 0.9;">{row['date']} / {row['point_name']}</div>
+    with tab3:
+        st.header("釣果ギャラリー")
+
+        # 1. データの準備（dfが読み込まれている前提です）
+        if df.empty:
+            st.info("データがありません。登録タブからデータを追加してください。")
+        else:
+            # 最新の釣果を上に表示するために逆順にする（お好みで）
+            filtered_df = df.iloc[::-1]
+
+            # 2. ギャラリー表示（1件ずつループ）
+            for index, row in filtered_df.iterrows():
+                # GoogleドライブURLまたはローカルパスを取得
+                img_source = get_image_for_display(row["filename"])
+                
+                if img_source:
+                    try:
+                        # URLまたはパスから画像バイナリデータを取得
+                        if str(img_source).startswith("http"):
+                            response = requests.get(img_source, timeout=10)
+                            img_data = response.content
+                        else:
+                            with open(img_source, "rb") as f:
+                                img_data = f.read()
+                        
+                        # Base64形式に変換
+                        b64_img = base64.b64encode(img_data).decode()
+                        
+                        # 精密データオーバーレイのHTML/CSS
+                        # 写真の上にグラデーションをかけて文字を読みやすくしています
+                        overlay_html = f"""
+                        <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.3); margin-bottom: 25px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
+                            <img src="data:image/jpeg;base64,{b64_img}" style="width: 100%; display: block;">
+                            <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.9)); color: white; padding: 20px 15px;">
+                                <div style="font-size: 1.4em; font-weight: bold; margin-bottom: 5px;">
+                                    {row['fish_type']} <span style="font-size: 0.8em;">{row['size']}cm</span>
+                                </div>
+                                <div style="font-size: 0.9em; opacity: 0.8; line-height: 1.4;">
+                                    📅 {row['date']} <br>
+                                    📍 {row['point_name']}
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    """
-                    st.components.v1.html(overlay_html, height=350)
-                except Exception as e:
-                    st.error(f"画像の読み込みに失敗: {e}")
+                        """
+                        # HTMLを埋め込み（heightは画像のアスペクト比に合わせて調整してください）
+                        st.components.v1.html(overlay_html, height=450)
+                        
+                    except Exception as e:
+                        st.error(f"画像の表示に失敗しました ({row['fish_type']}): {e}")
+                else:
+                    # 画像がない場合のシンプルな表示
+                    st.warning(f"画像なし: {row['fish_type']} ({row['date']})")
+                    st.write(f"サイズ: {row['size']}cm / 地点: {row['point_name']}")
+                    st.divider()
 
     # --- タブ4: 攻略メモリー ---
     with tab4:
@@ -893,6 +916,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
