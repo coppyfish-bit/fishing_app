@@ -16,22 +16,23 @@ def get_image_for_display(file_val):
         return None
     val_str = str(file_val).strip()
 
-    # GoogleドライブのURL判定
+    # GoogleドライブのURL（/file/d/... や id=...）を判定
     if "drive.google.com" in val_str:
         file_id = ""
         try:
+            # URLからファイルID（10PKvg...）を抽出
             if "/d/" in val_str:
                 file_id = val_str.split('/d/')[1].split('/')[0]
             elif "id=" in val_str:
                 file_id = val_str.split('id=')[1].split('&')[0]
             
             if file_id:
-                # プレビュー用URLを作成（これが一番安定して表示されます）
+                # この形式がStreamlitで最も安定して表示されます
                 return f"https://drive.google.com/uc?export=view&id={file_id}"
-        except:
-            return None
+        except Exception:
+            pass
 
-    # ローカルファイル判定（今までの images フォルダ用）
+    # URLでない場合は、ローカルの images フォルダ内を探す
     local_path = os.path.join(PHOTO_DIR, val_str)
     if os.path.exists(local_path):
         return local_path
@@ -900,6 +901,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
