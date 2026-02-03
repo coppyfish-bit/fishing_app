@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
+from streamlit_gsheets import GSheetsConnection
 import os
 import numpy as np
 import plotly.express as px
@@ -791,3 +792,4 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
