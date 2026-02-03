@@ -9,7 +9,33 @@ import plotly.graph_objects as go
 from PIL import Image, ImageDraw, ImageFont
 import io
 import base64
+import requests
 
+def get_image_for_display(file_val):
+    """URLならURLを、ファイル名ならパスを、何もないならNoneを返す"""
+    if pd.isna(file_val) or str(file_val) == "":
+        return None
+    
+    val_str = str(file_val)
+    
+    # GoogleドライブのURLだった場合
+    if "drive.google.com" in val_str:
+        try:
+            if "/d/" in val_str:
+                fid = val_str.split('/d/')[1].split('/')[0]
+            else:
+                fid = val_str.split('id=')[1].split('&')[0]
+            return f"https://lh3.googleusercontent.com/u/0/d/{fid}"
+        except:
+            return val_str
+            
+    # 普通のファイル名だった場合（GitHub内の images フォルダを探す）
+    local_path = os.path.join(PHOTO_DIR, val_str)
+    if os.path.exists(local_path):
+        return local_path
+        
+    return None
+    
 # --- 1. 基本設定 ---
 st.set_page_config(page_title="天草スズキ・ログ管理", layout="wide")
 LOG_CSV = "final_fishing_log.csv"
@@ -100,8 +126,13 @@ if df is not None:
             with st.container(border=True):
                 c1, c2 = st.columns([1, 2])
                 with c1:
-                    img_path = os.path.join(PHOTO_DIR, str(row["filename"]))
-                    if os.path.exists(img_path): st.image(img_path, use_container_width=True)
+    # 判別関数を使って、表示すべき画像ソースを取得
+    img_source = get_image_for_display(row["filename"])
+    
+    if img_source:
+        st.image(img_source, use_container_width=True)
+    else:
+        st.warning("画像が見つかりません。URLが正しいか、ファイルが images フォルダにあるか確認してください。")
                 with c2:
                     with st.form(key=f"edit_{idx}"):
                         f_fish = st.text_input("魚種", value=row["魚種"])
@@ -859,6 +890,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
