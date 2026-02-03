@@ -154,112 +154,67 @@ if df is not None:
         available_cols = [c for c in ["datetime", "場所", "魚種", "全長_cm", "潮名", "天気", "ルアー"] if c in df.columns]
         st.dataframe(df[available_cols].sort_values("datetime", ascending=False), use_container_width=True, hide_index=True)
 
-    # --- タブ3：ギャラリー表示（データ満載版） ---
-        with tab3:
-        # ここから下の行は、すべて「with tab3:」より右側にズラします（通常スペース8個分）
+    with tab3:
         st.header("釣果ギャラリー")
 
+        # 1. データの準備
         if 'df' in locals() and not df.empty:
-            filtered_df = df.copy()
-            filtered_df = filtered_df.iloc[::-1]
+            # データをコピーして最新順に並べ替え
+            filtered_df = df.copy().iloc[::-1]
 
+            # 2. 1件ずつ表示するためのループ
             for index, row in filtered_df.iterrows():
+                # 画像ソースを取得
                 img_source = get_image_for_display(row["filename"])
                 
-                # --- ここからも、さらに右側にズラして書いていきます ---
+                # 基本データの抽出
+                fish_name = row.get('魚種', '不明')
+                fish_size = row.get('全長_cm', '-')
+                fish_date = row.get('datetime', '-')
+                fish_place = row.get('場所', '不明')
+                fish_lure = row.get('ルアー', '-')
+
+                # --- 3. カード形式で表示 ---
                 with st.container(border=True):
                     if img_source:
+                        # 写真
                         st.image(img_source, use_container_width=True)
-                        for index, row in filtered_df.iterrows():
-            img_source = get_image_for_display(row["filename"])
-            
-            # 基本データの取得
-            fish_name = row.get('魚種', '不明')
-            fish_size = row.get('全長_cm', '-')
-            fish_date = row.get('datetime', '-')
-            fish_place = row.get('場所', '不明')
+                        
+                        # メイン情報
+                        st.markdown(f"### {fish_name} {fish_size}cm")
+                        st.caption(f"📅 {fish_date} 📍 {fish_place}")
 
-            with st.container(border=True):
-                if img_source:
-                    st.image(img_source, use_container_width=True)
-                    
-                    # 1. メイン情報
-                    st.markdown(f"### {fish_name} {fish_size}cm")
-                    st.caption(f"📅 {fish_date} 📍 {fish_place}")
+                        # 気象コンディション
+                        st.markdown("---")
+                        st.markdown("**🌡️ 気象コンディション**")
+                        w1, w2, w3 = st.columns(3)
+                        w1.metric("気温", f"{row.get('気温', '-')}℃")
+                        w2.metric("風速", f"{row.get('風速', '-')}m/s", f"{row.get('風向', '')}")
+                        w3.metric("天気", f"{row.get('天気', '-')}")
 
-                    # 2. 気象条件（2列でコンパクトに表示）
-                    st.markdown("---")
-                    st.markdown("**🌡️ 気象コンディション**")
-                    w1, w2, w3 = st.columns(3)
-                    w1.metric("気温", f"{row.get('気温', '-')}℃")
-                    w2.metric("風速", f"{row.get('風速', '-')}m/s", row.get('風向', ''))
-                    w3.metric("天気", f"{row.get('天気', '-')}")
+                        # 潮汐・タイドデータ
+                        st.markdown("**🌊 潮汐・タイドデータ**")
+                        t1, t2 = st.columns(2)
+                        with t1:
+                            st.write(f"**潮名:** {row.get('潮名', '-')}")
+                            st.write(f"**月齢:** {row.get('月齢', '-')}")
+                            st.write(f"**フェーズ:** {row.get('潮位フェーズ', '-')}")
+                        with t2:
+                            st.write(f"**満潮:** {row.get('直前の満潮_時刻', '-')}")
+                            st.write(f"**干潮:** {row.get('直前の干潮_時刻', '-')}")
+                            st.write(f"**潮位:** {row.get('潮位_cm', '-')} cm")
 
-                    # 3. 潮汐データ（タイドグラフの代わりになる詳細数値）
-                    st.markdown("**🌊 潮汐・タイドデータ**")
-                    t1, t2 = st.columns(2)
-                    with t1:
-                        st.write(f"**潮名:** {row.get('潮名', '-')}")
-                        st.write(f"**月齢:** {row.get('月齢', '-')}")
-                        st.write(f"**フェーズ:** {row.get('潮位フェーズ', '-')}")
-                    with t2:
-                        st.write(f"**満潮:** {row.get('直前の満潮_時刻', '-')}")
-                        st.write(f"**干潮:** {row.get('直前の干潮_時刻', '-')}")
-                        st.write(f"**潮位:** {row.get('潮位_cm', '-')} cm")
+                        # 備考
+                        memo = row.get('備考')
+                        if pd.notna(memo) and str(memo).strip() != "":
+                            st.info(f"📝 {memo}")
+                        st.caption(f"🎣 使用ルアー: {fish_lure}")
 
-                    # 4. 備考・ルアー
-                    if pd.notna(row.get('備考')):
-                        st.info(f"📝 {row.get('備考')}")
-                    st.caption(f"🎣 使用ルアー: {row.get('ルアー', '-')}")
+                    else:
+                        st.warning(f"画像が見つかりません: {fish_name} ({fish_date})")
 
-                else:
-                    st.warning(f"画像が見つかりません: {fish_name}")
         else:
-            st.info("データが読み込めていないか、まだ登録されていません。")
-        for index, row in filtered_df.iterrows():
-            img_source = get_image_for_display(row["filename"])
-            
-            # 基本データの取得
-            fish_name = row.get('魚種', '不明')
-            fish_size = row.get('全長_cm', '-')
-            fish_date = row.get('datetime', '-')
-            fish_place = row.get('場所', '不明')
-
-            with st.container(border=True):
-                if img_source:
-                    st.image(img_source, use_container_width=True)
-                    
-                    # 1. メイン情報
-                    st.markdown(f"### {fish_name} {fish_size}cm")
-                    st.caption(f"📅 {fish_date} 📍 {fish_place}")
-
-                    # 2. 気象条件（2列でコンパクトに表示）
-                    st.markdown("---")
-                    st.markdown("**🌡️ 気象コンディション**")
-                    w1, w2, w3 = st.columns(3)
-                    w1.metric("気温", f"{row.get('気温', '-')}℃")
-                    w2.metric("風速", f"{row.get('風速', '-')}m/s", row.get('風向', ''))
-                    w3.metric("天気", f"{row.get('天気', '-')}")
-
-                    # 3. 潮汐データ（タイドグラフの代わりになる詳細数値）
-                    st.markdown("**🌊 潮汐・タイドデータ**")
-                    t1, t2 = st.columns(2)
-                    with t1:
-                        st.write(f"**潮名:** {row.get('潮名', '-')}")
-                        st.write(f"**月齢:** {row.get('月齢', '-')}")
-                        st.write(f"**フェーズ:** {row.get('潮位フェーズ', '-')}")
-                    with t2:
-                        st.write(f"**満潮:** {row.get('直前の満潮_時刻', '-')}")
-                        st.write(f"**干潮:** {row.get('直前の干潮_時刻', '-')}")
-                        st.write(f"**潮位:** {row.get('潮位_cm', '-')} cm")
-
-                    # 4. 備考・ルアー
-                    if pd.notna(row.get('備考')):
-                        st.info(f"📝 {row.get('備考')}")
-                    st.caption(f"🎣 使用ルアー: {row.get('ルアー', '-')}")
-
-                else:
-                    st.warning(f"画像が見つかりません: {fish_name}")
+            st.info("表示するデータがありません。スプレッドシートを確認してください。")
                     
     # --- タブ4: 攻略メモリー ---
     with tab4:
@@ -968,6 +923,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
