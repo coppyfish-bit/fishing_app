@@ -794,3 +794,4 @@ if df is not None:
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
 
 
+
