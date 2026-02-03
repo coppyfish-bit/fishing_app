@@ -126,13 +126,12 @@ if df is not None:
             with st.container(border=True):
                 c1, c2 = st.columns([1, 2])
                 with c1:
-    # 判別関数を使って、表示すべき画像ソースを取得
-    img_source = get_image_for_display(row["filename"])
-    
-    if img_source:
-        st.image(img_source, use_container_width=True)
-    else:
-        st.warning("画像が見つかりません。URLが正しいか、ファイルが images フォルダにあるか確認してください。")
+                    # ここの字下げ（スペース4つ分）が重要です！
+                    img_source = get_image_for_display(row["filename"])
+                    if img_source:
+                        st.image(img_source, use_container_width=True)
+                    else:
+                        st.info("画像なし")
                 with c2:
                     with st.form(key=f"edit_{idx}"):
                         f_fish = st.text_input("魚種", value=row["魚種"])
@@ -890,6 +889,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
