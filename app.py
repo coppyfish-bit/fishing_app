@@ -19,14 +19,12 @@ PHOTO_DIR = "input_photos"
 # --- 2. スプレッドシート連携の設定 ---
 # スプレッドシートのURL（「リンクを知っている全員が閲覧・編集可」に設定したもの）
 # ※ここをご自身のシートURLに書き換えてください
-SHEET_URL = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_FcoS8gFFyE/edit?gid=0#gid=0"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_FcoS8gFFyE/"
 
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-@st.cache_data(ttl=600) # 10分間はネットを見に行かずキャッシュを使う
+@st.cache_data(ttl=600)
 def load_data_from_gs():
-    # スプレッドシートからデータを読み込む
-    df = conn.read(spreadsheet=SHEET_URL, worksheet="シート1") # シート名は適宜変更
+    # worksheet="シート1" を消して、自動認識に任せます
+    df = conn.read(spreadsheet=SHEET_URL)
     
     # 日付や数値の型変換（これまでの処理を継続）
     if "datetime" in df.columns:
@@ -792,6 +790,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
