@@ -200,13 +200,29 @@ if df is not None:
                                 overlay_h = int(h * 0.28) if is_vertical else int(h * 0.22)
                                 d.rectangle([(0, h - overlay_h), (w, h)], fill=(0, 0, 0, 160))
 
-                                f_path = "C:\\Windows\\Fonts\\msyh.ttc"
-                                if not os.path.exists(f_path): f_path = "C:\\Windows\\Fonts\\msgothic.ttc"
+                              # --- フォント設定のWeb対応版 ---
+                                # Linuxサーバー(Streamlit Cloud)で一般的に入っている日本語フォントを指定
+                                fonts = [
+                                    "/usr/share/fonts/fonts-goethe/TakaoGothic.ttf",
+                                    "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
+                                    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+                                    "C:\\Windows\\Fonts\\msgothic.ttc" # PC実行時用
+                                ]
+                                
+                                f_path = None
+                                for f in fonts:
+                                    if os.path.exists(f):
+                                        f_path = f
+                                        break
+                                
                                 f_scale = 0.85 if is_vertical else 1.0
                                 try:
-                                    f_large = ImageFont.truetype(f_path, int(h * 0.045 * f_scale))
-                                    f_mid = ImageFont.truetype(f_path, int(h * 0.038 * f_scale))
-                                    f_small = ImageFont.truetype(f_path, int(h * 0.032 * f_scale))
+                                    if f_path:
+                                        f_large = ImageFont.truetype(f_path, int(h * 0.045 * f_scale))
+                                        f_mid = ImageFont.truetype(f_path, int(h * 0.038 * f_scale))
+                                        f_small = ImageFont.truetype(f_path, int(h * 0.032 * f_scale))
+                                    else:
+                                        f_large = f_mid = f_small = ImageFont.load_default()
                                 except:
                                     f_large = f_mid = f_small = ImageFont.load_default()
 
