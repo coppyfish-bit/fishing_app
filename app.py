@@ -157,21 +157,17 @@ if df is not None:
     with tab3:
         st.header("釣果ギャラリー")
 
-        # 1. データの準備（dfが読み込まれている前提です）
         if df.empty:
             st.info("データがありません。登録タブからデータを追加してください。")
         else:
-            # 最新の釣果を上に表示するために逆順にする（お好みで）
             filtered_df = df.iloc[::-1]
 
-            # 2. ギャラリー表示（1件ずつループ）
             for index, row in filtered_df.iterrows():
-                # GoogleドライブURLまたはローカルパスを取得
+                # 実際の列名「filename」を使用
                 img_source = get_image_for_display(row["filename"])
                 
                 if img_source:
                     try:
-                        # URLまたはパスから画像バイナリデータを取得
                         if str(img_source).startswith("http"):
                             response = requests.get(img_source, timeout=10)
                             img_data = response.content
@@ -179,36 +175,37 @@ if df is not None:
                             with open(img_source, "rb") as f:
                                 img_data = f.read()
                         
-                        # Base64形式に変換
                         b64_img = base64.b64encode(img_data).decode()
                         
-                        # 精密データオーバーレイのHTML/CSS
-                        # 写真の上にグラデーションをかけて文字を読みやすくしています
+                        # --- 列名を実際のデータに合わせて修正 ---
+                        fish_name = row.get('魚種', '不明')
+                        fish_size = row.get('全長_cm', '-')
+                        fish_date = row.get('datetime', '-')
+                        fish_place = row.get('場所', '不明')
+                        fish_lure = row.get('ルアー', '-')
+
                         overlay_html = f"""
-                        <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.3); margin-bottom: 25px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
+                        <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.3); margin-bottom: 25px; font-family: sans-serif;">
                             <img src="data:image/jpeg;base64,{b64_img}" style="width: 100%; display: block;">
                             <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.9)); color: white; padding: 20px 15px;">
                                 <div style="font-size: 1.4em; font-weight: bold; margin-bottom: 5px;">
-                                    {row['fish_type']} <span style="font-size: 0.8em;">{row['size']}cm</span>
+                                    {fish_name} <span style="font-size: 0.8em;">{fish_size}cm</span>
                                 </div>
                                 <div style="font-size: 0.9em; opacity: 0.8; line-height: 1.4;">
-                                    📅 {row['date']} <br>
-                                    📍 {row['point_name']}
+                                    📅 {fish_date} <br>
+                                    📍 {fish_place} / 🎣 {fish_lure}
                                 </div>
                             </div>
                         </div>
                         """
-                        # HTMLを埋め込み（heightは画像のアスペクト比に合わせて調整してください）
                         st.components.v1.html(overlay_html, height=450)
                         
                     except Exception as e:
-                        st.error(f"画像の表示に失敗しました ({row['fish_type']}): {e}")
+                        st.error(f"画像の表示に失敗しました: {e}")
                 else:
-                    # 画像がない場合のシンプルな表示
-                    st.warning(f"画像なし: {row['fish_type']} ({row['date']})")
-                    st.write(f"サイズ: {row['size']}cm / 地点: {row['point_name']}")
+                    st.warning(f"画像なし: {row.get('魚種', '不明')} ({row.get('datetime', '-')})")
                     st.divider()
-
+                    
     # --- タブ4: 攻略メモリー ---
     with tab4:
         st.subheader("🗺️ ポイント別攻略メモリー")
@@ -916,6 +913,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
