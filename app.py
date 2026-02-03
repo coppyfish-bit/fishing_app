@@ -15,38 +15,34 @@ LOG_CSV = "final_fishing_log.csv"
 MASTER_CSV = "group_place_master.csv"
 PHOTO_DIR = "input_photos"
 
-# --- 2. データ管理関数 (キャッシュ対応版) ---
+# --- 2. スプレッドシート連携の設定 ---
+# スプレッドシートのURL（「リンクを知っている全員が閲覧・編集可」に設定したもの）
+# ※ここをご自身のシートURLに書き換えてください
+SHEET_URL = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_FcoS8gFFyE/edit?gid=0#gid=0"
 
-# CSVファイルが更新された時だけ再読み込みするように last_modified を引数に入れる
-@st.cache_data(show_spinner="データを読み込み中...")
-def load_data(file_path, last_modified):
-    if not os.path.exists(file_path): 
-        return None
-    df = pd.read_csv(file_path)
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+@st.cache_data(ttl=600) # 10分間はネットを見に行かずキャッシュを使う
+def load_data_from_gs():
+    # スプレッドシートからデータを読み込む
+    df = conn.read(spreadsheet=SHEET_URL, worksheet="シート1") # シート名は適宜変更
     
-    # 重い型変換処理をキャッシュ内で完結させる
+    # 日付や数値の型変換（これまでの処理を継続）
     if "datetime" in df.columns:
         df["datetime"] = pd.to_datetime(df["datetime"], errors='coerce')
-    if "直前の満潮_時刻" in df.columns:
-        df["直前の満潮_時刻"] = pd.to_datetime(df["直前の満潮_時刻"], errors='coerce')
     if "全長_cm" in df.columns:
         df["全長_cm"] = pd.to_numeric(df["全長_cm"], errors='coerce')
-    
     df["場所"] = df["場所"].fillna("未設定")
-    df["魚種"] = df["魚種"].fillna("不明")
     return df
 
-@st.cache_data(show_spinner=False)
-def load_master(file_path, last_modified):
-    if os.path.exists(file_path):
-        return pd.read_csv(file_path)
-    return pd.DataFrame({"group_id": [0], "place_name": ["未設定"]})
-
 def save_all(df, m_df):
-    df.to_csv(LOG_CSV, index=False)
-    m_df.to_csv(MASTER_CSV, index=False)
-    # 保存した後はキャッシュをクリアして反映させる
+    # スプレッドシートを更新（上書き）
+    conn.update(spreadsheet=SHEET_URL, data=df)
+    # 更新後はキャッシュをクリアして最新状態を表示させる
     st.cache_data.clear()
+
+# マスターデータ（場所リスト）もシートで管理するか、固定にするか選べますが
+# とりあえず既存のCSV読み込みのままでも動きます
 
 # --- 3. メイン処理開始 ---
 # ファイルの最終更新時刻を取得（これで自動更新を実現）
@@ -793,4 +789,5 @@ if df is not None:
             st.dataframe(predict_ranking[["場所", "実績数", "最大サイズ", "スコア"]].head(5), use_container_width=True)
 
         else:
+
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
