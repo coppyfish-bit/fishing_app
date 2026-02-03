@@ -159,20 +159,37 @@ if df is not None:
         st.subheader("🖼️ 精密データオーバーレイ")
         cols = st.columns(3)
         for i, (idx, row) in enumerate(df.sort_values("datetime", ascending=False).iterrows()):
-            img_path = os.path.join(PHOTO_DIR, str(row["filename"]))
-            if os.path.exists(img_path):
-                with cols[i % 3]:
-                    try:
-                        with Image.open(img_path) as img:
-                            img.thumbnail((400, 400))
-                            buffered = io.BytesIO()
-                            img.save(buffered, format="JPEG", quality=70)
-                            data = base64.b64encode(buffered.getvalue()).decode("utf-8")
-                        
-                        diff_mins = int((row['datetime'] - row['直前の満潮_時刻']).total_seconds() / 60) % 744
-                        tide_detail = f"下げ {diff_mins}分" if diff_mins <= 360 else f"上げ {diff_mins - 360}分"
-                    except:
-                        data = ""
+            # --- タブ3のループ内での書き換え例 ---
+img_source = get_image_for_display(row["filename"]) # 前に作った関数を使います
+
+if img_source:
+    try:
+        # 1. 画像データの取得
+        if img_source.startswith("http"):
+            # URLの場合
+            response = requests.get(img_source)
+            img_data = response.content
+        else:
+            # ローカルファイルの場合
+            with open(img_source, "rb") as f:
+                img_data = f.read()
+
+        # 2. Base64形式に変換
+        b64_img = base64.b64encode(img_data).decode()
+
+        # 3. HTMLでオーバーレイ表示
+        overlay_html = f"""
+        <div style="position: relative; width: 100%; border-radius: 10px; overflow: hidden; margin-bottom: 10px;">
+            <img src="data:image/jpeg;base64,{b64_img}" style="width: 100%; display: block;">
+            <div style="position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.6); color: white; padding: 5px 10px; border-radius: 5px; font-size: 0.8em;">
+                {row['fish_type']} / {row['size']}cm<br>
+                {row['date']}
+            </div>
+        </div>
+        """
+        st.components.v1.html(overlay_html, height=250) # 高さは適宜調整
+    except Exception as e:
+        st.error(f"画像の読み込みに失敗しました: {e}")
 
                     if data:
                         overlay_html = f"""
@@ -893,6 +910,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
