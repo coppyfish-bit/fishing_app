@@ -18,14 +18,14 @@ def get_image_for_display(file_val):
     val_str = str(file_val).strip()
 
     if "drive.google.com" in val_str:
-        # 正規表現を使ってID（10PKvg...）をより正確に抽出
-        match = re.search(r'(?<=/d/)[^/]+|(?<=id=)[^&]+', val_str)
+        # 共有いただいたURLからID「10PKvg8VaK3jSE6NRvBEN4fFcI-j9yWai」を抜き出す
+        match = re.search(r'[-\w]{25,}', val_str)
         if match:
             file_id = match.group(0)
-            # URLを直接叩いて画像が表示される形式に変換
-            return f"https://drive.google.com/uc?export=view&id={file_id}"
+            # プレビュー表示用のURLを生成
+            return f"https://drive.google.com/uc?id={file_id}"
     
-    # ローカルファイル判定
+    # URLでない場合はローカルフォルダを探す
     local_path = os.path.join(PHOTO_DIR, val_str)
     if os.path.exists(local_path):
         return local_path
@@ -887,6 +887,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
