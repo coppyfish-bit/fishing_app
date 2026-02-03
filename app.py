@@ -155,6 +155,24 @@ if df is not None:
         st.dataframe(df[available_cols].sort_values("datetime", ascending=False), use_container_width=True, hide_index=True)
 
     # --- タブ3：ギャラリー表示（データ満載版） ---
+        with tab3:
+        st.header("釣果ギャラリー")
+
+        # --- 1. まずデータを準備する (この行が抜けているとNameErrorになります) ---
+        if 'df' in locals() and not df.empty:
+            filtered_df = df.copy()  # ここで filtered_df を作成！
+            
+            # 最新を上にしたい場合は並び替え
+            filtered_df = filtered_df.iloc[::-1]
+
+            # --- 2. その後にループを回す ---
+            for index, row in filtered_df.iterrows():
+                img_source = get_image_for_display(row["filename"])
+                
+                # ...（以下、先ほどお送りした潮位や気象のコードを続ける）...
+
+        else:
+            st.info("データが読み込めていないか、まだ登録されていません。")
         for index, row in filtered_df.iterrows():
             img_source = get_image_for_display(row["filename"])
             
@@ -907,6 +925,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
