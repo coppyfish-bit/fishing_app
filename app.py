@@ -144,47 +144,120 @@ if df is not None:
 ])
     place_options = sorted(m_df["place_name"].unique().tolist())
 
-    # --- タブ1: 地点登録 ---
     with tab1:
-        st.subheader("📸 写真と地点の紐付け")
+        st.header("🎣 釣果登録と管理")
+
+        # --- 1. 【新規機能】写真からスピード登録 ---
+        with st.expander("📸 写真から新規登録 (自動解析・軽量化)", expanded=True):
+            uploaded_file = st.file_uploader("スマホの写真をアップロード", type=["jpg", "jpeg"])
+            
+            if uploaded_file:
+                # --- 画像の軽量化処理 ---
+                img = Image.open(uploaded_file)
+                # 最大幅1000pxにリサイズして容量削減
+                if img.width > 1000:
+                    ratio = 1000 / float(img.width)
+                    h = int(float(img.height) * float(ratio))
+                    img = img.resize((1000, h), Image.Resampling.LANCZOS)
+                
+                # --- Exifから撮影日時を抽出 ---
+                uploaded_file.seek(0)
+                try:
+                    exif_img = ExifImage(uploaded_file)
+                    extracted_dt = ""
+                    if exif_img.has_exif and hasattr(exif_img, 'datetime_original'):
+                        # 日時形式を変換 (2024:02:04 -> 2024-02-04)
+                        extracted_dt = exif_img.datetime_original.replace(":", "-", 2)
+                    else:
+                        extracted_dt = ""
+                except:
+                    extracted_dt = ""
+
+                # --- 新規登録フォーム ---
+                with st.form("new_fish_registration"):
+                    st.info("写真から日時を読み取りました。内容を確認して登録してください。")
+                    f_date = st.text_input("日時 (YYYY-MM-DD HH:MM:SS)", value=extracted_dt)
+                    f_fish = st.text_input("魚種", placeholder="アジ、シーバスなど")
+                    f_size = st.number_input("全長(cm)", min_value=0.0, step=0.1)
+                    f_place = st.selectbox("場所を選択", place_options)
+                    f_lure = st.text_input("使用ルアー")
+                    f_memo = st.text_area("備考・状況メモ")
+                    
+                    if st.form_submit_button("✨ この内容で新規保存"):
+                        # 新しい行データを作成
+                        new_data = {
+                            "datetime": f_date,
+                            "魚種": f_fish,
+                            "全長_cm": f_size,
+                            "場所": f_place,
+                            "ルアー": f_lure,
+                            "備考": f_memo,
+                            "filename": "pending" # ここにGoogleドライブのURLが入る想定
+                        }
+                        
+                        # データフレームに追加して保存
+                        new_df_row = pd.DataFrame([new_data])
+                        df = pd.concat([df, new_df_row], ignore_index=True)
+                        save_all(df, m_df)
+                        
+                        st.success("釣果を保存しました！写真はGoogleドライブにアップ後、URLを貼り付けてください。")
+                        st.rerun()
+
+        st.divider()
+
+        # --- 2. 【既存機能】地点マスター登録 ---
         with st.expander("🆕 新しい釣り場をマスターに追加"):
             with st.form("add_master"):
                 new_p = st.text_input("新しい場所名")
                 if st.form_submit_button("マスター登録"):
                     if new_p and new_p not in m_df["place_name"].values:
-                        new_id = m_df["group_id"].max() + 1 if not m_df.empty else 0
+                        new_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 0
                         new_row = pd.DataFrame({"group_id": [new_id], "place_name": [new_p]})
                         m_df = pd.concat([m_df, new_row], ignore_index=True)
                         save_all(df, m_df)
-                        st.success(f"「{new_p}」を登録！")
+                        st.success(f"「{new_p}」を登録しました！")
                         st.rerun()
 
+        # --- 3. 【既存機能】写真と地点の紐付け・編集 ---
+        st.subheader("📝 登録済みデータの修正")
         edit_filter = st.selectbox("場所で絞り込み", ["すべて"] + place_options)
-        edit_df = df if edit_filter == "すべて" else df[df["場所"] == edit_filter]
+        edit_target_df = df if edit_filter == "すべて" else df[df["場所"] == edit_filter]
 
-        for idx, row in edit_df.sort_values("datetime", ascending=False).iterrows():
+        # 降順（新しい順）で表示
+        for idx, row in edit_target_df.sort_values("datetime", ascending=False).iterrows():
             with st.container(border=True):
                 c1, c2 = st.columns([1, 2])
                 with c1:
-                    img_source = get_image_for_display(row["filename"])
-                    if img_source:
-                        # 画像の下にURLを直接表示して、クリックできるか確認する
-                        st.image(img_source, use_container_width=True)
-                        st.caption(f"[画像リンク]({img_source})") 
+                    img_src = get_image_for_display(row["filename"])
+                    if img_src:
+                        st.image(img_src, use_container_width=True)
+                        st.caption(f"[画像リンク]({img_src})") 
                     else:
-                        st.info("画像が見つかりません")
-                with c2:
-                    with st.form(key=f"edit_{idx}"):
-                        f_fish = st.text_input("魚種", value=row["魚種"])
-                        cur_size = float(row["全長_cm"]) if pd.notna(row["全長_cm"]) else 0.0
-                        f_size = st.number_input("全長(cm)", value=cur_size, step=0.1)
-                        cur_p = row["場所"] if row["場所"] in place_options else (place_options[0] if place_options else "未設定")
-                        f_place = st.selectbox("場所", place_options, index=place_options.index(cur_p) if cur_p in place_options else 0)
-                        if st.form_submit_button("保存"):
-                            df.at[idx, "魚種"], df.at[idx, "全長_cm"], df.at[idx, "場所"] = f_fish, f_size, f_place
+                        st.info("画像URL未設定")
+                        # 編集用URL入力欄（ここにGoogleドライブURLを貼る）
+                        new_url = st.text_input("ドライブURLを貼る", key=f"url_{idx}")
+                        if new_url:
+                            df.at[idx, "filename"] = new_url
                             save_all(df, m_df)
                             st.rerun()
-
+                            
+                with c2:
+                    with st.form(key=f"edit_{idx}"):
+                        f_fish_edit = st.text_input("魚種", value=row["魚種"])
+                        cur_s = float(row["全長_cm"]) if pd.notna(row["全長_cm"]) else 0.0
+                        f_size_edit = st.number_input("全長(cm)", value=cur_s, step=0.1)
+                        
+                        cur_p = row["場所"]
+                        p_idx = place_options.index(cur_p) if cur_p in place_options else 0
+                        f_place_edit = st.selectbox("場所", place_options, index=p_idx)
+                        
+                        if st.form_submit_button("変更を保存"):
+                            df.at[idx, "魚種"] = f_fish_edit
+                            df.at[idx, "全長_cm"] = f_size_edit
+                            df.at[idx, "場所"] = f_place_edit
+                            save_all(df, m_df)
+                            st.success("更新完了")
+                            st.rerun()
     # --- タブ2: 一覧 ---
     with tab2:
         st.subheader("📋 釣果一覧")
@@ -960,6 +1033,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
