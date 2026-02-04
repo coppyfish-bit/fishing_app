@@ -89,6 +89,8 @@ spreadsheet = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjB
 # 関数の「外」に置いておく必要があります。
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# --- 重要：ここを追加 ---
+# もし以前 SHEET_URL = "..." という行があったら、それは消すかコメントアウトしてください。
 @st.cache_data(ttl=600)
 def load_data_from_gs():
     # Secrets の中から直接スプレッドシートのURLを引っ張ってきます
@@ -1034,6 +1036,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
