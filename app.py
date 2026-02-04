@@ -103,7 +103,26 @@ m_df = pd.read_csv("group_place_master.csv")
 # 111行目周辺：ここの「左端の余白」を下の行とピッタリ合わせます
 if df is not None:
     place_options = sorted(m_df["place_name"].unique().tolist())
+    if df is not None:
+    # --- 全タブ共通のデータ整形処理 ---
+    # 1. 日付を計算可能な形式に変換
+    df["datetime"] = pd.to_datetime(df["datetime"], errors='coerce')
+    if "直前の満潮_時刻" in df.columns:
+        df["直前の満潮_時刻"] = pd.to_datetime(df["直前の満潮_時刻"], errors='coerce')
     
+    # 2. 数値列を数値として認識させる
+    num_cols = ["全長_cm", "潮位_cm", "気温", "風速", "月齢"]
+    for col in num_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # 3. 欠損値を埋める（グラフでエラーが出ないように）
+    df["場所"] = df["場所"].fillna("未設定")
+    df["魚種"] = df["魚種"].fillna("不明")
+
+    # --- ここからタブの定義 ---
+    place_options = sorted(m_df["place_name"].unique().tolist())
+    tab1, tab2, ... = st.tabs([...])
     # タブの定義（ここも place_options と同じ深さにズラす）
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
         "📝 登録", "📈 統計", "🗺️ エリア分析", "🌊 潮汐相関", "🌬️ 気象影響", 
@@ -1015,6 +1034,7 @@ def save_all(df, m_df):
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
