@@ -103,28 +103,37 @@ def save_all(df, m_df):
         return False
 
 # --- メイン処理開始 ---
-# 1. データの読み込み（関数の外で呼ぶ）
-df = load_data_from_gs()
-m_df = pd.read_csv("group_place_master.csv")
+try:
+    df = load_data_from_gs()
+    m_df = pd.read_csv("group_place_master.csv")
 
-# 2. 読み込めたかどうかのチェックを画面に出す
-if df is None or df.empty:
-    st.error("スプレッドシートからデータが読み込めませんでした。SecretsのURLや、シートの中身を確認してください。")
-    st.info("ヒント：スプレッドシートの1行目に見出し（datetime, 場所など）はありますか？")
-    st.stop() # ここで止めることで、原因を特定しやすくします
+    # 読み込み状態を画面に「固定」して表示
+    if df is not None:
+        st.write(f"✅ 読み込み成功: {len(df)}件のデータがあります")
+        
+        # 111行目周辺でエラーが起きていないか確認するための目印
+        st.write("DEBUG: プレイスオプション作成開始")
+        place_options = sorted(m_df["place_name"].unique().tolist())
+        st.write(f"DEBUG: 釣り場数: {len(place_options)}")
 
-# --- 3. データが正常な場合のみ、以下を実行 ---
-st.success(f"データを読み込みました！ (合計: {len(df)} 件)")
+        # タブの作成
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+            "📝 登録", "📋 一覧", "🖼️ ギャラリー", "🌊 時合分析", "📊 統計", 
+            "🌬️ 気象", "🧪 LABO", "🚩 風向", "🏆 RANKER", "🎯 PREDICT"
+        ])
+        
+        with tab1:
+            st.subheader("登録タブ")
+            st.dataframe(df.head()) # 読み込んだデータを表で出す
+            
+    else:
+        st.error("スプレッドシートの読み込みに失敗しました（dfがNoneです）")
 
-# 場所のリスト作成
-place_options = sorted(m_df["place_name"].unique().tolist())
-
-# タブの作成
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
-    "📝 登録", "📋 一覧", "🖼️ ギャラリー", "🌊 時合分析", "📊 統計", 
-    "🌬️ 気象", "🧪 LABO", "🚩 風向", "🏆 RANKER", "🎯 PREDICT"
-])
-
+except Exception as e:
+    # ここでエラーを捕まえて、画面から消えないように表示する
+    st.error(f"⚠️ 実行中にエラーが発生しました: {e}")
+    # どこでエラーが起きたか詳細を表示
+    st.exception(e)
 with tab1:
     st.write("ここは登録タブです。")
     st.dataframe(df.head()) # 試しに数行だけ表示
@@ -1036,6 +1045,7 @@ def save_all(df, m_df):
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
