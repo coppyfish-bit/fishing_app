@@ -96,15 +96,19 @@ def save_all(df, m_df):
         st.error(f"保存失敗: {e}")
         return False
 
-# --- 4. メイン処理 ---
+# --- 3. メイン処理開始 ---
 df = load_data_from_gs()
 m_df = pd.read_csv("group_place_master.csv")
-place_options = sorted(m_df["place_name"].unique().tolist())
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
-    "📝 登録", "📋 一覧", "🖼️ ギャラリー", "🌊 時合分析", "📊 攻略レポート", 
-    "🧪 LABO", "🚩 風向別", "🏆 RANKER", "🎯 PREDICT", "🛠️ 管理"
-])
+# 111行目周辺：ここの「左端の余白」を下の行とピッタリ合わせます
+if df is not None:
+    place_options = sorted(m_df["place_name"].unique().tolist())
+    
+    # タブの定義（ここも place_options と同じ深さにズラす）
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+        "📝 登録", "📈 統計", "🗺️ エリア分析", "🌊 潮汐相関", "🌬️ 気象影響", 
+        "📊 統合レポート", "🧪 LABO", "🚩 風向別ポイント", "🏆 RANKER ROAD", "🎯 PREDICT"
+    ])
 
 # 以降、各 tab の中身を記述...
 # (各タブ内の計算で `df` を使う部分は、上記 load_data_from_gs で型変換済みなのでそのまま動きます)
@@ -1011,6 +1015,7 @@ def save_all(df, m_df):
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
