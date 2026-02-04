@@ -113,10 +113,9 @@ def calc_elapsed_v2(r):
     return 0 # エラーや空データの場合は0を返す
 
 def save_all(df, m_df):
-    # スプレッドシートを更新（上書き）
-    conn.update(spreadsheet=SHEET_URL, data=df)
-    # 更新後はキャッシュをクリアして最新状態を表示させる
-    st.cache_data.clear()
+    # SHEET_URL を使わず、Secretsの設定をそのまま使って保存する
+    conn.update(data=df) 
+    st.success("スプレッドシートに保存しました！")
 
 # マスターデータ（場所リスト）もシートで管理するか、固定にするか選べますが
 # とりあえず既存のCSV読み込みのままでも動きます
@@ -1035,6 +1034,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
