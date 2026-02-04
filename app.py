@@ -115,12 +115,12 @@ def calc_elapsed_v2(r):
     return 0 # エラーや空データの場合は0を返す
 
 def save_all(df, m_df):
-    # SHEET_URL を使わず、Secretsの設定をそのまま使って保存する
-    conn.update(data=df) 
-    st.success("スプレッドシートに保存しました！")
-
-# マスターデータ（場所リスト）もシートで管理するか、固定にするか選べますが
-# とりあえず既存のCSV読み込みのままでも動きます
+    try:
+        # data=df だけで実行。SecretsにURLがあれば自動でそこへ書き込みます
+        conn.update(data=df)
+        st.success("スプレッドシートへの保存に成功しました！")
+    except Exception as e:
+        st.error(f"保存中にエラーが発生しました: {e}")
 
 # --- 3. メイン処理開始 ---
 # ファイルの最終更新時刻を取得（これで自動更新を実現）
@@ -1036,6 +1036,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
