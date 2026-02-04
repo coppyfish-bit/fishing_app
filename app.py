@@ -95,7 +95,10 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def load_data_from_gs():
     # Secrets の中から直接スプレッドシートのURLを引っ張ってきます
     target_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    df = conn.read()
+    def load_data_from_gs():
+    # Secrets の [connections.gsheets] セクションからURLを取得
+    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    df = conn.read(spreadsheet=url)
     return df
     
     if "datetime" in df.columns:
@@ -116,12 +119,15 @@ def calc_elapsed_v2(r):
 
 def save_all(df, m_df):
     try:
-        # data=df だけで実行。SecretsにURLがあれば自動でそこへ書き込みます
-        conn.update(data=df)
-        st.success("スプレッドシートへの保存に成功しました！")
+        # 保存時もSecretsからURLを引っ張ってくる
+        url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+        conn.update(spreadsheet=url, data=df)
+        st.cache_data.clear()
+        return True
     except Exception as e:
-        st.error(f"保存中にエラーが発生しました: {e}")
-
+        st.error(f"保存失敗: {e}")
+        return False
+        
 # --- 3. メイン処理開始 ---
 # ファイルの最終更新時刻を取得（これで自動更新を実現）
 log_mtime = os.path.getmtime(LOG_CSV) if os.path.exists(LOG_CSV) else 0
@@ -1048,6 +1054,7 @@ def save_all(df, m_df):
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
