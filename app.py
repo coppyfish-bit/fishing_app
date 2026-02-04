@@ -102,38 +102,34 @@ def save_all(df, m_df):
         st.error(f"保存失敗: {e}")
         return False
 
-# --- 3. メイン処理開始 ---
+# --- メイン処理開始 ---
+# 1. データの読み込み（関数の外で呼ぶ）
 df = load_data_from_gs()
 m_df = pd.read_csv("group_place_master.csv")
 
-# 111行目周辺：ここの「左端の余白」を下の行とピッタリ合わせます
-if df is not None:
-    place_options = sorted(m_df["place_name"].unique().tolist())
-    if df is not None:
-    # --- 全タブ共通のデータ整形処理 ---
-    # 1. 日付を計算可能な形式に変換
-    df["datetime"] = pd.to_datetime(df["datetime"], errors='coerce')
-    if "直前の満潮_時刻" in df.columns:
-        df["直前の満潮_時刻"] = pd.to_datetime(df["直前の満潮_時刻"], errors='coerce')
-    
-    # 2. 数値列を数値として認識させる
-    num_cols = ["全長_cm", "潮位_cm", "気温", "風速", "月齢"]
-    for col in num_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+# 2. 読み込めたかどうかのチェックを画面に出す
+if df is None or df.empty:
+    st.error("スプレッドシートからデータが読み込めませんでした。SecretsのURLや、シートの中身を確認してください。")
+    st.info("ヒント：スプレッドシートの1行目に見出し（datetime, 場所など）はありますか？")
+    st.stop() # ここで止めることで、原因を特定しやすくします
 
-    # 3. 欠損値を埋める（グラフでエラーが出ないように）
-    df["場所"] = df["場所"].fillna("未設定")
-    df["魚種"] = df["魚種"].fillna("不明")
+# --- 3. データが正常な場合のみ、以下を実行 ---
+st.success(f"データを読み込みました！ (合計: {len(df)} 件)")
 
-    # --- ここからタブの定義 ---
-    place_options = sorted(m_df["place_name"].unique().tolist())
-    tab1, tab2, ... = st.tabs([...])
-    # タブの定義（ここも place_options と同じ深さにズラす）
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
-        "📝 登録", "📈 統計", "🗺️ エリア分析", "🌊 潮汐相関", "🌬️ 気象影響", 
-        "📊 統合レポート", "🧪 LABO", "🚩 風向別ポイント", "🏆 RANKER ROAD", "🎯 PREDICT"
-    ])
+# 場所のリスト作成
+place_options = sorted(m_df["place_name"].unique().tolist())
+
+# タブの作成
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+    "📝 登録", "📋 一覧", "🖼️ ギャラリー", "🌊 時合分析", "📊 統計", 
+    "🌬️ 気象", "🧪 LABO", "🚩 風向", "🏆 RANKER", "🎯 PREDICT"
+])
+
+with tab1:
+    st.write("ここは登録タブです。")
+    st.dataframe(df.head()) # 試しに数行だけ表示
+
+# (以降、他のタブの中身)
 
 # 以降、各 tab の中身を記述...
 # (各タブ内の計算で `df` を使う部分は、上記 load_data_from_gs で型変換済みなのでそのまま動きます)
@@ -1040,6 +1036,7 @@ def save_all(df, m_df):
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
