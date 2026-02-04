@@ -8,146 +8,106 @@ import plotly.express as px
 import plotly.graph_objects as go
 from PIL import Image, ImageDraw, ImageFont
 import io
-import base64
-import requests
-from io import BytesIO
-import base64
 import re
 
-import streamlit as st
-
-# --- パスワード設定 ---
-# ここに好きなパスワードを設定してください
+# --- 1. 基本設定・ログイン ---
+st.set_page_config(page_title="天草スズキ・ログ管理", layout="wide")
 STATIC_PASSWORD = "Ktdamks3" 
 
 def check_password():
-    """ログイン画面を表示し、パスワードを確認する関数"""
     if "password_correct" not in st.session_state:
         st.session_state["password_correct"] = False
-
-    # すでにログイン済みなら何もしない
     if st.session_state["password_correct"]:
         return True
-
-    # ログイン画面のレイアウト
     st.title("🔐 Fishing App Login")
-    
     with st.form("login_form"):
-        pwd = st.text_input("パスワードを入力してください", type="password")
-        submit = st.form_submit_button("ログイン")
-        
-        if submit:
+        pwd = st.text_input("パスワード", type="password")
+        if st.form_submit_button("ログイン"):
             if pwd == STATIC_PASSWORD:
                 st.session_state["password_correct"] = True
-                st.rerun() # 画面を更新してアプリを表示
+                st.rerun()
             else:
                 st.error("パスワードが正しくありません")
-    
     return False
 
-# パスワードが通るまで、これ以降のコードを実行させない
 if not check_password():
     st.stop()
 
-# --- ここから下に、元のスプレッドシート読み込みやタブのコードを続けます ---
-
+# --- 2. 共通関数（画像・計算） ---
 def get_image_for_display(file_val):
     if pd.isna(file_val) or str(file_val).strip() == "":
         return None
     val_str = str(file_val).strip()
-
     if "drive.google.com" in val_str:
         match = re.search(r'[-\w]{25,}', val_str)
         if match:
             file_id = match.group(0)
-            # 【ここを修正】uc?id= ではなく thumbnail リンクを使用します
-            # sz=w1000 とすることで、高画質な画像を取得できます
             return f"https://drive.google.com/thumbnail?id={file_id}&sz=w1000"
-    
-    local_path = os.path.join(PHOTO_DIR, val_str)
-    if os.path.exists(local_path):
-        return local_path
     return None
-    
-    # URLでない場合はローカルフォルダを探す
-    local_path = os.path.join(PHOTO_DIR, val_str)
-    if os.path.exists(local_path):
-        return local_path
-    
-    return None
-    
-# --- 1. 基本設定 ---
-st.set_page_config(page_title="天草スズキ・ログ管理", layout="wide")
-LOG_CSV = "final_fishing_log.csv"
-MASTER_CSV = "group_place_master.csv"
-PHOTO_DIR = "input_photos"
 
-# --- 2. スプレッドシート連携の設定 ---
-spreadsheet = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_FcoS8gFFyE/"
-
-# 【重要！】この一行が抜けているか、関数の「中」に入っていませんか？
-# 関数の「外」に置いておく必要があります。
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-# --- 重要：ここを追加 ---
-# もし以前 SHEET_URL = "..." という行があったら、それは消すかコメントアウトしてください。
-@st.cache_data(ttl=600)
-def load_data_from_gs():
-    # 行の頭を揃えるのがポイントです！
-    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    df = conn.read(spreadsheet=url)
-    return df
-    
-    if "datetime" in df.columns:
-        df["datetime"] = pd.to_datetime(df["datetime"], errors='coerce')
-    if "全長_cm" in df.columns:
-        df["全長_cm"] = pd.to_numeric(df["全長_cm"], errors='coerce')
-    # df["場所"] = df["場所"].fillna("未設定")  # 必要なら追加
-    return df
-    # --- 計算用の安全な関数を追加 ---
 def calc_elapsed_v2(r):
     try:
-        # datetimeと直前の満潮_時刻が両方存在し、かつ計算可能な場合のみ実行
         if pd.notna(r['datetime']) and pd.notna(r['直前の満潮_時刻']):
-            return (r['datetime'] - r['直前の満潮_時刻']).total_seconds() / 60 % 744
+            # 日付型同士の引き算ができるように変換
+            dt = pd.to_datetime(r['datetime'])
+            high = pd.to_datetime(r['直前の満潮_時刻'])
+            return (dt - high).total_seconds() / 60 % 744
     except:
         pass
-    return 0 # エラーや空データの場合は0を返す
+    return 0
+
+# --- 3. スプレッドシート連携 ---
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+def load_data_from_gs():
+    try:
+        url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+        df = conn.read(spreadsheet=url, ttl="0")
+        
+        # --- 【重要】読み込み時に型を一括変換 ---
+        if "datetime" in df.columns:
+            df["datetime"] = pd.to_datetime(df["datetime"], errors='coerce')
+        if "直前の満潮_時刻" in df.columns:
+            df["直前の満潮_時刻"] = pd.to_datetime(df["直前の満潮_時刻"], errors='coerce')
+        if "全長_cm" in df.columns:
+            df["全長_cm"] = pd.to_numeric(df["全長_cm"], errors='coerce')
+        if "潮位_cm" in df.columns:
+            df["潮位_cm"] = pd.to_numeric(df["潮位_cm"], errors='coerce')
+            
+        return df
+    except Exception as e:
+        st.error(f"データ読み込みエラー: {e}")
+        return pd.DataFrame()
 
 def save_all(df, m_df):
     try:
-        # 保存時もSecretsからURLを引っ張ってくる
         url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-        conn.update(spreadsheet=url, data=df)
+        # 保存前に日付を文字列に戻すとスプレッドシート側で扱いやすくなります
+        df_to_save = df.copy()
+        if "datetime" in df_to_save.columns:
+            df_to_save["datetime"] = df_to_save["datetime"].astype(str)
+        
+        conn.update(spreadsheet=url, data=df_to_save)
         st.cache_data.clear()
+        # 地点マスターもCSV保存
+        m_df.to_csv("group_place_master.csv", index=False)
         return True
     except Exception as e:
         st.error(f"保存失敗: {e}")
         return False
-        
-# --- 3. メイン処理開始 ---
-# ファイルの最終更新時刻を取得（これで自動更新を実現）
-log_mtime = os.path.getmtime(LOG_CSV) if os.path.exists(LOG_CSV) else 0
-master_mtime = os.path.getmtime(MASTER_CSV) if os.path.exists(MASTER_CSV) else 0
 
+# --- 4. メイン処理 ---
 df = load_data_from_gs()
 m_df = pd.read_csv("group_place_master.csv")
+place_options = sorted(m_df["place_name"].unique().tolist())
 
-if df is not None:
-    # 61行目：ここを if の中に入れるか、if の外に出すか確認してください
-    # 通常、タブ定義は if の外（左端）に書くのが一般的です
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10= st.tabs([
-    "📝 登録", 
-    "📈 統計", 
-    "🗺️ エリア分析", 
-    "🌊 潮汐相関", 
-    "🌬️ 気象影響", 
-    "📊 統合レポート", 
-    "🧪 LABO", 
-    "🚩 風向別ポイント", 
-    "🏆 RANKER ROAD",
-    "🎯 PREDICT"
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+    "📝 登録", "📋 一覧", "🖼️ ギャラリー", "🌊 時合分析", "📊 攻略レポート", 
+    "🧪 LABO", "🚩 風向別", "🏆 RANKER", "🎯 PREDICT", "🛠️ 管理"
 ])
+
+# 以降、各 tab の中身を記述...
+# (各タブ内の計算で `df` を使う部分は、上記 load_data_from_gs で型変換済みなのでそのまま動きます)
     place_options = sorted(m_df["place_name"].unique().tolist())
 
     with tab1:
@@ -1051,6 +1011,7 @@ def save_all(df, m_df):
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
