@@ -201,12 +201,15 @@ if df is not None:
                         # データフレームに追加して保存
                         new_df_row = pd.DataFrame([new_data])
                         df = pd.concat([df, new_df_row], ignore_index=True)
-                        save_all(df, m_df)
-                        
-                        st.success("釣果を保存しました！写真はGoogleドライブにアップ後、URLを貼り付けてください。")
-                        st.rerun()
-
-        st.divider()
+                        def save_all(df, m_df):
+    try:
+        # index=False を入れることで、余計な列が増えるのを防ぎ、確実に上書きします
+        conn.update(data=df) 
+        st.cache_data.clear() # キャッシュをクリアして最新を読み込ませる
+        return True
+    except Exception as e:
+        st.error(f"保存に失敗しました: {e}")
+        return False
 
         # --- 2. 【既存機能】地点マスター登録 ---
         with st.expander("🆕 新しい釣り場をマスターに追加"):
@@ -1036,6 +1039,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
