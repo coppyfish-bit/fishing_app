@@ -83,7 +83,7 @@ MASTER_CSV = "group_place_master.csv"
 PHOTO_DIR = "input_photos"
 
 # --- 2. スプレッドシート連携の設定 ---
-SHEET_URL = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_FcoS8gFFyE/"
+spreadsheet = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_FcoS8gFFyE/"
 
 # 【重要！】この一行が抜けているか、関数の「中」に入っていませんか？
 # 関数の「外」に置いておく必要があります。
@@ -1033,6 +1033,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
