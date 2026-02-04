@@ -14,6 +14,43 @@ from io import BytesIO
 import base64
 import re
 
+import streamlit as st
+
+# --- パスワード設定 ---
+# ここに好きなパスワードを設定してください
+STATIC_PASSWORD = "Ktdamks3" 
+
+def check_password():
+    """ログイン画面を表示し、パスワードを確認する関数"""
+    if "password_correct" not in st.session_state:
+        st.session_state["password_correct"] = False
+
+    # すでにログイン済みなら何もしない
+    if st.session_state["password_correct"]:
+        return True
+
+    # ログイン画面のレイアウト
+    st.title("🔐 Fishing App Login")
+    
+    with st.form("login_form"):
+        pwd = st.text_input("パスワードを入力してください", type="password")
+        submit = st.form_submit_button("ログイン")
+        
+        if submit:
+            if pwd == STATIC_PASSWORD:
+                st.session_state["password_correct"] = True
+                st.rerun() # 画面を更新してアプリを表示
+            else:
+                st.error("パスワードが正しくありません")
+    
+    return False
+
+# パスワードが通るまで、これ以降のコードを実行させない
+if not check_password():
+    st.stop()
+
+# --- ここから下に、元のスプレッドシート読み込みやタブのコードを続けます ---
+
 def get_image_for_display(file_val):
     if pd.isna(file_val) or str(file_val).strip() == "":
         return None
@@ -923,6 +960,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
