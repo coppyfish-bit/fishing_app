@@ -91,8 +91,10 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=600)
 def load_data_from_gs():
-    df = conn.read()  # ← 先頭に半角スペースを4つ！
-    return df         # ← 先頭に半角スペースを4つ！
+    # Secrets の中から直接スプレッドシートのURLを引っ張ってきます
+    target_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    df = conn.read(spreadsheet=target_url)
+    return df
     
     if "datetime" in df.columns:
         df["datetime"] = pd.to_datetime(df["datetime"], errors='coerce')
@@ -1033,6 +1035,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
