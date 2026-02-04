@@ -95,7 +95,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def load_data_from_gs():
     # Secrets の中から直接スプレッドシートのURLを引っ張ってきます
     target_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    df = conn.read(spreadsheet=target_url)
+    df = conn.read()
     return df
     
     if "datetime" in df.columns:
@@ -187,21 +187,29 @@ if df is not None:
                     f_memo = st.text_area("備考・状況メモ")
                     
                     if st.form_submit_button("✨ この内容で新規保存"):
-                        # 新しい行データを作成
-                        new_data = {
+                        # --- 1. スプレッドシートの全ての列名を持った空のデータを作る ---
+                        # これにより、項目の不一致によるエラーを防ぎます
+                        new_row_full = {col: "" for col in df.columns}
+                        
+                        # --- 2. ユーザーが入力した項目だけを上書きする ---
+                        new_row_full.update({
                             "datetime": f_date,
+                            "場所": f_place,
                             "魚種": f_fish,
                             "全長_cm": f_size,
-                            "場所": f_place,
                             "ルアー": f_lure,
                             "備考": f_memo,
-                            "filename": "pending" # ここにGoogleドライブのURLが入る想定
-                        }
+                            "filename": "pending" # 後でドライブURLを貼る用
+                        })
                         
-                        # データフレームに追加して保存
-                        new_df_row = pd.DataFrame([new_data])
-                        df = pd.concat([df, new_df_row], ignore_index=True)
-                        # 204行目
+                        # --- 3. データフレームに変換して合体 ---
+                        new_df_row = pd.DataFrame([new_row_full])
+                        updated_df = pd.concat([df, new_df_row], ignore_index=True)
+                        
+                        # --- 4. 保存実行 ---
+                        if save_all(updated_df, m_df):
+                            st.success("スプレッドシートに正常に反映されました！")
+                            st.rerun()
 def save_all(df, m_df):
     # ↓ここから下の行はすべて「Tab」か「スペース4つ」で右にずらします
     try:
@@ -1040,6 +1048,7 @@ def save_all(df, m_df):
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
