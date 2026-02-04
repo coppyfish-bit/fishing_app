@@ -91,16 +91,8 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=600)
 def load_data_from_gs():
-    # ここで conn を使います
-    # --- 修正前 ---
-# df = conn.read(spreadsheet=SHEET_URL)
-
-# --- 修正後 ---
-def load_data_from_gs():
-    # Secrets の [connections.gsheets] セクションに 
-    # spreadsheet = "URL" が書いてあれば、引数なしで読み込めます
-    df = conn.read() 
-    return df 
+    df = conn.read()  # ← 先頭に半角スペースを4つ！
+    return df         # ← 先頭に半角スペースを4つ！
     
     if "datetime" in df.columns:
         df["datetime"] = pd.to_datetime(df["datetime"], errors='coerce')
@@ -1041,6 +1033,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
