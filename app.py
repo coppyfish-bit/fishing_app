@@ -61,20 +61,26 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data_from_gs():
     try:
+        # URLの取得確認
         url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-        df = conn.read(spreadsheet=url, ttl="0")
+        st.write("🔗 接続先URL:", url) # 画面にURLが出るか確認
         
-        # --- 【重要】読み込み時に型を一括変換 ---
-        if "datetime" in df.columns:
-            df["datetime"] = pd.to_datetime(df["datetime"], errors='coerce')
-        if "直前の満潮_時刻" in df.columns:
-            df["直前の満潮_時刻"] = pd.to_datetime(df["直前の満潮_時刻"], errors='coerce')
-        if "全長_cm" in df.columns:
-            df["全長_cm"] = pd.to_numeric(df["全長_cm"], errors='coerce')
-        if "潮位_cm" in df.columns:
-            df["潮位_cm"] = pd.to_numeric(df["潮位_cm"], errors='coerce')
+        # データの読み込み
+        df = conn.read(spreadsheet=url, ttl="0") 
+        
+        # 読み込めた直後の状態を確認
+        if df is not None:
+            st.write(f"✅ 読み込み成功！データ数: {len(df)}行")
+            st.write("📋 列名一覧:", df.columns.tolist())
+            # 最初の1行を試しに出してみる
+            st.write("👀 最初のデータ:", df.head(1))
+        else:
+            st.error("❌ dfがNone（空）で返ってきています")
             
         return df
+    except Exception as e:
+        st.error(f"❌ 読み込み中にエラーが発生しました: {e}")
+        return pd.DataFrame()
     except Exception as e:
         st.error(f"データ読み込みエラー: {e}")
         return pd.DataFrame()
@@ -1034,6 +1040,7 @@ def save_all(df, m_df):
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
