@@ -201,14 +201,15 @@ if df is not None:
                         # データフレームに追加して保存
                         new_df_row = pd.DataFrame([new_data])
                         df = pd.concat([df, new_df_row], ignore_index=True)
-                        def save_all(df, m_df):
+                        # 204行目
+def save_all(df, m_df):
+    # ↓ここから下の行はすべて「Tab」か「スペース4つ」で右にずらします
     try:
-        # index=False を入れることで、余計な列が増えるのを防ぎ、確実に上書きします
-        conn.update(data=df) 
-        st.cache_data.clear() # キャッシュをクリアして最新を読み込ませる
+        conn.update(data=df)
+        st.cache_data.clear()
         return True
     except Exception as e:
-        st.error(f"保存に失敗しました: {e}")
+        st.error(f"保存失敗: {e}")
         return False
 
         # --- 2. 【既存機能】地点マスター登録 ---
@@ -1039,6 +1040,7 @@ if df is not None:
         else:
 
             st.warning("⚠️ 指定された風向きグループでの実績がまだありません。")
+
 
 
 
