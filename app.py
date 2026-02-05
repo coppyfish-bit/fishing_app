@@ -294,90 +294,106 @@ with st.form("main_form", clear_on_submit=True):
     # 保存ボタン
     submit = st.form_submit_button("🚀 気象・潮汐を解析してスプレッドシートに保存")
 
-# --- 保存ボタンが押された後の処理 ---
-
+# --- 保存処理の改良版全文 ---
 if submit:
-    # 場所名とIDの確定
+    # 1. 場所名とIDの確定ロジック
     if place_selected != "-- 新規地点 or 手動入力 --":
         final_place_name = place_selected
         final_group_id = place_to_id.get(place_selected)
     else:
-        final_place_name = place_manual
-        # 新規の場合は現在の最大ID + 1
-        final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 0
+        final_place_name = place_manual.strip() # 前後の空白を削除
+        # 新規の場合は現在の最大ID + 1 を数値として取得
+        if not m_df.empty and "group_id" in m_df.columns:
+            final_group_id = int(m_df["group_id"].max() + 1)
+        else:
+            final_group_id = 0
 
+    # 2. 入力チェック
     if not final_place_name:
         st.error("⚠️ 場所名を選択するか、新しい場所名を入力してください。")
     else:
-        with st.spinner('📊 当時の気象と潮汐を計算中...'):
-            from datetime import datetime # ファイル上部にあるか確認
-            target_dt = datetime(
-                date_in.year, date_in.month, date_in.day,
-                time_in.hour, time_in.minute
-            )
-            
-            # 1. 気象取得（4項目）
-            weather_res = get_weather_data(lat_in_final, lon_in_final, target_dt)
-            if weather_res and len(weather_res) == 4:
-                temp, wind_s, wind_d, precip = weather_res
-            else:
-                temp, wind_s, wind_d, precip = None, None, None, None
-            
-            # 2. 潮汐取得（10段階フェーズ版）
-            tide_name = get_tide_name(target_dt)
-            tide_info = get_tide_details(target_dt)
-            
-            # 3. 保存データの作成
-            save_data = {
-                "group_id": final_group_id,
-                "場所": final_place_name,
-                "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
-                "date": date_in.strftime('%Y-%m-%d'),
-                "time": time_in.strftime('%H:%M'),
-                "lat": lat_in_final,
-                "lon": lon_in_final,
-                "気温": temp,
-                "風速": wind_s,
-                "風向": get_wind_direction_label(wind_d), # 度数から方位文字へ
-                "降水量": precip,
-                "潮名": tide_name,
-                "潮位_cm": tide_info.get("潮位_cm"),
-                "月齢": tide_info.get("月齢"),
-                "潮位フェーズ": tide_info.get("潮位フェーズ"),
-                "直前の満潮_時刻": tide_info.get("直前の満潮_時刻"),
-                "直前の干潮_時刻": tide_info.get("直前の干潮_時刻"),
-                "次の満潮まで_分": tide_info.get("次の満潮まで_分"),
-                "次の干潮まで_分": tide_info.get("次の干潮まで_分"),
-                "魚種": fish_in,
-                "全長_cm": length_in,
-                "ルアー": lure_in,
-                "備考": memo_in,
-                "filename": uploaded_file.name if uploaded_file else ""
-            }
-            
-            # 4. 書き込み実行
+        with st.spinner('📊 当時の気象と潮汐を解析中...'):
             try:
+                # 3. 日時の厳密な datetime オブジェクト化（TypeError対策）
+                target_dt = datetime(
+                    date_in.year, date_in.month, date_in.day,
+                    time_in.hour, time_in.minute
+                )
+                
+                # 4. 気象データの取得（4項目: 気温, 風速, 風向, 降水量）
+                weather_res = get_weather_data(lat_in_final, lon_in_final, target_dt)
+                if weather_res and len(weather_res) == 4:
+                    temp, wind_s, wind_d, precip = weather_res
+                else:
+                    temp, wind_s, wind_d, precip = None, None, None, None
+                
+                # 5. 潮汐データの取得（10段階フェーズ・干満時刻）
+                tide_name = get_tide_name(target_dt)
+                tide_info = get_tide_details(target_dt)
+                if not tide_info:
+                    tide_info = {} # 万が一の空辞書ガード
+
+                # 6. 保存データの辞書作成（全23カラム想定）
+                save_data = {
+                    "group_id": final_group_id,
+                    "場所": final_place_name,
+                    "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
+                    "date": date_in.strftime('%Y-%m-%d'),
+                    "time": time_in.strftime('%H:%M'),
+                    "lat": lat_in_final,
+                    "lon": lon_in_final,
+                    "気温": temp,
+                    "風速": wind_s,
+                    "風向": get_wind_direction_label(wind_d), # 角度を方位文字（南南西など）へ変換
+                    "降水量": precip,
+                    "潮名": tide_name,
+                    "潮位_cm": tide_info.get("潮位_cm"),
+                    "月齢": tide_info.get("月齢"),
+                    "潮位フェーズ": tide_info.get("潮位フェーズ"),
+                    "直前の満潮_時刻": tide_info.get("直前の満潮_時刻"),
+                    "直前の干潮_時刻": tide_info.get("直前の干潮_時刻"),
+                    "次の満潮まで_分": tide_info.get("次の満潮まで_分"),
+                    "次の干潮まで_分": tide_info.get("次の干潮まで_分"),
+                    "魚種": fish_in,
+                    "全長_cm": length_in,
+                    "ルアー": lure_in,
+                    "備考": memo_in,
+                    "filename": uploaded_file.name if uploaded_file else ""
+                }
+                
+                # 7. スプレッドシートへの書き込み実行
+                # 釣果ログシートの更新
                 new_row = pd.DataFrame([save_data])
                 updated_df = pd.concat([df, new_row], ignore_index=True)
                 conn.update(spreadsheet=url, data=updated_df)
                 
-                # 新規場所だった場合はマスターにも追加
-                if place_selected == "-- 新規地点 or 手動入力 --":
-                    new_m = pd.DataFrame([{
+                # 8. マスターデータの更新（新規場所かつ、まだ登録されていない場合のみ）
+                if place_selected == "-- 新規地点 or 手動入力 --" and final_place_name not in place_options:
+                    new_m_row = pd.DataFrame([{
                         "group_id": final_group_id, 
                         "place_name": final_place_name, 
                         "latitude": lat_in_final, 
                         "longitude": lon_in_final
                     }])
-                    updated_m = pd.concat([m_df, new_m], ignore_index=True)
-                    conn.update(spreadsheet=url, worksheet="place_master", data=updated_m)
+                    # 列名をマスターシートの形式に合わせて結合
+                    updated_m_df = pd.concat([m_df, new_m_row], ignore_index=True)
+                    conn.update(spreadsheet=url, worksheet="place_master", data=updated_m_df)
+                    st.toast(f"📍 新しい釣り場「{final_place_name}」をマスターに登録しました")
 
+                # 9. 完了通知
                 st.success(f"✅ 保存成功: {final_place_name} (ID:{final_group_id})")
                 st.balloons()
+                
+                # 画面更新のためのキャッシュクリア
                 st.cache_data.clear()
-                # st.rerun() # 必要に応じて
+                # 成功したら画面をリセット
+                st.rerun()
+
             except Exception as e:
-                st.error(f"保存に失敗しました: {e}")
+                st.error(f"❌ 処理中にエラーが発生しました: {e}")
+                # 詳細なエラーを画面に出したい場合は以下を有効に
+                # st.exception(e)
+
 
 
 
