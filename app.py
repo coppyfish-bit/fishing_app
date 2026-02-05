@@ -286,7 +286,7 @@ with st.form("main_form", clear_on_submit=True):
                     
                     # 潮汐・気象計算
                     t_name = get_tide_name(target_dt)
-                    t_info = get_tide_details(lat_in, lon_in, target_dt)
+                    t_info = get_tide_details(lat_in, lon_in, target_dt, final_place_name)
                     temp, wind_s, wind_d, prec = get_weather_data(lat_in, lon_in, target_dt)
 
                     # --- ご指定の列順にデータを並べ替え ---
@@ -341,6 +341,7 @@ with st.form("main_form", clear_on_submit=True):
                     st.cache_data.clear()
                 except Exception as e:
                     st.error(f"❌ 書き込みエラーが発生しました: {e}")
+
 
 
 
