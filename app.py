@@ -104,14 +104,28 @@ def get_tide_details(dt):
     return {"潮位_cm": int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21))), 
             "月齢": moon_age, "潮位フェーズ": phase}
     
+    # 潮位(cm)の計算
     tide_cm = int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21)))
+
+    # --- 直前の満潮・干潮時刻の算出 ---
+    # 1. 直前の満潮 (hour_cycle分だけ遡る)
+    prev_high_dt = dt - timedelta(hours=hour_cycle)
+    
+    # 2. 直前の干潮
+    if hour_cycle >= 6.21:
+        # すでに干潮を過ぎている場合、その干潮時刻
+        prev_low_dt = dt - timedelta(hours=(hour_cycle - 6.21))
+    else:
+        # まだ干潮に達していない場合、前サイクルの干潮時刻
+        prev_low_dt = dt - timedelta(hours=(hour_cycle + 6.21))
+
     return {
         "潮位_cm": tide_cm,
         "月齢": moon_age,
         "潮位フェーズ": phase,
-        "直前の満潮_時刻": (dt - timedelta(hours=hour_cycle)).strftime("%H:%M"),
-        "直前の干潮_時刻": (dt - timedelta(hours=(hour_cycle-6.21 if hour_cycle>6.21 else hour_cycle+6.21))).strftime("%H:%M"),
-        "次の満潮まで_分": int((12.42 - hour_cycle) * 60),
+        "直前の満潮_時刻": prev_high_dt.strftime("%H:%M"),
+        "直前の干潮_時刻": prev_low_dt.strftime("%H:%M"),
+        "次の満潮まで_分": int((12.42 - hour_cycle) * 60) if hour_cycle < 12.42 else 0,
         "次の干潮まで_分": int((6.21 - hour_cycle) * 60 if hour_cycle < 6.21 else (18.63 - hour_cycle) * 60)
     }
 
@@ -235,6 +249,7 @@ if submit:
             
         except Exception as e:
             st.error(f"保存中にエラーが発生しました: {e}")
+
 
 
 
