@@ -80,7 +80,7 @@ with st.form("input_form", clear_on_submit=True):
     place_in = st.selectbox("📍 場所", options=place_options)
     fish_in = st.text_input("🐟 魚種", placeholder="スズキ")
     lure_in = st.text_input("🎣 ルアー", placeholder="カゲロウ125MD")
-    length_in = st.slider("📏 全長 (cm)", 0.0, 150.0, 40.0, 0.5)
+    length_in = st.slider("📏 全長 (cm)", 0.0, 150.0, 40.0, 1.0)
     memo_in = st.text_area("📝 備考")
     
     submit_button = st.form_submit_button("🚀 スプレッドシートに保存", use_container_width=True)
@@ -91,6 +91,7 @@ if submit_button:
     # ...
     st.success("登録完了！")
     st.rerun()
+
 
 
 
