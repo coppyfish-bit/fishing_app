@@ -38,8 +38,17 @@ def get_coordinates(geotags):
     except:
         return None, None
 
+# --- 1. 風向を漢字に変換する関数 ---
+def get_wind_direction(deg):
+    if deg is None: return ""
+    # 360度を16方位（22.5度刻み）で割る
+    directions = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", 
+                  "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
+    idx = int((deg + 11.25) / 22.5) % 16
+    return directions[idx]
+
+# --- 2. 気象データ取得関数（風向対応版） ---
 def get_weather_data(lat, lon, dt):
-    """気象データを取得。失敗時は (None, None, None) を返す"""
     try:
         start_date = (dt - timedelta(days=2)).strftime('%Y-%m-%d')
         end_date = dt.strftime('%Y-%m-%d')
@@ -49,24 +58,28 @@ def get_weather_data(lat, lon, dt):
             "longitude": float(lon),
             "start_date": start_date,
             "end_date": end_date,
-            "hourly": "temperature_2m,windspeed_10m,precipitation",
+            # winddirection_10m を追加
+            "hourly": "temperature_2m,windspeed_10m,winddirection_10m,precipitation",
             "timezone": "Asia/Tokyo"
         }
-        res = requests.get(url, params=params, timeout=10)
-        data = res.json()
-        if "hourly" not in data:
-            return None, None, None
-
-        idx = (len(data['hourly']['temperature_2m']) - 25) + dt.hour
-        idx = max(0, min(idx, len(data['hourly']['temperature_2m']) - 1))
+        res = requests.get(url, params=params, timeout=10).json()
         
-        temp = data['hourly']['temperature_2m'][idx]
-        wind_s = data['hourly']['windspeed_10m'][idx]
-        precip_list = data['hourly']['precipitation'][:idx+1]
+        if "hourly" not in res: return None, None, None, None
+
+        target_hour_idx = ((dt.date() - (dt - timedelta(days=2)).date()).days * 24) + dt.hour
+        target_hour_idx = max(0, min(target_hour_idx, len(res['hourly']['temperature_2m']) - 1))
+        
+        temp = res['hourly']['temperature_2m'][target_hour_idx]
+        wind_s = res['hourly']['windspeed_10m'][target_hour_idx]
+        wind_d_deg = res['hourly']['winddirection_10m'][target_hour_idx] # 角度
+        wind_d_str = get_wind_direction(wind_d_deg) # 漢字に変換
+        
+        precip_list = res['hourly']['precipitation'][:target_hour_idx+1]
         precip_48h = sum(precip_list[-48:])
-        return temp, wind_s, round(precip_48h, 1)
+        
+        return temp, wind_s, wind_d_str, round(precip_48h, 1)
     except:
-        return None, None, None
+        return None, None, None, None
 
 def get_tide_name(dt):
     base_date = datetime(2023, 1, 22)
@@ -77,20 +90,28 @@ def get_tide_name(dt):
                 8:"長潮", 22:"長潮", 9:"若潮", 23:"若潮"}
     return tide_map.get(diff, "中潮")
 
+# --- 3. 潮汐詳細（10段階表示） ---
 def get_tide_details(dt):
-    """天文潮位の簡易計算"""
     base_new_moon = datetime(2023, 1, 22, 5, 53) 
     lunar_cycle = 29.530588
     diff_days = (dt - base_new_moon).total_seconds() / 86400
     moon_age = round(diff_days % lunar_cycle, 1)
+    
+    # 満潮から次の満潮まで約12.42時間、半分で6.21時間
     hour_cycle = (dt.hour + dt.minute/60) % 12.42
     
-    if hour_cycle < 1.5: phase = "満潮付近"
-    elif hour_cycle < 4.5: phase = "下げ三分"
-    elif hour_cycle < 7.5: phase = "下げ七分"
-    elif hour_cycle < 9.0: phase = "干潮付近"
-    elif hour_cycle < 10.5: phase = "上げ三分"
-    else: phase = "上げ七分"
+    # 6.21時間を10分割して判定
+    step = 6.21 / 10
+    if hour_cycle < 6.21:
+        s = int(hour_cycle / step)
+        phase = f"下げ{s}分" if 0 < s < 10 else ("満潮" if s==0 else "干潮")
+    else:
+        s = int((hour_cycle - 6.21) / step)
+        phase = f"上げ{s}分" if 0 < s < 10 else ("干潮" if s==0 else "満潮")
+    
+    # ...（潮位計算などは前回同様）
+    return {"潮位_cm": int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21))), 
+            "月齢": moon_age, "潮位フェーズ": phase}
     
     tide_cm = int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21)))
     return {
@@ -152,19 +173,25 @@ with st.form("main_form", clear_on_submit=True):
     
     submit = st.form_submit_button("🚀 気象と潮汐を解析して保存")
 
-# --- 3. 保存処理 ---
-
+# --- 6. 保存処理 ---
 if submit:
-    with st.spinner('解析中...'):
+    with st.spinner('気象と潮汐を解析中...'):
         target_dt = datetime.combine(date_in, time_in)
         
-        # 気象データの取得 (安全に取得)
-        weather_data = get_weather_data(lat_in, lon_in, target_dt)
-        temp, wind_s, precip = weather_data if weather_data else (None, None, None)
+        # 1. 気象データを取得 (戻り値が4つ [気温, 風速, 風向, 降水] になっています)
+        weather_res = get_weather_data(lat_in, lon_in, target_dt)
         
+        # もしデータが取れなかった場合でも、空の値(None)で埋めてエラーを防ぐ
+        if weather_res:
+            temp, wind_s, wind_d, precip = weather_res
+        else:
+            temp, wind_s, wind_d, precip = None, None, None, None
+        
+        # 2. 潮汐データの取得
         tide_name = get_tide_name(target_dt)
         tide_info = get_tide_details(target_dt)
         
+        # 3. 保存用データの作成（共有いただいた全カラムを網羅）
         save_data = {
             "filename": uploaded_file.name if uploaded_file else "",
             "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
@@ -172,21 +199,29 @@ if submit:
             "time": time_in.strftime('%H:%M'),
             "lat": lat_in,
             "lon": lon_in,
-            "気温": temp, "風速": wind_s, "降水量": precip,
+            "気温": temp,
+            "風速": wind_s,
+            "風向": wind_d,      # ここが追加された風向（漢字）です
+            "降水量": precip,
             "潮名": tide_name,
             "潮位_cm": tide_info["潮位_cm"],
             "月齢": tide_info["月齢"],
-            "潮位フェーズ": tide_info["潮位フェーズ"],
+            "潮位フェーズ": tide_info["潮位フェーズ"], # 10段階表示
             "直前の満潮_時刻": tide_info["直前の満潮_時刻"],
             "直前の干潮_時刻": tide_info["直前の干潮_時刻"],
             "次の満潮まで_分": tide_info["次の満潮まで_分"],
             "次の干潮まで_分": tide_info["次の干潮まで_分"],
-            "場所": place_name, "魚種": fish_in, "全長_cm": length_in,
-            "ルアー": lure_in, "備考": memo_in
+            "場所": final_place_name,
+            "魚種": fish_in,
+            "全長_cm": length_in,
+            "ルアー": lure_in,
+            "備考": memo_in
         }
         
+        # 4. スプレッドシートを更新
         new_df = pd.concat([df, pd.DataFrame([save_data])], ignore_index=True)
         conn.update(spreadsheet=url, data=new_df)
-        st.success("✅ 保存が完了しました！")
+        
+        st.success(f"✅ 保存完了！ {wind_d}の風、フェーズは {tide_info['潮位フェーズ']} でした。")
         st.cache_data.clear()
         st.rerun()
