@@ -201,7 +201,7 @@ if submit:
             "lon": lon_in,
             "気温": temp,
             "風速": wind_s,
-            "風向": wind_d,
+            "風向": get_wind_direction_label(wind_d), # 文字に変換して保存！
             "降水量": precip,
             "潮名": tide_name,
             "潮位_cm": tide_info.get("潮位_cm"),
@@ -235,6 +235,7 @@ if submit:
             
         except Exception as e:
             st.error(f"保存中にエラーが発生しました: {e}")
+
 
 
 
