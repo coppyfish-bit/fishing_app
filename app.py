@@ -6,12 +6,9 @@ from PIL.ExifTags import TAGS, GPSTAGS
 from datetime import datetime, timedelta
 import requests
 
-# --- 1. 座標変換・取得関数 ---
-
+# --- 1. 各種関数 (GPS変換・気象・潮汐) ---
 def get_geotagging(exif):
-    """EXIFからGPS情報を辞書形式で抽出"""
-    if not exif:
-        return None
+    if not exif: return None
     geotagging = {}
     for tag, value in exif.items():
         decoded = TAGS.get(tag, tag)
@@ -22,7 +19,6 @@ def get_geotagging(exif):
     return geotagging
 
 def get_decimal_from_dms(dms, ref):
-    """度分秒形式を10進数に変換"""
     degrees = dms[0]
     minutes = dms[1] / 60.0
     seconds = dms[2] / 3600.0
@@ -33,15 +29,12 @@ def get_decimal_from_dms(dms, ref):
     return round(degrees + minutes + seconds, 6)
 
 def get_coordinates(geotags):
-    """緯度と経度の10進数を取得"""
     try:
         lat = get_decimal_from_dms(geotags['GPSLatitude'], geotags['GPSLatitudeRef'])
         lon = get_decimal_from_dms(geotags['GPSLongitude'], geotags['GPSLongitudeRef'])
         return lat, lon
     except:
         return None, None
-
-# --- 2. 気象・潮汐関数 (以前のものを流用) ---
 
 def get_weather_data(lat, lon, dt):
     try:
@@ -72,20 +65,43 @@ def get_tide_name(dt):
                 8:"長潮", 22:"長潮", 9:"若潮", 23:"若潮"}
     return tide_map.get(diff, "中潮")
 
-# --- 3. アプリメイン処理 ---
+# --- 2. 初期設定とデータ読み込み ---
+st.set_page_config(page_title="Pro Fishing Log", layout="wide")
+st.title("🎣 全自動GPSログ ＆ 釣り場マスター")
 
-st.set_page_config(page_title="Fishing GPS App", layout="wide")
-st.title("🎣 GPS・気象・潮汐 全自動ログ")
-
-# 初期値
 default_dt = datetime.now()
 auto_lat, auto_lon = 35.0, 135.0
 
-# データの読み込み
-conn = st.connection("gsheets", type=GSheetsConnection)
-url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-df = conn.read(spreadsheet=url, ttl="5m")
-m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    df = conn.read(spreadsheet=url, ttl="5m")
+    m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
+    place_options = sorted(m_df["place_name"].unique().tolist())
+except Exception as e:
+    st.error(f"接続エラー: {e}")
+    st.stop()
+
+# --- 3. 新規地点のマスター登録機能 ---
+with st.expander("📍 新しい釣り場をマスターに事前登録"):
+    with st.form("master_form"):
+        new_place = st.text_input("釣り場名 (例: 志賀島 沖堤防)")
+        col1, col2 = st.columns(2)
+        with col1:
+            m_lat = st.number_input("緯度", value=33.6, format="%.6f")
+        with col2:
+            m_lon = st.number_input("経度", value=130.4, format="%.6f")
+        
+        if st.form_submit_button("マスターに保存"):
+            if new_place and new_place not in m_df["place_name"].values:
+                new_row = pd.DataFrame([{"place_name": new_place, "latitude": m_lat, "longitude": m_lon}])
+                updated_m_df = pd.concat([m_df, new_row], ignore_index=True)
+                conn.update(spreadsheet=url, worksheet="place_master", data=updated_m_df)
+                st.success(f"✅ 「{new_place}」を登録しました。プルダウンから選択可能になります。")
+                st.cache_data.clear()
+                st.rerun()
+
+st.write("---")
 
 # --- 4. 写真解析セクション ---
 uploaded_file = st.file_uploader("📸 写真をアップロード（位置・日時を自動取得）", type=['jpg', 'jpeg'])
@@ -94,41 +110,43 @@ if uploaded_file:
     img = Image.open(uploaded_file)
     exif = img._getexif()
     if exif:
-        # 日時の自動取得
         for tag_id, value in exif.items():
             if TAGS.get(tag_id) == 'DateTimeOriginal':
                 default_dt = datetime.strptime(value, '%Y:%m:%d %H:%M:%S')
-        
-        # GPSの自動取得
         geotags = get_geotagging(exif)
         if geotags:
             lat, lon = get_coordinates(geotags)
             if lat and lon:
                 auto_lat, auto_lon = lat, lon
-                st.success(f"📍 位置を特定しました: {auto_lat}, {auto_lon}")
-                st.info(f"⏰ 日時を特定しました: {default_dt}")
+                st.success(f"🎯 写真から位置( {auto_lat}, {auto_lon} )と日時を読み込みました！")
 
-# --- 5. 入力フォーム ---
-with st.form("fishing_form"):
+# --- 5. 釣果入力フォーム ---
+with st.form("fishing_form", clear_on_submit=True):
     c1, c2 = st.columns(2)
     with c1:
         date_in = st.date_input("📅 日付", value=default_dt.date())
         time_in = st.time_input("⏰ 時刻", value=default_dt.time())
     with c2:
-        lat_in = st.number_input("Lat (緯度)", value=auto_lat, format="%.6f")
-        lon_in = st.number_input("Lon (経度)", value=auto_lon, format="%.6f")
+        # 写真から取得した値を初期値にするが、手動調整も可能
+        lat_in = st.number_input("緯度", value=auto_lat, format="%.6f")
+        lon_in = st.number_input("経度", value=auto_lon, format="%.6f")
     
-    place_name = st.text_input("📍 場所名（未入力でも保存可）", placeholder="〇〇突堤")
-    fish_in = st.text_input("🐟 魚種")
+    # 既存マスターから選ぶか、手動で場所名を入力するか
+    place_selected = st.selectbox("📍 登録済み釣り場から選択", options=["-- 手動入力 --"] + place_options)
+    place_manual = st.text_input("📍 新しい場所名（直接入力）", placeholder="写真の場所名を入力")
+    
+    final_place_name = place_selected if place_selected != "-- 手動入力 --" else place_manual
+    
+    fish_in = st.text_input("🐟 魚種", placeholder="シーバス")
     length_in = st.slider("📏 全長 (cm)", 0.0, 150.0, 40.0)
     lure_in = st.text_input("🎣 ルアー")
     memo_in = st.text_area("📝 備考")
     
-    submit = st.form_submit_button("🚀 データを解析して保存")
+    submit = st.form_submit_button("🚀 気象・潮汐を自動取得して保存")
 
 # --- 6. 保存処理 ---
 if submit:
-    with st.spinner('解析中...'):
+    with st.spinner('当時の気象データを解析中...'):
         target_dt = datetime.combine(date_in, time_in)
         temp, wind_s, precip = get_weather_data(lat_in, lon_in, target_dt)
         tide = get_tide_name(target_dt)
@@ -141,11 +159,12 @@ if submit:
             "lat": lat_in,
             "lon": lon_in,
             "気温": temp, "風速": wind_s, "降水量": precip, "潮名": tide,
-            "場所": place_name, "魚種": fish_in, "全長_cm": length_in,
+            "場所": final_place_name, "魚種": fish_in, "全長_cm": length_in,
             "ルアー": lure_in, "備考": memo_in
         }
         
         new_df = pd.concat([df, pd.DataFrame([save_data])], ignore_index=True)
         conn.update(spreadsheet=url, data=new_df)
-        st.success(f"✅ 保存完了！当時の潮は「{tide}」、気温は「{temp}℃」でした。")
+        st.success(f"✅ 保存完了！当時の潮は「{tide}」、48h降水量は「{precip}mm」でした。")
         st.cache_data.clear()
+        st.rerun()
