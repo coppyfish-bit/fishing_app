@@ -59,20 +59,39 @@ def get_weather_data(lat, lon, dt):
         return h['temperature_2m'][idx], h['windspeed_10m'][idx], h['winddirection_10m'][idx], round(sum(h['precipitation'][:idx+1][-48:]), 1)
     except: return None, None, None, None
 
-def get_tide_details(lat, lon, dt):
+def get_best_station(lat, lon, place_name):
+    """
+    場所名や座標から、最も潮汐が一致する観測所を返す
+    """
+    # 1. 場所名に特定のキーワードが入っている場合の強制指定（最も精度が高い）
+    if any(k in place_name for k in ["苓北", "富岡", "都呂々"]):
+        return {"name": "苓北", "code": "RH"}
+    if any(k in place_name for k in ["本渡", "瀬戸", "下浦"]):
+        return {"name": "本渡瀬戸", "code": "HS"}
+    if any(k in place_name for k in ["八代", "鏡", "日奈久"]):
+        return {"name": "八代", "code": "O5"}
+    if any(k in place_name for k in ["口之津", "島原", "南島原"]):
+        return {"name": "口之津", "code": "KT"}
+
+    # 2. キーワードに該当しない場合は、座標から海域を判定（西側か東側か）
+    # 天草下島の中央付近（東経130.15付近）を境界にする
     STATIONS = [
-        {"name": "本渡瀬戸", "lat": 32.26, "lon": 130.13, "code": "HS"},
-        {"name": "苓北", "lat": 32.28, "lon": 130.20, "code": "RH"},
-        {"name": "口之津", "lat": 32.36, "lon": 130.12, "code": "KT"},
-        {"name": "八代", "lat": 32.31, "lon": 130.34, "code": "O5"},
+        {"name": "本渡瀬戸", "lat": 32.2625, "lon": 130.1342, "code": "HS"},
+        {"name": "苓北",     "lat": 32.5011, "lon": 130.0381, "code": "RH"},
+        {"name": "口之津",   "lat": 32.6106, "lon": 130.1931, "code": "KT"},
+        {"name": "八代",     "lat": 32.5022, "lon": 130.5683, "code": "O5"},
     ]
-    
-    station = STATIONS[0]
+
+    # 座標に基づいた単純な最短距離計算（フォールバック）
+    best_s = STATIONS[0]
     min_dist = 999
     for s in STATIONS:
-        d = calculate_distance(lat, lon, s["lat"], s["lon"])
-        if d < min_dist: min_dist, station = d, s
-
+        dist = ((lat - s["lat"])**2 + (lon - s["lon"])**2)**0.5
+        if dist < min_dist:
+            min_dist = dist
+            best_s = s
+            
+    return best_s
     try:
         url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{dt.year}/{station['code']}.txt"
         response = requests.get(url, timeout=10)
@@ -287,6 +306,7 @@ with st.form("main_form", clear_on_submit=True):
                     st.cache_data.clear()
                 except Exception as e:
                     st.error(f"❌ 書き込みエラーが発生しました: {e}")
+
 
 
 
