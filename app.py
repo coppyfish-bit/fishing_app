@@ -60,44 +60,87 @@ def get_weather_data(lat, lon, dt):
     except: return None, None, None, None
 
 def get_tide_details(lat, lon, dt):
+    """気象庁テキストフォーマット（136カラム形式）に完全準拠した解析"""
     STATIONS = [
         {"name": "本渡瀬戸", "lat": 32.26, "lon": 130.13, "code": "HS"},
         {"name": "苓北", "lat": 32.28, "lon": 130.20, "code": "RH"},
         {"name": "口之津", "lat": 32.36, "lon": 130.12, "code": "KT"},
         {"name": "八代", "lat": 32.31, "lon": 130.34, "code": "O5"},
     ]
+    
+    # 最寄りの観測所を判定
     station = STATIONS[0]
     min_dist = 999
     for s in STATIONS:
         d = calculate_distance(lat, lon, s["lat"], s["lon"])
         if d < min_dist: min_dist, station = d, s
+
     try:
+        # 気象庁のURL（水産庁方式テキスト）
         url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{dt.year}/{station['code']}.txt"
-        lines = requests.get(url, timeout=10).text.splitlines()
-        date_str = dt.strftime("%y%m%d")
-        line = next((l for l in lines if l[72:78] == date_str), None)
+        response = requests.get(url, timeout=10)
+        if response.status_code != 200: return {}
+        
+        lines = response.text.splitlines()
+        date_str = dt.strftime("%y%m%d") # YYMMDD形式
+        
+        # 73-78文字目が日付に一致する行を探す（Pythonのインデックスは0開始なので72:78）
+        line = next((l for l in lines if len(l) >= 78 and l[72:78] == date_str), None)
         if not line: return {}
+
+        # 1. 潮位の取得 (0-72文字目、3文字ずつ)
+        current_hour_tide = int(line[dt.hour*3 : dt.hour*3+3].strip() or 0)
+
+        # 2. 満潮・干潮イベントの抽出
         events = []
+        # 満潮: 81-108カラム (80文字目から4桁時刻+3桁潮位が4セット)
         for i in range(4):
-            m = line[80+i*7:84+i*7].strip()
-            if m and m != "9999": events.append(("満潮", datetime(dt.year, dt.month, dt.day, int(m[:2]), int(m[2:]))))
-            k = line[108+i*7:112+i*7].strip()
-            if k and k != "9999": events.append(("干潮", datetime(dt.year, dt.month, dt.day, int(k[:2]), int(k[2:]))))
-        events.sort(key=lambda x: x[1])
-        prev_ev = next((e for e in reversed(events) if e[1] <= dt), None)
-        next_ev = next((e for e in events if e[1] > dt), None)
+            time_part = line[80+i*7 : 84+i*7].strip()
+            tide_part = line[84+i*7 : 87+i*7].strip()
+            if time_part and time_part != "9999":
+                ev_dt = datetime(dt.year, dt.month, dt.day, int(time_part[:2]), int(time_part[2:]))
+                events.append({"type": "満潮", "time": ev_dt, "tide": tide_part})
+
+        # 干潮: 109-136カラム (108文字目から4桁時刻+3桁潮位が4セット)
+        for i in range(4):
+            time_part = line[108+i*7 : 112+i*7].strip()
+            tide_part = line[112+i*7 : 115+i*7].strip()
+            if time_part and time_part != "9999":
+                ev_dt = datetime(dt.year, dt.month, dt.day, int(time_part[:2]), int(time_part[2:]))
+                events.append({"type": "干潮", "time": ev_dt, "tide": tide_part})
+
+        events.sort(key=lambda x: x["time"])
+
+        # 3. 直前・直後のイベントを特定
+        prev_ev = next((e for e in reversed(events) if e["time"] <= dt), None)
+        next_ev = next((e for e in events if e["time"] > dt), None)
+        
+        # 次の満潮・干潮までの時間計算
+        next_high = next((e for e in events if e["type"] == "満潮" and e["time"] > dt), None)
+        next_low = next((e for e in events if e["type"] == "干潮" and e["time"] > dt), None)
+        
+        min_to_high = int((next_high["time"] - dt).total_seconds() / 60) if next_high else ""
+        min_to_low = int((next_low["time"] - dt).total_seconds() / 60) if next_low else ""
+
+        # 4. フェーズ判定
         phase = "不明"
         if prev_ev and next_ev:
-            ratio = (dt - prev_ev[1]).total_seconds() / (next_ev[1] - prev_ev[1]).total_seconds()
-            direction = "下げ" if prev_ev[0] == "満潮" else "上げ"
+            direction = "下げ" if prev_ev["type"] == "満潮" else "上げ"
+            ratio = (dt - prev_ev["time"]).total_seconds() / (next_ev["time"] - prev_ev["time"]).total_seconds()
             phase = f"{direction}{max(1, min(9, round(ratio * 10)))}分"
+
         return {
-            "潮位_cm": int(line[dt.hour*3:dt.hour*3+3].strip() or 0),
+            "潮位_cm": current_hour_tide,
             "潮位フェーズ": phase,
-            "直前の満潮_時刻": next((e[1].strftime("%H:%M") for e in reversed(events) if e[0]=="満潮" and e[1]<=dt), ""),
-            "直前の干潮_時刻": next((e[1].strftime("%H:%M") for e in reversed(events) if e[0]=="干潮" and e[1]<=dt), ""),
+            "直前の満潮_時刻": next((e["time"].strftime("%H:%M") for e in reversed(events) if e["type"] == "満潮" and e["time"] <= dt), ""),
+            "直前の干潮_時刻": next((e["time"].strftime("%H:%M") for e in reversed(events) if e["type"] == "干潮" and e["time"] <= dt), ""),
+            "次の満潮まで_分": min_to_high,
+            "次の干潮まで_分": min_to_low,
+            "観測所": station["name"]
         }
-    except: return {}
+    except Exception as e:
+        print(f"Tide Parse Error: {e}")
+        return {}
 
 def get_tide_name(dt):
     base_new_moon = datetime(2023, 1, 22, 5, 53)
@@ -248,4 +291,5 @@ with st.form("main_form", clear_on_submit=True):
                     st.cache_data.clear()
                 except Exception as e:
                     st.error(f"❌ 書き込みエラーが発生しました: {e}")
+
 
