@@ -170,12 +170,29 @@ if submit:
         temp, ws, wd, prec = get_weather_data(lat_in, lon_in, target_dt)
         tide = get_tide_details(lat_in, lon_in, target_dt)
         
+        # --- 修正後の save_data (列名をスプレッドシートに合わせる) ---
         save_data = {
-            "group_id": final_gid, "場所": final_place, "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
-            "lat": lat_in, "lon": lon_in, "気温": temp, "風速": ws, "風向": get_wind_direction_label(wd),
-            "降水量": prec, "潮位フェーズ": tide.get("潮位フェーズ"), "潮位_cm": tide.get("潮位_cm"),
-            "直前の満潮_時刻": tide.get("直前の満潮_時刻"), "直前の干潮_時刻": tide.get("直前の干潮_時刻"),
-            "魚種": fish, "全長_cm": length, "備考": memo
+            "group_id": final_gid,
+            "場所": final_place,
+            "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
+            "lat": lat_in,
+            "lon": lon_in,
+            "気温": temp,
+            "風速": ws,
+            "風向": get_wind_direction_label(wd),
+            "降水量": prec,
+            
+            # --- ここが潮の情報 ---
+            "潮名": get_tide_name(target_dt), # 以前の関数も活用
+            "潮位_cm": tide.get("潮位_cm"),
+            "潮位フェーズ": tide.get("潮位フェーズ"),
+            "直前の満潮_時刻": tide.get("直前の満潮_時刻"),
+            "直前の干潮_時刻": tide.get("直前の干潮_時刻"),
+            "観測所": tide.get("観測所"),  # どの観測所のデータか記録
+            
+            "魚種": fish,
+            "全長_cm": length,
+            "備考": memo
         }
         
         # 保存とマスター更新
@@ -185,3 +202,4 @@ if submit:
             conn.update(spreadsheet=url, worksheet="place_master", data=pd.concat([m_df, new_m], ignore_index=True))
         
         st.success("✅ 保存完了！"); st.balloons(); st.cache_data.clear()
+
