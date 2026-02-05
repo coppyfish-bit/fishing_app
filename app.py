@@ -38,15 +38,6 @@ def get_coordinates(geotags):
     except:
         return None, None
 
-# --- 1. 風向を漢字に変換する関数 ---
-def get_wind_direction(deg):
-    if deg is None: return ""
-    # 360度を16方位（22.5度刻み）で割る
-    directions = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", 
-                  "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
-    idx = int((deg + 11.25) / 22.5) % 16
-    return directions[idx]
-
 # --- 2. 気象データ取得関数（風向対応版） ---
 def get_weather_data(lat, lon, dt):
     """気象データを取得。気温・風速・風向・48h降水量の4つを返す"""
@@ -123,6 +114,14 @@ def get_tide_details(dt):
         "次の満潮まで_分": int((12.42 - hour_cycle) * 60),
         "次の干潮まで_分": int((6.21 - hour_cycle) * 60 if hour_cycle < 6.21 else (18.63 - hour_cycle) * 60)
     }
+
+def get_wind_direction_label(degree):
+    """角度(0-360)を方位文字に変換"""
+    if degree is None or degree == "": return ""
+    labels = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", 
+              "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
+    idx = int((degree + 11.25) / 22.5) % 16
+    return labels[idx]
 
 # --- 2. Streamlit UI部 ---
 
@@ -236,6 +235,7 @@ if submit:
             
         except Exception as e:
             st.error(f"保存中にエラーが発生しました: {e}")
+
 
 
 
