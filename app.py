@@ -7,21 +7,19 @@ from datetime import datetime, timedelta
 import requests
 import math
 
-# --- 1. 各種関数定義 ---
+# --- 1. 各種関数定義（計算・変換系） ---
 def calculate_distance(lat1, lon1, lat2, lon2):
-    """
-    2点間の直線距離(km)を計算する関数（ハバーシン公式）
-    """
-    if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
-        return 999.0  # 座標がない場合は大きな値を返す
-    
-    R = 6371.0  # 地球の半径 (km)
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
+    if None in [lat1, lon1, lat2, lon2]: return 999.0
+    R = 6371.0
+    dlat, dlon = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
     a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
-    
+    return R * (2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)))
+
+def get_wind_direction_label(degree):
+    if degree is None: return ""
+    labels = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
+    return labels[int((degree + 11.25) / 22.5) % 16]
+
 def get_geotagging(exif):
     if not exif: return None
     geotagging = {}
@@ -34,174 +32,159 @@ def get_geotagging(exif):
     return geotagging
 
 def get_decimal_from_dms(dms, ref):
-    degrees = dms[0]
-    minutes = dms[1] / 60.0
-    seconds = dms[2] / 3600.0
-    if ref in ['S', 'W']:
-        degrees = -degrees
-        minutes = -minutes
-        seconds = -seconds
-    return round(degrees + minutes + seconds, 6)
+    res = dms[0] + dms[1] / 60.0 + dms[2] / 3600.0
+    return -res if ref in ['S', 'W'] else round(res, 6)
 
-def get_coordinates(geotags):
-    try:
-        lat = get_decimal_from_dms(geotags['GPSLatitude'], geotags['GPSLatitudeRef'])
-        lon = get_decimal_from_dms(geotags['GPSLongitude'], geotags['GPSLongitudeRef'])
-        return lat, lon
-    except:
-        return None, None
-
-# --- 2. 気象データ取得関数（風向対応版） ---
+# --- 2. 気象・潮汐取得（外部データ連動） ---
 def get_weather_data(lat, lon, dt):
-    """気象データを取得。気温・風速・風向・48h降水量の4つを返す"""
     try:
-        start_date = (dt - timedelta(days=2)).strftime('%Y-%m-%d')
-        end_date = dt.strftime('%Y-%m-%d')
         url = "https://archive-api.open-meteo.com/v1/archive"
         params = {
-            "latitude": float(lat),
-            "longitude": float(lon),
-            "start_date": start_date,
-            "end_date": end_date,
+            "latitude": lat, "longitude": lon,
+            "start_date": (dt - timedelta(days=2)).strftime('%Y-%m-%d'),
+            "end_date": dt.strftime('%Y-%m-%d'),
             "hourly": "temperature_2m,windspeed_10m,winddirection_10m,precipitation",
             "timezone": "Asia/Tokyo"
         }
-        res = requests.get(url, params=params, timeout=10)
-        data = res.json()
-        
-        if "hourly" not in data:
-            return None, None, None, None # 4つ返す
-
+        data = requests.get(url, params=params, timeout=10).json()
         idx = (len(data['hourly']['temperature_2m']) - 25) + dt.hour
-        idx = max(0, min(idx, len(data['hourly']['temperature_2m']) - 1))
-        
-        temp = data['hourly']['temperature_2m'][idx]
-        wind_s = data['hourly']['windspeed_10m'][idx]
-        wind_d = data['hourly']['winddirection_10m'][idx] # 風向を追加
-        precip_list = data['hourly']['precipitation'][:idx+1]
-        precip_48h = sum(precip_list[-48:])
-        
-        return temp, wind_s, wind_d, round(precip_48h, 1) # 4つ返す
-    except:
-        return None, None, None, None # 失敗時も4つ返す
+        h = data['hourly']
+        return h['temperature_2m'][idx], h['windspeed_10m'][idx], h['winddirection_10m'][idx], round(sum(h['precipitation'][:idx+1][-48:]), 1)
+    except: return None, None, None, None
 
-def get_tide_name(dt):
-    base_date = datetime(2023, 1, 22)
-    diff = (dt - base_date).days % 30
-    tide_map = {0:"大潮", 1:"大潮", 14:"大潮", 15:"大潮", 29:"大潮",
-                2:"中潮", 3:"中潮", 4:"中潮", 16:"中潮", 17:"中潮", 18:"中潮",
-                5:"小潮", 6:"小潮", 7:"小潮", 19:"小潮", 20:"小潮", 21:"小潮",
-                8:"長潮", 22:"長潮", 9:"若潮", 23:"若潮"}
-    return tide_map.get(diff, "中潮")
-
-# --- 3. 潮汐詳細（10段階表示） ---
 def get_tide_details(lat, lon, dt):
-    """
-    Open-Meteo APIを使用して実際の干満時刻を取得し、
-    独自の10段階フェーズ判定を行う
-    """
-    # --- 1. 初期値の設定（API失敗時のバックアップ用） ---
-    base_new_moon = datetime(2023, 1, 22, 5, 53) 
-    lunar_cycle = 29.530588
-    diff_days = (dt - base_new_moon).total_seconds() / 86400
-    moon_age = round(diff_days % lunar_cycle, 1)
-    
-    hour_cycle = (dt.hour + dt.minute/60) % 12.42
-    
-    # 簡易計算によるバックアップ時刻
-    prev_high_t = (dt - timedelta(hours=hour_cycle)).strftime("%H:%M")
-    if hour_cycle >= 6.21:
-        prev_low_t = (dt - timedelta(hours=(hour_cycle - 6.21))).strftime("%H:%M")
-    else:
-        prev_low_t = (dt - timedelta(hours=(hour_cycle + 6.21))).strftime("%H:%M")
+    """気象庁データに基づく精密解析（観測所リスト連動）"""
+    STATIONS = [
+        {"name": "本渡瀬戸", "lat": 32.26, "lon": 130.13, "code": "HS"},
+        {"name": "苓北", "lat": 32.28, "lon": 130.20, "code": "RH"},
+        {"name": "口之津", "lat": 32.36, "lon": 130.12, "code": "KT"},
+        {"name": "八代", "lat": 32.31, "lon": 130.34, "code": "O5"},
+    ]
+    # 最寄りの観測所を判定
+    station = STATIONS[0]
+    min_dist = 999
+    for s in STATIONS:
+        d = calculate_distance(lat, lon, s["lat"], s["lon"])
+        if d < min_dist: min_dist, station = d, s
 
-    # --- 2. APIによる正確な時刻取得の試行 ---
     try:
-        start_date = (dt - timedelta(days=1)).strftime('%Y-%m-%d')
-        end_date = dt.strftime('%Y-%m-%d')
-        url = "https://marine-api.open-meteo.com/v1/marine"
-        params = {
-            "latitude": lat, "longitude": lon,
-            "hourly": "tidal_height",
-            "start_date": start_date, "end_date": end_date,
-            "timezone": "Asia/Tokyo"
+        url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{dt.year}/{station['code']}.txt"
+        lines = requests.get(url, timeout=10).text.splitlines()
+        date_str = dt.strftime("%y%m%d")
+        line = next((l for l in lines if l[72:78] == date_str), None)
+        if not line: return {}
+
+        # 満干潮イベント抽出
+        events = []
+        for i in range(4):
+            m = line[80+i*7:84+i*7].strip()
+            if m and m != "9999": events.append(("満潮", datetime(dt.year, dt.month, dt.day, int(m[:2]), int(m[2:]))))
+            k = line[108+i*7:112+i*7].strip()
+            if k and k != "9999": events.append(("干潮", datetime(dt.year, dt.month, dt.day, int(k[:2]), int(k[2:]))))
+        events.sort(key=lambda x: x[1])
+
+        # フェーズ判定
+        prev_ev = next((e for e in reversed(events) if e[1] <= dt), None)
+        next_ev = next((e for e in events if e[1] > dt), None)
+        phase = "不明"
+        if prev_ev and next_ev:
+            ratio = (dt - prev_ev[1]).total_seconds() / (next_ev[1] - prev_ev[1]).total_seconds()
+            direction = "下げ" if prev_ev[0] == "満潮" else "上げ"
+            phase = f"{direction}{max(1, min(9, round(ratio * 10)))}分"
+            if ratio < 0.1: phase = prev_ev[0]
+            elif ratio > 0.9: phase = next_ev[0]
+
+        return {
+            "潮位_cm": int(line[dt.hour*3:dt.hour*3+3].strip() or 0),
+            "潮位フェーズ": phase,
+            "直前の満潮_時刻": next((e[1].strftime("%H:%M") for e in reversed(events) if e[0]=="満潮" and e[1]<=dt), ""),
+            "直前の干潮_時刻": next((e[1].strftime("%H:%M") for e in reversed(events) if e[0]=="干潮" and e[1]<=dt), ""),
+            "観測所": station["name"]
         }
-        res = requests.get(url, params=params, timeout=5)
-        data = res.json()
-        
-        if "hourly" in data:
-            heights = data['hourly']['tidal_height']
-            times = [datetime.fromisoformat(t) for t in data['hourly']['time']]
-            past_indices = [i for i, t in enumerate(times) if t <= dt]
-            
-            if past_indices:
-                last_idx = past_indices[-1]
-                # 極値（山と谷）を過去に向かって探索
-                api_high, api_low = None, None
-                for i in reversed(range(1, last_idx)):
-                    if api_high is None and heights[i] > heights[i-1] and heights[i] > heights[i+1]:
-                        api_high = times[i].strftime("%H:%M")
-                    if api_low is None and heights[i] < heights[i-1] and heights[i] < heights[i+1]:
-                        api_low = times[i].strftime("%H:%M")
-                    if api_high and api_low: break
-                
-                if api_high: prev_high_t = api_high
-                if api_low: prev_low_t = api_low
-    except:
-        pass # 失敗時はバックアップ値をそのまま使用
+    except: return {}
 
-    # --- 3. 10段階フェーズの判定 ---
-    step = 6.21 / 10
-    if hour_cycle < 6.21:
-        s = int(hour_cycle / step)
-        if s == 0: phase = "満潮"
-        elif s >= 9: phase = "干潮"
-        else: phase = f"下げ{s}分"
-    else:
-        s = int((hour_cycle - 6.21) / step)
-        if s == 0: phase = "干潮"
-        elif s >= 9: phase = "満潮"
-        else: phase = f"上げ{s}分"
-
-    # --- 4. 潮位cmの計算（簡易計算） ---
-    tide_cm = int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21)))
-
-    return {
-        "潮位_cm": tide_cm,
-        "月齢": moon_age,
-        "潮位フェーズ": phase,
-        "直前の満潮_時刻": prev_high_t,
-        "直前の干潮_時刻": prev_low_t,
-        "次の満潮まで_分": int((12.42 - hour_cycle) * 60) if hour_cycle < 12.42 else 0,
-        "次の干潮まで_分": int((6.21 - hour_cycle) * 60 if hour_cycle < 6.21 else (18.63 - hour_cycle) * 60)
-    }
-
-def get_wind_direction_label(degree):
-    """角度(0-360)を方位文字に変換"""
-    if degree is None or degree == "": return ""
-    labels = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", 
-              "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
-    idx = int((degree + 11.25) / 22.5) % 16
-    return labels[idx]
-
-# --- 2. Streamlit UI部 ---
-
+# --- 3. メイン UI ---
 st.set_page_config(page_title="Fishing AI Log", layout="wide")
-st.title("🎣 GPS・気象・潮汐 統合ログシステム")
+st.title("🎣 釣果統合ログシステム")
 
-default_dt = datetime.now()
-auto_lat, auto_lon = 35.0, 135.0
-
+# データ接続
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
     df = conn.read(spreadsheet=url, ttl="5m")
     m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
-    place_options = sorted(m_df["place_name"].unique().tolist())
 except:
-    st.error("スプレッドシートへの接続に失敗しました。")
-    st.stop()
+    st.error("スプレッドシート接続エラー"); st.stop()
 
+# 写真アップロード
+uploaded_file = st.file_uploader("📸 写真を選択", type=['jpg', 'jpeg'])
+auto_lat, auto_lon, default_dt = 32.5, 130.0, datetime.now()
+
+if uploaded_file:
+    img = Image.open(uploaded_file)
+    exif = img._getexif()
+    if exif:
+        geotags = get_geotagging(exif)
+        if geotags:
+            lat, lon = get_decimal_from_dms(geotags['GPSLatitude'], geotags['GPSLatitudeRef']), get_decimal_from_dms(geotags['GPSLongitude'], geotags['GPSLongitudeRef'])
+            if lat: auto_lat, auto_lon = lat, lon
+        dt_str = exif.get(36867)
+        if dt_str: default_dt = datetime.strptime(dt_str, '%Y:%m:%d %H:%M:%S')
+
+# 場所自動判定
+nearest_place = None
+if not m_df.empty:
+    place_to_id = dict(zip(m_df["place_name"], m_df["group_id"]))
+    for _, row in m_df.iterrows():
+        if calculate_distance(auto_lat, auto_lon, row['latitude'], row['longitude']) < 0.5:
+            nearest_place = row['place_name']; break
+    place_options = sorted(place_to_id.keys())
+else: place_to_id, place_options = {}, []
+
+# フォーム
+with st.form("main_form"):
+    c1, c2 = st.columns(2)
+    with c1:
+        date_in = st.date_input("📅 日付", value=default_dt.date())
+        time_in = st.time_input("⏰ 時刻", value=default_dt.time())
+        default_idx = (place_options.index(nearest_place) + 1) if nearest_place in place_options else 0
+        place_sel = st.selectbox("📍 釣り場を選択", options=["-- 新規入力 --"] + place_options, index=default_idx)
+    with c2:
+        lat_in = st.number_input("緯度", value=auto_lat, format="%.6f")
+        lon_in = st.number_input("経度", value=auto_lon, format="%.6f")
+        place_man = st.text_input("📍 新しい場所名（新規時のみ）")
+
+    fish = st.text_input("🐟 魚種")
+    length = st.number_input("📏 全長(cm)", value=0.0)
+    memo = st.text_area("📝 備考")
+    submit = st.form_submit_button("🚀 データを保存")
+
+if submit:
+    target_dt = datetime.combine(date_in, time_in)
+    final_place = place_sel if place_sel != "-- 新規入力 --" else place_man
+    final_gid = place_to_id.get(final_place, int(m_df["group_id"].max() + 1 if not m_df.empty else 0))
+    
+    if not final_place: st.error("場所名を入力してください"); st.stop()
+
+    with st.spinner('解析中...'):
+        temp, ws, wd, prec = get_weather_data(lat_in, lon_in, target_dt)
+        tide = get_tide_details(lat_in, lon_in, target_dt)
+        
+        save_data = {
+            "group_id": final_gid, "場所": final_place, "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
+            "lat": lat_in, "lon": lon_in, "気温": temp, "風速": ws, "風向": get_wind_direction_label(wd),
+            "降水量": prec, "潮位フェーズ": tide.get("潮位フェーズ"), "潮位_cm": tide.get("潮位_cm"),
+            "直前の満潮_時刻": tide.get("直前の満潮_時刻"), "直前の干潮_時刻": tide.get("直前の干潮_時刻"),
+            "魚種": fish, "全長_cm": length, "備考": memo
+        }
+        
+        # 保存とマスター更新
+        conn.update(spreadsheet=url, data=pd.concat([df, pd.DataFrame([save_data])], ignore_index=True))
+        if place_sel == "-- 新規入力 --":
+            new_m = pd.DataFrame([{"group_id": final_gid, "place_name": final_place, "latitude": lat_in, "longitude": lon_in}])
+            conn.update(spreadsheet=url, worksheet="place_master", data=pd.concat([m_df, new_m], ignore_index=True))
+        
+        st.success("✅ 保存完了！"); st.balloons(); st.cache_data.clear()
 # 写真解析
 uploaded_file = st.file_uploader("📸 写真を選択", type=['jpg', 'jpeg'])
 if uploaded_file:
@@ -393,6 +376,7 @@ if submit:
                 st.error(f"❌ 処理中にエラーが発生しました: {e}")
                 # 詳細なエラーを画面に出したい場合は以下を有効に
                 # st.exception(e)
+
 
 
 
