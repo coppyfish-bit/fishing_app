@@ -188,15 +188,25 @@ if submit:
     # 新規の場合は現在の最大ID + 1
     final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 0
 
-# --- 保存処理の完全版 ---
+# --- 保存処理の完全版（変数確定ロジック入り） ---
 if submit:
-    # 1. 場所名が空でないかチェック
+    # 1. フォームで選択・入力された値から「最終的な場所名」と「ID」を決定する
+    # ※ if submit の中で行うことで NameError を確実に防ぎます
+    if place_selected != "-- 新規地点 or 手動入力 --":
+        final_place_name = place_selected
+        final_group_id = place_to_id.get(place_selected)
+    else:
+        final_place_name = place_manual
+        # 新規の場合は現在の最大ID + 1 を付与
+        final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 0
+
+    # 2. 場所名が空でないかチェック
     if not final_place_name:
         st.error("⚠️ 場所名を選択するか、新しい場所名を入力してください。")
     else:
         with st.spinner('📊 解析中...'):
             try:
-                # 2. 確実に datetime オブジェクトをここで作成する
+                # 3. 確実に datetime オブジェクトをここで作成する
                 target_dt = datetime(
                     year=date_in.year, 
                     month=date_in.month, 
@@ -205,18 +215,18 @@ if submit:
                     minute=time_in.minute
                 )
 
-                # 3. 潮汐データの計算（target_dt が決まった直後に呼ぶ）
+                # 4. 潮汐データの計算
                 tide_name = get_tide_name(target_dt)
                 tide_info = get_tide_details(target_dt)
                 
-                # 4. 気象データの取得
+                # 5. 気象データの取得
                 weather_res = get_weather_data(lat_in_final, lon_in_final, target_dt)
                 if weather_res and len(weather_res) == 4:
                     temp, wind_s, wind_d, precip = weather_res
                 else:
                     temp, wind_s, wind_d, precip = None, None, None, None
 
-                # 5. 保存データの作成（すべての変数が揃った状態で）
+                # 6. 保存データの作成
                 save_data = {
                     "group_id": final_group_id,
                     "場所": final_place_name,
@@ -244,12 +254,12 @@ if submit:
                     "filename": uploaded_file.name if uploaded_file else ""
                 }
 
-                # 6. 書き込み実行
+                # 7. 書き込み実行
                 new_row = pd.DataFrame([save_data])
                 updated_df = pd.concat([df, new_row], ignore_index=True)
                 conn.update(spreadsheet=url, data=updated_df)
                 
-                # 新規場所だった場合はマスターにも追加
+                # 新規場所だった場合はマスター(place_masterシート)にも自動追加
                 if place_selected == "-- 新規地点 or 手動入力 --":
                     new_m = pd.DataFrame([{
                         "group_id": final_group_id, 
@@ -266,7 +276,3 @@ if submit:
 
             except Exception as e:
                 st.error(f"❌ 処理中にエラーが発生しました: {e}")
-
-
-
-
