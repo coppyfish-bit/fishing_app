@@ -9,7 +9,7 @@ from datetime import datetime
 # ページ設定
 st.set_page_config(page_title="Fishing App", layout="wide")
 
-st.title("📱 スマホ爆速登録")
+st.title("📱 釣果登録")
 
 # --- 1. まずデフォルトの日時を決める ---
 # これで NameError: datetime.now() は解決します
@@ -60,3 +60,4 @@ if submit_button:
     # ...
     st.success("登録完了！")
     st.rerun()
+
