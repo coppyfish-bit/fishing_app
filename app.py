@@ -57,28 +57,47 @@ def get_weather_data(lat, lon, dt):
     except:
         return None, None, None
 
-# --- 既存の get_weather_data の下あたりに追加 ---
-
 def get_tide_details(dt):
-    """
-    指定日時の詳細な潮汐情報を計算（簡易天文計算）
-    """
-    # 月齢計算
+    # (月齢計算などはそのまま)
     base_new_moon = datetime(2023, 1, 22, 5, 53) 
     lunar_cycle = 29.530588
     diff_days = (dt - base_new_moon).total_seconds() / 86400
     moon_age = round(diff_days % lunar_cycle, 1)
     
-    # 潮位サイクルの計算 (12.42時間周期)
+    # 潮位サイクルの計算 (12.42時間周期 / 片道6.21時間)
     hour_cycle = (dt.hour + dt.minute/60) % 12.42
     
-    # フェーズ判定
-    if hour_cycle < 1.5: phase = "満潮付近"
-    elif hour_cycle < 4.5: phase = "下げ三分"
-    elif hour_cycle < 7.5: phase = "下げ七分"
-    elif hour_cycle < 9.0: phase = "干潮付近"
-    elif hour_cycle < 10.5: phase = "上げ三分"
-    else: phase = "上げ七分"
+    # 10段階判定ロジック
+    if hour_cycle < 0.62:
+        phase = "満潮"
+    elif hour_cycle < 5.59:
+        # 下げを9分割 (1〜9)
+        num = int((hour_cycle / 6.21) * 10)
+        phase = f"下げ{num}分"
+    elif hour_cycle < 6.83:
+        phase = "干潮"
+    elif hour_cycle < 11.8:
+        # 上げを9分割 (1〜9)
+        # 上げは 6.21〜12.42時間の間なので、そこからの経過分を計算
+        num = int(((hour_cycle - 6.21) / 6.21) * 10)
+        phase = f"上げ{num}分"
+    else:
+        phase = "満潮"
+    
+    # (潮位cm計算と干満時刻算出はそのまま)
+    tide_cm = int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21)))
+    prev_h_tide = (dt - timedelta(hours=hour_cycle)).strftime("%H:%M")
+    prev_l_tide = (dt - timedelta(hours=(hour_cycle-6.21 if hour_cycle>6.21 else hour_cycle+6.21))).strftime("%H:%M")
+
+    return {
+        "潮位_cm": tide_cm,
+        "月齢": moon_age,
+        "潮位フェーズ": phase,
+        "直前の満潮_時刻": prev_h_tide,
+        "直前の干潮_時刻": prev_l_tide,
+        "次の満潮まで_分": int((12.42 - hour_cycle) * 60),
+        "次の干潮まで_分": int((6.21 - hour_cycle) * 60 if hour_cycle < 6.21 else (18.63 - hour_cycle) * 60)
+    }
     
     # 潮位(cm)のシミュレーション
     tide_cm = int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21)))
@@ -231,5 +250,6 @@ if submit:
         st.success(f"✅ 保存完了！当時の潮は {tide_name} ({tide_info['潮位フェーズ']}) でした。")
         st.cache_data.clear()
         st.rerun()
+
 
 
