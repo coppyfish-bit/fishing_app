@@ -183,6 +183,10 @@ if uploaded_file:
             if lat: auto_lat, auto_lon = lat, lon
             st.success(f"📍 GPS/日時を取得しました")
 
+# --- 座標の初期値を確定させる ---
+# 写真から取得できていればそれを使い、なければデフォルト（例：天草近辺）を入れる
+lat_in = locals().get('auto_lat', 32.5) 
+lon_in = locals().get('auto_lon', 130.0)
 # --- 統合版：場所自動判定 ＆ 入力フォーム ---
 
 # 1. 準備：マスターデータから場所・ID・座標の辞書を作成
@@ -336,6 +340,7 @@ if submit:
                 # st.rerun() # 必要に応じて
             except Exception as e:
                 st.error(f"保存に失敗しました: {e}")
+
 
 
 
