@@ -193,25 +193,21 @@ if submit:
         tide_name = get_tide_name(target_dt)
         tide_info = get_tide_details(target_dt)
         
-# --- 6. 保存処理 ---
+# --- 3. 保存処理 (if submit: の中) ---
+
 if submit:
-    with st.spinner('気象と潮汐を解析中...'):
+    with st.spinner('解析中...'):
         target_dt = datetime.combine(date_in, time_in)
         
-        # 1. 気象データを取得 (戻り値が4つ [気温, 風速, 風向, 降水] になっています)
-        weather_res = get_weather_data(lat_in, lon_in, target_dt)
+        # 気象データの取得
+        weather_data = get_weather_data(lat_in, lon_in, target_dt)
+        temp, wind_s, precip = weather_data if weather_data else (None, None, None)
         
-        # もしデータが取れなかった場合でも、空の値(None)で埋めてエラーを防ぐ
-        if weather_res:
-            temp, wind_s, wind_d, precip = weather_res
-        else:
-            temp, wind_s, wind_d, precip = None, None, None, None
-        
-        # 2. 潮汐データの取得
+        # 潮汐データの取得
         tide_name = get_tide_name(target_dt)
         tide_info = get_tide_details(target_dt)
         
-        # 3. 保存用データの作成（共有いただいた全カラムを網羅）
+        # tide_info["キー"] ではなく tide_info.get("キー") を使うことでエラーを回避
         save_data = {
             "filename": uploaded_file.name if uploaded_file else "",
             "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
@@ -221,29 +217,28 @@ if submit:
             "lon": lon_in,
             "気温": temp,
             "風速": wind_s,
-            "風向": wind_d,      # ここが追加された風向（漢字）です
             "降水量": precip,
             "潮名": tide_name,
-            "潮位_cm": tide_info["潮位_cm"],
-            "月齢": tide_info["月齢"],
-            "潮位フェーズ": tide_info["潮位フェーズ"], # 10段階表示
-            "直前の満潮_時刻": tide_info["直前の満潮_時刻"],
-            "直前の干潮_時刻": tide_info["直前の干潮_時刻"],
-            "次の満潮まで_分": tide_info["次の満潮まで_分"],
-            "次の干潮まで_分": tide_info["次の干潮まで_分"],
-            "場所": final_place_name,
+            "潮位_cm": tide_info.get("潮位_cm"),
+            "月齢": tide_info.get("月齢"),
+            "潮位フェーズ": tide_info.get("潮位フェーズ"),
+            "直前の満潮_時刻": tide_info.get("直前の満潮_時刻"),
+            "直前の干潮_時刻": tide_info.get("直前の干潮_時刻"),
+            "次の満潮まで_分": tide_info.get("次の満潮まで_分"),
+            "次の干潮まで_分": tide_info.get("次の干潮まで_分"),
+            "場所": place_name,
             "魚種": fish_in,
             "全長_cm": length_in,
             "ルアー": lure_in,
             "備考": memo_in
         }
         
-        # 4. スプレッドシートを更新
+        # 保存実行
         new_df = pd.concat([df, pd.DataFrame([save_data])], ignore_index=True)
         conn.update(spreadsheet=url, data=new_df)
-        
-        st.success(f"✅ 保存完了！ {wind_d}の風、フェーズは {tide_info['潮位フェーズ']} でした。")
+        st.success("✅ 全てのデータを正常に保存しました！")
         st.cache_data.clear()
         st.rerun()
+
 
 
