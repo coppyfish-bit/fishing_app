@@ -3,13 +3,14 @@ import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 from PIL import Image
 from PIL.ExifTags import TAGS
-from datetime import datetime, timedelta # timedeltaを追加
+from datetime import datetime, timedelta
 import requests
 
-# --- 1. 気象データ取得関数 (48時間降水量対応) ---
+# --- 1. 関数定義エリア (独立させて並べる) ---
+
 def get_weather_data(lat, lon, dt):
+    """指定された緯度経度・日時の気象データ(気温・風速・48h降水量)を取得"""
     try:
-        # 48時間前から取得するために開始日を計算
         start_date = (dt - timedelta(days=2)).strftime('%Y-%m-%d')
         end_date = dt.strftime('%Y-%m-%d')
         
@@ -24,20 +25,7 @@ def get_weather_data(lat, lon, dt):
         }
         response = requests.get(url, params=params).json()
 
-       # --- 1. 潮名を判定する関数 ---
-def get_tide_name(dt):
-    # ここから下は全て「半角スペース4つ」右にずらします
-        base_date = datetime(2023, 1, 22) # 2023年の新月の一つ
-        diff = (dt - base_date).days % 30
-    
-        if diff in [0, 1, 14, 15, 29]: return "大潮"
-        if diff in [2, 3, 4, 16, 17, 18]: return "中潮"
-        if diff in [5, 6, 7, 19, 20, 21]: return "小潮"
-        if diff in [8, 22]: return "長潮"
-        if diff in [9, 23]: return "若潮"
-        return "中潮"
-        # 釣った瞬間のリスト内インデックスを計算
-        # 48時間分(2日分) + 当日の経過時間
+        # インデックスの計算 (48時間前からのリストなので調整)
         current_idx = (len(response['hourly']['temperature_2m']) - 25) + dt.hour
         
         temp = response['hourly']['temperature_2m'][current_idx]
@@ -51,59 +39,93 @@ def get_tide_name(dt):
     except Exception as e:
         return None, None, None
 
-# --- 2. 初期設定 ---
+def get_tide_name(dt):
+    """簡易的な潮名判定ロジック"""
+    base_date = datetime(2023, 1, 22) # 新月基準
+    diff = (dt - base_date).days % 30
+    
+    if diff in [0, 1, 14, 15, 29]: return "大潮"
+    if diff in [2, 3, 4, 16, 17, 18]: return "中潮"
+    if diff in [5, 6, 7, 19, 20, 21]: return "小潮"
+    if diff in [8, 22]: return "長潮"
+    if diff in [9, 23]: return "若潮"
+    return "中潮"
+
+# --- 2. アプリ初期設定 ---
+
 st.set_page_config(page_title="Fishing App", layout="wide")
 st.title("🎣 プロ仕様・自動補完ログ")
 
-# ★重要★ エラー回避のため、まず最初にデフォルト値を決める
+# デフォルト日時の設定
 default_datetime = datetime.now()
 
-## --- データの読み込み部分を修正 ---
+# データの読み込み (キャッシュ設定 ttl="10m")
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
     
-    # ttl=0 (毎回読み込む) から ttl="10m" (10分間キャッシュ) に変更
-    # これで Google へのリクエスト回数が激減します
     df = conn.read(spreadsheet=url, ttl="10m")
-    
-    # 場所マスターも同様にキャッシュ
     m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
     place_options = sorted(m_df["place_name"].unique().tolist())
 except Exception as e:
-    # 429エラーが出た時のための分かりやすい表示
     if "429" in str(e):
-        st.error("🚫 Google APIの制限に達しました。1分ほど待ってから再読み込みしてください。")
+        st.error("🚫 Google APIの制限に達しました。1分ほど待って再起動してください。")
     else:
         st.error(f"接続エラー: {e}")
     st.stop()
 
-# --- 3. 写真アップローダー（EXIF解析） ---
+# --- 3. マスター管理 (釣り場追加) ---
+
+with st.expander("📍 新しい釣り場をマスターに追加"):
+    new_place_name = st.text_input("追加する釣り場名")
+    new_lat = st.number_input("緯度 (Latitude)", value=35.0, format="%.6f")
+    new_lon = st.number_input("経度 (Longitude)", value=135.0, format="%.6f")
+    
+    if st.button("場所を登録"):
+        if new_place_name and new_place_name not in m_df["place_name"].values:
+            new_id = m_df["group_id"].max() + 1 if not m_df.empty else 0
+            new_row = pd.DataFrame([{
+                "group_id": int(new_id), 
+                "place_name": new_place_name,
+                "latitude": new_lat,
+                "longitude": new_lon
+            }])
+            updated_m_df = pd.concat([m_df, new_row], ignore_index=True)
+            conn.update(spreadsheet=url, worksheet="place_master", data=updated_m_df)
+            st.success(f"✅ 「{new_place_name}」を登録しました！")
+            st.cache_data.clear()
+            st.rerun()
+
+st.write("---")
+
+# --- 4. 釣果入力エリア ---
+
 uploaded_file = st.file_uploader("📸 写真を選択（日時を自動反映）", type=['jpg', 'jpeg', 'png'])
 
 if uploaded_file:
-    img = Image.open(uploaded_file)
-    exif = img._getexif()
-    if exif:
-        for tag_id, value in exif.items():
-            tag = TAGS.get(tag_id, tag_id)
-            if tag == 'DateTimeOriginal':
-                # 写真の日時で default_datetime を上書き
-                default_datetime = datetime.strptime(value, '%Y:%m:%d %H:%M:%S')
-                st.success(f"✅ 写真から日時を読み取りました: {default_datetime.strftime('%Y-%m-%d %H:%M')}")
+    try:
+        img = Image.open(uploaded_file)
+        exif = img._getexif()
+        if exif:
+            for tag_id, value in exif.items():
+                tag = TAGS.get(tag_id, tag_id)
+                if tag == 'DateTimeOriginal':
+                    default_datetime = datetime.strptime(value, '%Y:%m:%d %H:%M:%S')
+                    st.success(f"✅ 写真から日時を読み取りました: {default_datetime.strftime('%Y-%m-%d %H:%M')}")
+    except Exception:
+        st.warning("写真のメタデータを読み込めませんでした。")
 
-# --- 4. 釣果登録フォーム ---
 with st.form("input_form", clear_on_submit=True):
-    # ここで使う default_datetime は必ず存在するのでエラーになりません
     date_in = st.date_input("📅 日付", value=default_datetime.date())
     time_in = st.time_input("⏰ 時刻", value=default_datetime.time())
     
     place_in = st.selectbox("📍 場所", options=place_options)
     
-    # 緯度経度の取得（マスターに latitude, longitude 列がある前提。なければデフォルト値）
+    # 選択した場所の情報を取得
     loc_data = m_df.loc[m_df["place_name"] == place_in]
-    lat = loc_data["latitude"].values[0] if "latitude" in m_df.columns else 35.0
-    lon = loc_data["longitude"].values[0] if "longitude" in m_df.columns else 135.0
+    current_id = loc_data["group_id"].values[0] if not loc_data.empty else 0
+    lat = loc_data["latitude"].values[0] if "latitude" in m_df.columns and not loc_data.empty else 35.0
+    lon = loc_data["longitude"].values[0] if "longitude" in m_df.columns and not loc_data.empty else 135.0
     
     fish_in = st.text_input("🐟 魚種", placeholder="シーバス")
     lure_in = st.text_input("🎣 ルアー")
@@ -113,18 +135,15 @@ with st.form("input_form", clear_on_submit=True):
     submit_button = st.form_submit_button("🚀 気象を自動取得して保存", use_container_width=True)
 
 # --- 5. 保存処理 ---
+
 if submit_button:
     with st.spinner('データを解析・保存中...'):
         target_dt = datetime.combine(date_in, time_in)
-        
-        # 気象データの取得 (lat, lon はマスターから取得済み)
         temp, wind_s, precip_48h = get_weather_data(lat, lon, target_dt)
-        
-        # 潮名の計算
         tide_name = get_tide_name(target_dt)
 
-        # 共有いただいたカラム名に完全一致させる辞書
         save_data = {
+            "filename": uploaded_file.name if uploaded_file else "",
             "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
             "date": date_in.strftime('%Y-%m-%d'),
             "time": time_in.strftime('%H:%M'),
@@ -132,7 +151,7 @@ if submit_button:
             "lon": lon,
             "気温": temp,
             "風速": wind_s,
-            "降水量": precip_48h, # ここに48h降水量を入れます
+            "降水量": precip_48h,
             "潮名": tide_name,
             "場所": place_in,
             "魚種": fish_in,
@@ -140,27 +159,18 @@ if submit_button:
             "ルアー": lure_in,
             "備考": memo_in,
             "group_id": int(current_id),
-            # 以下、今回は空欄だが列として保持しておく項目
             "weather_station_name": "", 
             "station_code": "",
             "潮位_cm": "",
-            "月齢": "",
-            "filename": uploaded_file.name if uploaded_file else ""
+            "月齢": ""
         }
         
-        # 既存のカラム順序を維持しつつ、新しいデータを結合
         new_row_df = pd.DataFrame([save_data])
-        
-        # スプレッドシートにある列だけを抽出し、足りない列は補完して結合
         updated_df = pd.concat([df, new_row_df], ignore_index=True)
-        
-        # 保存実行
         conn.update(spreadsheet=url, data=updated_df)
         
-        st.success("✅ 既存のカラム形式で保存が完了しました！")
+        st.success(f"✅ 保存完了！ 気温:{temp}℃ 降水量:{precip_48h}mm")
         st.cache_data.clear()
         st.rerun()
+
 st.write("---")
-
-
-
