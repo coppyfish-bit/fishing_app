@@ -97,13 +97,28 @@ def get_tide_name(dt):
 # --- 3. 潮汐詳細（10段階表示） ---
 def get_tide_details(lat, lon, dt):
     """
-    Open-Meteo APIを使用して、実際の予測データから直前の満潮・干潮時刻を取得する
+    Open-Meteo APIを使用して実際の干満時刻を取得し、
+    独自の10段階フェーズ判定を行う
     """
+    # --- 1. 初期値の設定（API失敗時のバックアップ用） ---
+    base_new_moon = datetime(2023, 1, 22, 5, 53) 
+    lunar_cycle = 29.530588
+    diff_days = (dt - base_new_moon).total_seconds() / 86400
+    moon_age = round(diff_days % lunar_cycle, 1)
+    
+    hour_cycle = (dt.hour + dt.minute/60) % 12.42
+    
+    # 簡易計算によるバックアップ時刻
+    prev_high_t = (dt - timedelta(hours=hour_cycle)).strftime("%H:%M")
+    if hour_cycle >= 6.21:
+        prev_low_t = (dt - timedelta(hours=(hour_cycle - 6.21))).strftime("%H:%M")
+    else:
+        prev_low_t = (dt - timedelta(hours=(hour_cycle + 6.21))).strftime("%H:%M")
+
+    # --- 2. APIによる正確な時刻取得の試行 ---
     try:
-        # 前日から当日までのデータを取得
         start_date = (dt - timedelta(days=1)).strftime('%Y-%m-%d')
         end_date = dt.strftime('%Y-%m-%d')
-        
         url = "https://marine-api.open-meteo.com/v1/marine"
         params = {
             "latitude": lat, "longitude": lon,
@@ -111,69 +126,52 @@ def get_tide_details(lat, lon, dt):
             "start_date": start_date, "end_date": end_date,
             "timezone": "Asia/Tokyo"
         }
-        res = requests.get(url, params=params, timeout=10)
+        res = requests.get(url, params=params, timeout=5)
         data = res.json()
         
-        heights = data['hourly']['tidal_height']
-        times = [datetime.fromisoformat(t) for t in data['hourly']['time']]
-        
-        # 現在時刻より前のデータに絞る
-        past_indices = [i for i, t in enumerate(times) if t <= dt]
-        if not past_indices: return {}
+        if "hourly" in data:
+            heights = data['hourly']['tidal_height']
+            times = [datetime.fromisoformat(t) for t in data['hourly']['time']]
+            past_indices = [i for i, t in enumerate(times) if t <= dt]
+            
+            if past_indices:
+                last_idx = past_indices[-1]
+                # 極値（山と谷）を過去に向かって探索
+                api_high, api_low = None, None
+                for i in reversed(range(1, last_idx)):
+                    if api_high is None and heights[i] > heights[i-1] and heights[i] > heights[i+1]:
+                        api_high = times[i].strftime("%H:%M")
+                    if api_low is None and heights[i] < heights[i-1] and heights[i] < heights[i+1]:
+                        api_low = times[i].strftime("%H:%M")
+                    if api_high and api_low: break
+                
+                if api_high: prev_high_t = api_high
+                if api_low: prev_low_t = api_low
+    except:
+        pass # 失敗時はバックアップ値をそのまま使用
 
-        # 直近の数件から極大値（満潮）と極小値（干潮）を探す
-        prev_high_t = "不明"
-        prev_low_t = "不明"
-        
-        # 簡易的な極値判定
-        for i in reversed(range(1, past_indices[-1])):
-            if heights[i] > heights[i-1] and heights[i] > heights[i+1]:
-                if prev_high_t == "不明":
-                    prev_high_t = times[i].strftime("%H:%M")
-            if heights[i] < heights[i-1] and heights[i] < heights[i+1]:
-                if prev_low_t == "不明":
-                    prev_low_t = times[i].strftime("%H:%M")
-            if prev_high_t != "不明" and prev_low_t != "不明":
-                break
-
-        # 潮位フェーズ（10段階）のロジック
-        hour_cycle = (dt.hour + dt.minute/60) % 12.42 # 判定用
-        # ... (前回のフェーズ判定ロジックをここに継続) ...
-    
-    # 6.21時間を10分割して判定
+    # --- 3. 10段階フェーズの判定 ---
     step = 6.21 / 10
     if hour_cycle < 6.21:
         s = int(hour_cycle / step)
-        phase = f"下げ{s}分" if 0 < s < 10 else ("満潮" if s==0 else "干潮")
+        if s == 0: phase = "満潮"
+        elif s >= 9: phase = "干潮"
+        else: phase = f"下げ{s}分"
     else:
         s = int((hour_cycle - 6.21) / step)
-        phase = f"上げ{s}分" if 0 < s < 10 else ("干潮" if s==0 else "満潮")
-    
-    # ...（潮位計算などは前回同様）
-    return {"潮位_cm": int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21))), 
-            "月齢": moon_age, "潮位フェーズ": phase}
-    
-    # 潮位(cm)の計算
-    tide_cm = int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21)))
+        if s == 0: phase = "干潮"
+        elif s >= 9: phase = "満潮"
+        else: phase = f"上げ{s}分"
 
-    # --- 直前の満潮・干潮時刻の算出 ---
-    # 1. 直前の満潮 (hour_cycle分だけ遡る)
-    prev_high_dt = dt - timedelta(hours=hour_cycle)
-    
-    # 2. 直前の干潮
-    if hour_cycle >= 6.21:
-        # すでに干潮を過ぎている場合、その干潮時刻
-        prev_low_dt = dt - timedelta(hours=(hour_cycle - 6.21))
-    else:
-        # まだ干潮に達していない場合、前サイクルの干潮時刻
-        prev_low_dt = dt - timedelta(hours=(hour_cycle + 6.21))
+    # --- 4. 潮位cmの計算（簡易計算） ---
+    tide_cm = int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21)))
 
     return {
         "潮位_cm": tide_cm,
         "月齢": moon_age,
         "潮位フェーズ": phase,
-        "直前の満潮_時刻": prev_high_dt.strftime("%H:%M"),
-        "直前の干潮_時刻": prev_low_dt.strftime("%H:%M"),
+        "直前の満潮_時刻": prev_high_t,
+        "直前の干潮_時刻": prev_low_t,
         "次の満潮まで_分": int((12.42 - hour_cycle) * 60) if hour_cycle < 12.42 else 0,
         "次の干潮まで_分": int((6.21 - hour_cycle) * 60 if hour_cycle < 6.21 else (18.63 - hour_cycle) * 60)
     }
@@ -376,6 +374,7 @@ if submit:
                 # st.rerun() # 必要に応じて
             except Exception as e:
                 st.error(f"保存に失敗しました: {e}")
+
 
 
 
