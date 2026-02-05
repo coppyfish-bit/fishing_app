@@ -103,6 +103,25 @@ def get_tide_details(lat, lon, dt):
         }
     except: return {}
 
+def get_tide_name(dt):
+    """
+    月齢から潮名（大潮・中潮など）を簡易的に判定
+    """
+    # 月齢を計算
+    base_new_moon = datetime(2023, 1, 22, 5, 53)
+    lunar_cycle = 29.530588
+    diff_days = (dt - base_new_moon).total_seconds() / 86400
+    age = diff_days % lunar_cycle
+    
+    if age < 3.0 or age > 26.5: return "大潮"
+    elif age < 7.0: return "中潮"
+    elif age < 11.0: return "小潮"
+    elif age < 13.0: return "長潮"
+    elif age < 14.0: return "若潮"
+    elif age < 18.0: return "大潮"
+    elif age < 22.0: return "中潮"
+    else: return "小潮"
+
 # --- 3. メイン UI ---
 st.set_page_config(page_title="Fishing AI Log", layout="wide")
 st.title("🎣 釣果統合ログシステム")
@@ -202,4 +221,5 @@ if submit:
             conn.update(spreadsheet=url, worksheet="place_master", data=pd.concat([m_df, new_m], ignore_index=True))
         
         st.success("✅ 保存完了！"); st.balloons(); st.cache_data.clear()
+
 
