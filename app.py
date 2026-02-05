@@ -5,6 +5,7 @@ from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
 from datetime import datetime, timedelta
 import requests
+import math
 
 # --- 1. 各種関数 (GPS変換・気象・潮汐) ---
 def get_geotagging(exif):
@@ -230,4 +231,5 @@ if submit:
         st.success(f"✅ 保存完了！当時の潮は {tide_name} ({tide_info['潮位フェーズ']}) でした。")
         st.cache_data.clear()
         st.rerun()
+
 
