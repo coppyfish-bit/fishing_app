@@ -310,7 +310,11 @@ if submit:
         st.error("⚠️ 場所名を選択するか、新しい場所名を入力してください。")
     else:
         with st.spinner('📊 当時の気象と潮汐を計算中...'):
-            target_dt = datetime.combine(date_in, time_in)
+            from datetime import datetime # ファイル上部にあるか確認
+            target_dt = datetime(
+                date_in.year, date_in.month, date_in.day,
+                time_in.hour, time_in.minute
+            )
             
             # 1. 気象取得（4項目）
             weather_res = get_weather_data(lat_in_final, lon_in_final, target_dt)
@@ -374,6 +378,7 @@ if submit:
                 # st.rerun() # 必要に応じて
             except Exception as e:
                 st.error(f"保存に失敗しました: {e}")
+
 
 
 
