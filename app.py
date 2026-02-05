@@ -190,27 +190,45 @@ with st.form("main_form", clear_on_submit=True):
                     t_info = get_tide_details(lat_in, lon_in, target_dt)
                     temp, wind_s, wind_d, prec = get_weather_data(lat_in, lon_in, target_dt)
 
-                    # 保存データの作成
+                    # --- ご指定の列順にデータを並べ替え ---
+                    # 全ての列を網羅し、スプレッドシートの左からの並び順と一致させます
                     save_data = {
-                        "group_id": final_group_id,
-                        "場所": final_place_name,
+                        "filename": uploaded_file.name if uploaded_file else "",
                         "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
-                        "lat": lat_in, "lon": lon_in,
-                        "気温": temp, "風速": wind_s,
+                        "date": date_in.strftime('%Y-%m-%d'),
+                        "time": time_in.strftime('%H:%M'),
+                        "lat": lat_in,
+                        "lon": lon_in,
+                        "気温": temp,
+                        "風速": wind_s,
                         "風向": get_wind_direction_label(wind_d),
-                        "降水量": prec, "潮名": t_name,
+                        "降水量": prec,
                         "潮位_cm": t_info.get("潮位_cm"),
-                        "潮位フェーズ": t_info.get("潮位フェーズ"),
+                        "月齢": get_moon_age(target_dt), # 月齢取得用の簡易処理
+                        "潮名": t_name,
+                        "次の満潮まで_分": t_info.get("次の満潮まで_分", ""), # 計算に含まれる場合
+                        "次の干潮まで_分": t_info.get("次の干潮まで_分", ""), # 計算に含まれる場合
                         "直前の満潮_時刻": t_info.get("直前の満潮_時刻"),
                         "直前の干潮_時刻": t_info.get("直前の干潮_時刻"),
-                        "魚種": fish_in, "全長_cm": length_in,
-                        "ルアー": lure_in, "備考": memo_in,
-                        "filename": uploaded_file.name if uploaded_file else ""
+                        "潮位フェーズ": t_info.get("潮位フェーズ"),
+                        "場所": final_place_name,
+                        "魚種": fish_in,
+                        "全長_cm": length_in,
+                        "ルアー": lure_in,
+                        "備考": memo_in,
+                        "group_id": final_group_id,
+                        "観測所": t_info.get("観測所", "不明")
                     }
 
-                    # メインデータ更新
+                    # データフレーム作成（順番を維持）
                     new_row = pd.DataFrame([save_data])
-                    updated_df = pd.concat([df, new_row], ignore_index=True)
+                    
+                    # カラムの順番を強制的にスプレッドシートに合わせる
+                    cols = ["filename", "datetime", "date", "time", "lat", "lon", "気温", "風速", "風向", "降水量", "潮位_cm", "月齢", "潮名", "次の満潮まで_分", "次の干潮まで_分", "直前の満潮_時刻", "直前の干潮_時刻", "潮位フェーズ", "場所", "魚種", "全長_cm", "ルアー", "備考", "group_id", "観測所"]
+                    new_row = new_row[cols]
+
+                    # メインデータ更新
+                    updated_df = pd.concat([df[cols], new_row], ignore_index=True)
                     conn.update(spreadsheet=url, data=updated_df)
 
                     # 新規場所ならマスターにも追加
@@ -223,4 +241,4 @@ with st.form("main_form", clear_on_submit=True):
                     st.balloons()
                     st.cache_data.clear()
                 except Exception as e:
-                    st.error(f"❌ 処理中にエラーが発生しました: {e}")
+                    st.error(f"❌ 書き込みエラーが発生しました: {e}")
