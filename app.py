@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 import requests
 import math
 
-# --- 1. 各種関数 (GPS変換・気象・潮汐) ---
+# --- 1. 各種関数定義 ---
+
 def get_geotagging(exif):
     if not exif: return None
     geotagging = {}
@@ -36,110 +37,36 @@ def get_coordinates(geotags):
         return lat, lon
     except:
         return None, None
-    
+
 def get_weather_data(lat, lon, dt):
+    """気象データを取得。失敗時は (None, None, None) を返す"""
     try:
         start_date = (dt - timedelta(days=2)).strftime('%Y-%m-%d')
         end_date = dt.strftime('%Y-%m-%d')
         url = "https://archive-api.open-meteo.com/v1/archive"
         params = {
-            "latitude": lat, "longitude": lon,
-            "start_date": start_date, "end_date": end_date,
-            # wind_direction_10m を追加
-            "hourly": "temperature_2m,windspeed_10m,wind_direction_10m,precipitation",
+            "latitude": float(lat),
+            "longitude": float(lon),
+            "start_date": start_date,
+            "end_date": end_date,
+            "hourly": "temperature_2m,windspeed_10m,precipitation",
             "timezone": "Asia/Tokyo"
         }
-        response = requests.get(url, params=params)
-        data = response.json()
-
-        # データが空っぽでないかチェック
+        res = requests.get(url, params=params, timeout=10)
+        data = res.json()
         if "hourly" not in data:
-            return "", "", "", "" # 戻り値を4つに増やす
+            return None, None, None
 
         idx = (len(data['hourly']['temperature_2m']) - 25) + dt.hour
         idx = max(0, min(idx, len(data['hourly']['temperature_2m']) - 1))
         
         temp = data['hourly']['temperature_2m'][idx]
         wind_s = data['hourly']['windspeed_10m'][idx]
-        
-        # --- 風向きの取得と変換を追加 ---
-        wind_deg = data['hourly'].get('wind_direction_10m', [0])[idx]
-        wind_dir = get_wind_direction(wind_deg) # 方位文字列に変換
-        # -----------------------------
-
         precip_list = data['hourly']['precipitation'][:idx+1]
         precip_48h = sum(precip_list[-48:])
-        
-        # 風向き(wind_dir)を含めた4つの値を返す
-        return temp, wind_s, round(precip_48h, 1), wind_dir
-    except Exception as e:
-        return "", "", "", ""
-        
-def get_wind_direction(degrees):
-    """度数を16方位の文字列に変換"""
-    directions = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", 
-                  "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
-    idx = int((degrees + 11.25) / 22.5) % 16
-    return directions[idx]
-
-def get_tide_details(dt):
-    # (月齢計算などはそのまま)
-    base_new_moon = datetime(2023, 1, 22, 5, 53) 
-    lunar_cycle = 29.530588
-    diff_days = (dt - base_new_moon).total_seconds() / 86400
-    moon_age = round(diff_days % lunar_cycle, 1)
-    
-    # 潮位サイクルの計算 (12.42時間周期 / 片道6.21時間)
-    hour_cycle = (dt.hour + dt.minute/60) % 12.42
-    
-    # 10段階判定ロジック
-    if hour_cycle < 0.62:
-        phase = "満潮"
-    elif hour_cycle < 5.59:
-        # 下げを9分割 (1〜9)
-        num = int((hour_cycle / 6.21) * 10)
-        phase = f"下げ{num}分"
-    elif hour_cycle < 6.83:
-        phase = "干潮"
-    elif hour_cycle < 11.8:
-        # 上げを9分割 (1〜9)
-        # 上げは 6.21〜12.42時間の間なので、そこからの経過分を計算
-        num = int(((hour_cycle - 6.21) / 6.21) * 10)
-        phase = f"上げ{num}分"
-    else:
-        phase = "満潮"
-    
-    # (潮位cm計算と干満時刻算出はそのまま)
-    tide_cm = int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21)))
-    prev_h_tide = (dt - timedelta(hours=hour_cycle)).strftime("%H:%M")
-    prev_l_tide = (dt - timedelta(hours=(hour_cycle-6.21 if hour_cycle>6.21 else hour_cycle+6.21))).strftime("%H:%M")
-
-    return {
-        "潮位_cm": tide_cm,
-        "月齢": moon_age,
-        "潮位フェーズ": phase,
-        "直前の満潮_時刻": prev_h_tide,
-        "直前の干潮_時刻": prev_l_tide,
-        "次の満潮まで_分": int((12.42 - hour_cycle) * 60),
-        "次の干潮まで_分": int((6.21 - hour_cycle) * 60 if hour_cycle < 6.21 else (18.63 - hour_cycle) * 60)
-    }
-    
-    # 潮位(cm)のシミュレーション
-    tide_cm = int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21)))
-    
-    # 干満時刻の算出（簡易）
-    prev_h_tide = (dt - timedelta(hours=hour_cycle)).strftime("%H:%M")
-    prev_l_tide = (dt - timedelta(hours=(hour_cycle-6.21 if hour_cycle>6.21 else hour_cycle+6.21))).strftime("%H:%M")
-
-    return {
-        "潮位_cm": tide_cm,
-        "月齢": moon_age,
-        "潮位フェーズ": phase,
-        "直前の満潮_時刻": prev_h_tide,
-        "直前の干潮_時刻": prev_l_tide,
-        "次の満潮まで_分": int((12.42 - hour_cycle) * 60),
-        "次の干潮まで_分": int((6.21 - hour_cycle) * 60 if hour_cycle < 6.21 else (18.63 - hour_cycle) * 60)
-    }
+        return temp, wind_s, round(precip_48h, 1)
+    except:
+        return None, None, None
 
 def get_tide_name(dt):
     base_date = datetime(2023, 1, 22)
@@ -150,9 +77,34 @@ def get_tide_name(dt):
                 8:"長潮", 22:"長潮", 9:"若潮", 23:"若潮"}
     return tide_map.get(diff, "中潮")
 
-# --- 2. 初期設定とデータ読み込み ---
-st.set_page_config(page_title="Pro Fishing Log", layout="wide")
-st.title("🎣 全自動GPSログ ＆ 釣り場マスター")
+def get_tide_details(dt):
+    """天文潮位の簡易計算"""
+    base_new_moon = datetime(2023, 1, 22, 5, 53) 
+    lunar_cycle = 29.530588
+    diff_days = (dt - base_new_moon).total_seconds() / 86400
+    moon_age = round(diff_days % lunar_cycle, 1)
+    hour_cycle = (dt.hour + dt.minute/60) % 12.42
+    
+    if hour_cycle < 1.5: phase = "満潮付近"
+    elif hour_cycle < 4.5: phase = "下げ三分"
+    elif hour_cycle < 7.5: phase = "下げ七分"
+    elif hour_cycle < 9.0: phase = "干潮付近"
+    elif hour_cycle < 10.5: phase = "上げ三分"
+    else: phase = "上げ七分"
+    
+    tide_cm = int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21)))
+    return {
+        "潮位_cm": tide_cm, "月齢": moon_age, "潮位フェーズ": phase,
+        "直前の満潮_時刻": (dt - timedelta(hours=hour_cycle)).strftime("%H:%M"),
+        "直前の干潮_時刻": (dt - timedelta(hours=(hour_cycle-6.21 if hour_cycle>6.21 else hour_cycle+6.21))).strftime("%H:%M"),
+        "次の満潮まで_分": int((12.42 - hour_cycle) * 60),
+        "次の干潮まで_分": int((6.21 - hour_cycle) * 60 if hour_cycle < 6.21 else (18.63 - hour_cycle) * 60)
+    }
+
+# --- 2. Streamlit UI部 ---
+
+st.set_page_config(page_title="Fishing AI Log", layout="wide")
+st.title("🎣 GPS・気象・潮汐 統合ログシステム")
 
 default_dt = datetime.now()
 auto_lat, auto_lon = 35.0, 135.0
@@ -163,34 +115,12 @@ try:
     df = conn.read(spreadsheet=url, ttl="5m")
     m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
     place_options = sorted(m_df["place_name"].unique().tolist())
-except Exception as e:
-    st.error(f"接続エラー: {e}")
+except:
+    st.error("スプレッドシートへの接続に失敗しました。")
     st.stop()
 
-# --- 3. 新規地点のマスター登録機能 ---
-with st.expander("📍 新しい釣り場をマスターに事前登録"):
-    with st.form("master_form"):
-        new_place = st.text_input("釣り場名 (例: 志賀島 沖堤防)")
-        col1, col2 = st.columns(2)
-        with col1:
-            m_lat = st.number_input("緯度", value=33.6, format="%.6f")
-        with col2:
-            m_lon = st.number_input("経度", value=130.4, format="%.6f")
-        
-        if st.form_submit_button("マスターに保存"):
-            if new_place and new_place not in m_df["place_name"].values:
-                new_row = pd.DataFrame([{"place_name": new_place, "latitude": m_lat, "longitude": m_lon}])
-                updated_m_df = pd.concat([m_df, new_row], ignore_index=True)
-                conn.update(spreadsheet=url, worksheet="place_master", data=updated_m_df)
-                st.success(f"✅ 「{new_place}」を登録しました。プルダウンから選択可能になります。")
-                st.cache_data.clear()
-                st.rerun()
-
-st.write("---")
-
-# --- 4. 写真解析セクション ---
-uploaded_file = st.file_uploader("📸 写真をアップロード（位置・日時を自動取得）", type=['jpg', 'jpeg'])
-
+# 写真解析
+uploaded_file = st.file_uploader("📸 写真を選択", type=['jpg', 'jpeg'])
 if uploaded_file:
     img = Image.open(uploaded_file)
     exif = img._getexif()
@@ -201,49 +131,40 @@ if uploaded_file:
         geotags = get_geotagging(exif)
         if geotags:
             lat, lon = get_coordinates(geotags)
-            if lat and lon:
-                auto_lat, auto_lon = lat, lon
-                st.success(f"🎯 写真から位置( {auto_lat}, {auto_lon} )と日時を読み込みました！")
+            if lat: auto_lat, auto_lon = lat, lon
+            st.success(f"📍 GPS/日時を取得しました")
 
-# --- 5. 釣果入力フォーム ---
-with st.form("fishing_form", clear_on_submit=True):
+# 入力フォーム
+with st.form("main_form", clear_on_submit=True):
     c1, c2 = st.columns(2)
     with c1:
-        date_in = st.date_input("📅 日付", value=default_dt.date())
-        time_in = st.time_input("⏰ 時刻", value=default_dt.time())
+        date_in = st.date_input("日付", value=default_dt.date())
+        time_in = st.time_input("時刻", value=default_dt.time())
     with c2:
-        # 写真から取得した値を初期値にするが、手動調整も可能
         lat_in = st.number_input("緯度", value=auto_lat, format="%.6f")
         lon_in = st.number_input("経度", value=auto_lon, format="%.6f")
     
-    # 既存マスターから選ぶか、手動で場所名を入力するか
-    place_selected = st.selectbox("📍 登録済み釣り場から選択", options=["-- 手動入力 --"] + place_options)
-    place_manual = st.text_input("📍 新しい場所名（直接入力）", placeholder="写真の場所名を入力")
+    place_name = st.text_input("場所名", value="")
+    fish_in = st.text_input("魚種")
+    length_in = st.slider("全長(cm)", 0.0, 150.0, 40.0)
+    lure_in = st.text_input("ルアー")
+    memo_in = st.text_area("備考")
     
-    final_place_name = place_selected if place_selected != "-- 手動入力 --" else place_manual
-    
-    fish_in = st.text_input("🐟 魚種", placeholder="シーバス")
-    length_in = st.slider("📏 全長 (cm)", 0.0, 150.0, 40.0)
-    lure_in = st.text_input("🎣 ルアー")
-    memo_in = st.text_area("📝 備考")
-    
-    submit = st.form_submit_button("🚀 気象・潮汐を自動取得して保存")
+    submit = st.form_submit_button("🚀 気象と潮汐を解析して保存")
 
-# --- 6. 保存処理 ---
+# --- 3. 保存処理 ---
+
 if submit:
-    with st.spinner('気象と潮汐を解析中...'):
+    with st.spinner('解析中...'):
         target_dt = datetime.combine(date_in, time_in)
         
-        # 1. 気象（既存）
-        temp, wind_s, precip = get_weather_data(lat_in, lon_in, target_dt)
+        # 気象データの取得 (安全に取得)
+        weather_data = get_weather_data(lat_in, lon_in, target_dt)
+        temp, wind_s, precip = weather_data if weather_data else (None, None, None)
         
-        # 2. 潮名（既存）
         tide_name = get_tide_name(target_dt)
-        
-        # 3. ★詳細潮汐（今回追加）
         tide_info = get_tide_details(target_dt)
         
-        # 4. 全データの統合マッピング
         save_data = {
             "filename": uploaded_file.name if uploaded_file else "",
             "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
@@ -251,9 +172,7 @@ if submit:
             "time": time_in.strftime('%H:%M'),
             "lat": lat_in,
             "lon": lon_in,
-            "気温": temp,
-            "風速": wind_s,
-            "降水量": precip,
+            "気温": temp, "風速": wind_s, "降水量": precip,
             "潮名": tide_name,
             "潮位_cm": tide_info["潮位_cm"],
             "月齢": tide_info["月齢"],
@@ -262,23 +181,12 @@ if submit:
             "直前の干潮_時刻": tide_info["直前の干潮_時刻"],
             "次の満潮まで_分": tide_info["次の満潮まで_分"],
             "次の干潮まで_分": tide_info["次の干潮まで_分"],
-            "場所": final_place_name,
-            "魚種": fish_in,
-            "全長_cm": length_in,
-            "ルアー": lure_in,
-            "備考": memo_in
+            "場所": place_name, "魚種": fish_in, "全長_cm": length_in,
+            "ルアー": lure_in, "備考": memo_in
         }
         
-        # 5. スプレッドシート更新（既存）
         new_df = pd.concat([df, pd.DataFrame([save_data])], ignore_index=True)
         conn.update(spreadsheet=url, data=new_df)
-        st.success(f"✅ 保存完了！当時の潮は {tide_name} ({tide_info['潮位フェーズ']}) でした。")
+        st.success("✅ 保存が完了しました！")
         st.cache_data.clear()
         st.rerun()
-
-
-
-
-
-
-
