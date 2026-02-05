@@ -36,13 +36,6 @@ def get_coordinates(geotags):
         return lat, lon
     except:
         return None, None
-
-def get_wind_direction(degrees):
-    """度数を16方位の文字列に変換"""
-    directions = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", 
-                  "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
-    idx = int((degrees + 11.25) / 22.5) % 16
-    return directions[idx]
     
 def get_weather_data(lat, lon, dt):
     try:
@@ -68,6 +61,13 @@ def get_weather_data(lat, lon, dt):
         return temp, wind_s, wind_dir, round(precip_48h, 1) # wind_dirを戻り値に加える
     except:
         return None, None, None, None
+
+def get_wind_direction(degrees):
+    """度数を16方位の文字列に変換"""
+    directions = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", 
+                  "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
+    idx = int((degrees + 11.25) / 22.5) % 16
+    return directions[idx]
 
 def get_tide_details(dt):
     # (月齢計算などはそのまま)
@@ -262,6 +262,7 @@ if submit:
         st.success(f"✅ 保存完了！当時の潮は {tide_name} ({tide_info['潮位フェーズ']}) でした。")
         st.cache_data.clear()
         st.rerun()
+
 
 
 
