@@ -191,6 +191,24 @@ if submit:
         tide_name = get_tide_name(target_dt)
         tide_info = get_tide_details(target_dt)
         
+# --- 6. 保存処理 ---
+if submit:
+    with st.spinner('気象と潮汐を解析中...'):
+        target_dt = datetime.combine(date_in, time_in)
+        
+        # 1. 気象データを取得 (戻り値が4つ [気温, 風速, 風向, 降水] になっています)
+        weather_res = get_weather_data(lat_in, lon_in, target_dt)
+        
+        # もしデータが取れなかった場合でも、空の値(None)で埋めてエラーを防ぐ
+        if weather_res:
+            temp, wind_s, wind_d, precip = weather_res
+        else:
+            temp, wind_s, wind_d, precip = None, None, None, None
+        
+        # 2. 潮汐データの取得
+        tide_name = get_tide_name(target_dt)
+        tide_info = get_tide_details(target_dt)
+        
         # 3. 保存用データの作成（共有いただいた全カラムを網羅）
         save_data = {
             "filename": uploaded_file.name if uploaded_file else "",
@@ -225,3 +243,4 @@ if submit:
         st.success(f"✅ 保存完了！ {wind_d}の風、フェーズは {tide_info['潮位フェーズ']} でした。")
         st.cache_data.clear()
         st.rerun()
+
