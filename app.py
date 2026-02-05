@@ -8,6 +8,12 @@ import requests
 import math
 
 # --- 1. 各種関数定義 ---
+def get_moon_age(dt):
+    base_new_moon = datetime(2023, 1, 22, 5, 53)
+    lunar_cycle = 29.530588
+    diff_days = (dt - base_new_moon).total_seconds() / 86400
+    return round(diff_days % lunar_cycle, 1)
+    
 def calculate_distance(lat1, lon1, lat2, lon2):
     if None in [lat1, lon1, lat2, lon2]: return 999.0
     R = 6371.0
@@ -242,3 +248,4 @@ with st.form("main_form", clear_on_submit=True):
                     st.cache_data.clear()
                 except Exception as e:
                     st.error(f"❌ 書き込みエラーが発生しました: {e}")
+
