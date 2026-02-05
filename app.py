@@ -178,62 +178,83 @@ with st.form("main_form"):
     memo = st.text_area("📝 備考")
     submit = st.form_submit_button("🚀 データを保存")
 
+# --- 保存処理の完全版 ---
 if submit:
-    # 1. 日時の確定 (確実に datetime 型にする)
-    target_dt = datetime(
-        year=date_in.year, month=date_in.month, day=date_in.day,
-        hour=time_in.hour, minute=time_in.minute
-    )
+    # 1. 場所名が空でないかチェック
+    if not final_place_name:
+        st.error("⚠️ 場所名を選択するか、新しい場所名を入力してください。")
+    else:
+        with st.spinner('📊 解析中...'):
+            try:
+                # 2. 確実に datetime オブジェクトをここで作成する
+                target_dt = datetime(
+                    year=date_in.year, 
+                    month=date_in.month, 
+                    day=date_in.day,
+                    hour=time_in.hour, 
+                    minute=time_in.minute
+                )
 
-    with st.spinner('📊 全データを集計中...'):
-        # 2. 各種計算・取得をここで実行
-        # (1) 潮名を取得
-        tide_name = get_tide_name(target_dt)
-        # (2) 潮位の詳細（10段階フェーズ、時刻など）を取得
-        tide_info = get_tide_details(target_dt)
-        # (3) 気象データを取得
-        weather_res = get_weather_data(lat_in_final, lon_in_final, target_dt)
-        temp, wind_s, wind_d, precip = weather_res if (weather_res and len(weather_res) == 4) else (None, None, None, None)
+                # 3. 潮汐データの計算（target_dt が決まった直後に呼ぶ）
+                tide_name = get_tide_name(target_dt)
+                tide_info = get_tide_details(target_dt)
+                
+                # 4. 気象データの取得
+                weather_res = get_weather_data(lat_in_final, lon_in_final, target_dt)
+                if weather_res and len(weather_res) == 4:
+                    temp, wind_s, wind_d, precip = weather_res
+                else:
+                    temp, wind_s, wind_d, precip = None, None, None, None
 
-        # 3. 保存用データの作成 (tide_info.get(...) で確実に値を取得)
-        save_data = {
-            "group_id": final_group_id,
-            "場所": final_place_name,
-            "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
-            "date": date_in.strftime('%Y-%m-%d'),
-            "time": time_in.strftime('%H:%M'),
-            "lat": lat_in_final,
-            "lon": lon_in_final,
-            "気温": temp,
-            "風速": wind_s,
-            "風向": get_wind_direction_label(wind_d),
-            "降水量": precip,
-            "潮名": tide_name,  # ← 潮名OK
-            "潮位_cm": tide_info.get("潮位_cm"),       # ← ここから下が空欄だった可能性
-            "月齢": tide_info.get("月齢"),
-            "潮位フェーズ": tide_info.get("潮位フェーズ"),
-            "直前の満潮_時刻": tide_info.get("直前の満潮_時刻"),
-            "直前の干潮_時刻": tide_info.get("直前の干潮_時刻"),
-            "次の満潮まで_分": tide_info.get("次の満潮まで_分"),
-            "次の干潮まで_分": tide_info.get("次の干潮まで_分"),
-            "魚種": fish_in,
-            "全長_cm": length_in,
-            "ルアー": lure_in,
-            "備考": memo_in,
-            "filename": uploaded_file.name if uploaded_file else ""
-        }
+                # 5. 保存データの作成（すべての変数が揃った状態で）
+                save_data = {
+                    "group_id": final_group_id,
+                    "場所": final_place_name,
+                    "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
+                    "date": date_in.strftime('%Y-%m-%d'),
+                    "time": time_in.strftime('%H:%M'),
+                    "lat": lat_in_final,
+                    "lon": lon_in_final,
+                    "気温": temp,
+                    "風速": wind_s,
+                    "風向": get_wind_direction_label(wind_d),
+                    "降水量": precip,
+                    "潮名": tide_name,
+                    "潮位_cm": tide_info.get("潮位_cm"),
+                    "月齢": tide_info.get("月齢"),
+                    "潮位フェーズ": tide_info.get("潮位フェーズ"),
+                    "直前の満潮_時刻": tide_info.get("直前の満潮_時刻"),
+                    "直前の干潮_時刻": tide_info.get("直前の干潮_時刻"),
+                    "次の満潮まで_分": tide_info.get("次の満潮まで_分"),
+                    "次の干潮まで_分": tide_info.get("次の干潮まで_分"),
+                    "魚種": fish_in,
+                    "全長_cm": length_in,
+                    "ルアー": lure_in,
+                    "備考": memo_in,
+                    "filename": uploaded_file.name if uploaded_file else ""
+                }
 
-        # 4. 書き込み実行
-        try:
-            new_row = pd.DataFrame([save_data])
-            updated_df = pd.concat([df, new_row], ignore_index=True)
-            conn.update(spreadsheet=url, data=updated_df)
-            
-            # (省略: マスター更新ロジック)
-            
-            st.success(f"✅ 保存完了！当時の状況：{tide_name} ({tide_info.get('潮位フェーズ')})")
-            st.balloons()
-        except Exception as e:
-            st.error(f"書き込みエラー: {e}")
+                # 6. 書き込み実行
+                new_row = pd.DataFrame([save_data])
+                updated_df = pd.concat([df, new_row], ignore_index=True)
+                conn.update(spreadsheet=url, data=updated_df)
+                
+                # 新規場所だった場合はマスターにも追加
+                if place_selected == "-- 新規地点 or 手動入力 --":
+                    new_m = pd.DataFrame([{
+                        "group_id": final_group_id, 
+                        "place_name": final_place_name, 
+                        "latitude": lat_in_final, 
+                        "longitude": lon_in_final
+                    }])
+                    updated_m = pd.concat([m_df, new_m], ignore_index=True)
+                    conn.update(spreadsheet=url, worksheet="place_master", data=updated_m)
+
+                st.success(f"✅ 保存成功: {final_place_name} (ID:{final_group_id})")
+                st.balloons()
+                st.cache_data.clear()
+
+            except Exception as e:
+                st.error(f"❌ 処理中にエラーが発生しました: {e}")
 
 
