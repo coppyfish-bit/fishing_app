@@ -5,28 +5,32 @@ from streamlit_gsheets import GSheetsConnection
 # ページ設定
 st.set_page_config(page_title="Fishing App", layout="wide")
 
-st.title("🎣 釣果登録システム")
+# --- メイン処理 ---
+st.title("📱 スマホ爆速登録")
 
-# 1. 接続とデータの読み込み
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    df = conn.read(spreadsheet=url, ttl=0)
-    # 地点マスターも読み込み（以前のCSVがある前提）
-    m_df = pd.read_csv("group_place_master.csv")
-    place_options = sorted(m_df["place_name"].unique().tolist())
-except Exception as e:
-    st.error(f"接続エラー: {e}")
-    st.stop()
+# 1. まず「デフォルトの日時」を現在の時刻で決めておく（★重要）
+default_datetime = datetime.now()
 
-# --- 2. スマホ向け縦型フォーム ---
+# 2. 写真アップローダー
+uploaded_file = st.file_uploader("📸 写真を選択（日時を自動反映）", type=['jpg', 'jpeg', 'png'])
+
+# 3. 写真がアップロードされたら、default_datetime を上書きする
+if uploaded_file:
+    img = Image.open(uploaded_file)
+    exif_dt = get_exif_datetime(img)
+    if exif_dt:
+        default_datetime = exif_dt
+        st.success(f"✅ 写真から日時を読み取りました: {default_datetime.strftime('%Y-%m-%d %H:%M')}")
+    else:
+        st.warning("⚠️ 写真に日時情報（EXIF）が含まれていませんでした。現在の時刻を使用します。")
+
+# --- 4. スマホ向け縦型フォーム ---
+# ここで使う default_datetime は、写真があってもなくても必ず存在するのでエラーになりません
 with st.form("input_form", clear_on_submit=True):
-    # 写真から読み取った値を初期値にセット
     date_in = st.date_input("📅 日付", value=default_datetime.date())
     time_in = st.time_input("⏰ 時刻", value=default_datetime.time())
     
-    place_in = st.selectbox("📍 場所", options=place_options)
-    fish_in = st.text_input("🐟 魚種", placeholder="シーバス")
+    # ... (以降の場所、魚種、ルアー、全長、備考の入力欄)
     
     # 【追加】ルアー入力欄
     lure_in = st.text_input("🎣 ルアー", placeholder="セットアッパー 125DR")
@@ -72,4 +76,5 @@ if df is not None:
     st.subheader(f"📊 登録済みデータ ({len(df)}件)")
     # 直近のデータを上に表示
     st.dataframe(df.sort_index(ascending=False).head(10), use_container_width=True)
+
 
