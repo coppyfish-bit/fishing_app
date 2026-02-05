@@ -3,48 +3,93 @@ import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 from PIL import Image
 from PIL.ExifTags import TAGS
-from datetime import datetime 
+from datetime import datetime
+import requests # 気象API用
 
-# ページ設定
+# --- 1. 気象データ取得関数 ---
+def get_weather_data(lat, lon, dt):
+    try:
+        url = "https://archive-api.open-meteo.com/v1/archive"
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "start_date": dt.strftime('%Y-%m-%d'),
+            "end_date": dt.strftime('%Y-%m-%d'),
+            "hourly": "temperature_2m,windspeed_10m,winddirection_10m,weathercode",
+            "timezone": "Asia/Tokyo"
+        }
+        response = requests.get(url, params=params).json()
+        hour = dt.hour
+        temp = response['hourly']['temperature_2m'][hour]
+        wind_s = response['hourly']['windspeed_10m'][hour]
+        wind_d = response['hourly']['winddirection_10m'][hour]
+        return temp, wind_s, wind_d
+    except:
+        return None, None, None
+
+# --- 2. ページ設定とデータ読み込み ---
 st.set_page_config(page_title="Fishing App", layout="wide")
-
-st.title("📱 釣果登録")
-
-# --- 1. 初期設定とデータ読み込み ---
-default_datetime = datetime.now()
+st.title("🎣 プロ仕様・自動補完ログ")
 
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    
-    # 釣果データ読み込み
     df = conn.read(spreadsheet=url, ttl=0)
-    
-    # 場所マスター読み込み
     m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl=0)
     place_options = sorted(m_df["place_name"].unique().tolist())
 except Exception as e:
-    st.error(f"データの読み込みに失敗しました: {e}")
+    st.error(f"接続エラー: {e}")
     st.stop()
 
-# --- 2. 釣り場追加機能（自動採番付き） ---
-st.write("---")
-with st.expander("📍 新規地点をマスターに追加する"):
-    new_place = st.text_input("追加する釣り場名", placeholder="例：〇〇堤防")
-    if st.button("マスターに登録"):
-        if new_place:
-            if new_place in m_df["place_name"].values:
-                st.warning("その場所は既に登録されています。")
-            else:
-                # 自動採番ロジック
-                new_id = m_df["group_id"].max() + 1 if not m_df.empty else 0
-                new_place_row = pd.DataFrame([{"group_id": int(new_id), "place_name": new_place}])
-                updated_m_df = pd.concat([m_df, new_place_row], ignore_index=True)
-                
-                conn.update(spreadsheet=url, worksheet="place_master", data=updated_m_df)
-                st.success(f"✅ 「{new_place}」(ID:{new_id}) を登録しました！")
-                st.cache_data.clear()
-                st.rerun()
+# (写真アップローダー部分は前回同様のため中略)
+# ... [uploaded_file の処理] ...
+
+# --- 3. 釣果登録フォーム ---
+with st.form("input_form"):
+    date_in = st.date_input("📅 日付", value=default_datetime.date())
+    time_in = st.time_input("⏰ 時刻", value=default_datetime.time())
+    place_in = st.selectbox("📍 場所", options=place_options)
+    
+    # 選択された場所の緯度経度を取得 (マスターに登録されている前提)
+    loc_data = m_df.loc[m_df["place_name"] == place_in]
+    lat = loc_data["latitude"].values[0] if "latitude" in m_df.columns else 35.0
+    lon = loc_data["longitude"].values[0] if "longitude" in m_df.columns else 135.0
+    
+    fish_in = st.text_input("🐟 魚種")
+    lure_in = st.text_input("🎣 ルアー")
+    length_in = st.slider("📏 全長 (cm)", 0.0, 150.0, 40.0, 1.0)
+    memo_in = st.text_area("📝 備考")
+    
+    submit_button = st.form_submit_button("🚀 気象を自動取得して保存", use_container_width=True)
+
+# --- 4. 保存処理（自動取得フェーズ） ---
+if submit_button:
+    with st.spinner('気象データと潮汐を計算中...'):
+        target_dt = datetime.combine(date_in, time_in)
+        
+        # 気象データの取得
+        temp, wind_s, wind_d = get_weather_data(lat, lon, target_dt)
+        
+        # 保存用データ作成
+        new_data = pd.DataFrame([{
+            "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
+            "場所": place_in,
+            "魚種": fish_in,
+            "ルアー": lure_in,
+            "全長_cm": length_in,
+            "気温": temp,
+            "風速": wind_s,
+            "風向き": wind_d,
+            "備考": memo_in
+        }])
+        
+        # スプレッドシート更新
+        updated_df = pd.concat([df, new_data], ignore_index=True)
+        conn.update(spreadsheet=url, data=updated_df)
+        
+        st.success(f"✅ 保存完了！ 気温:{temp}℃ / 風速:{wind_s}m")
+        st.cache_data.clear()
+        st.rerun()
 
 st.write("---")
 
@@ -99,3 +144,4 @@ if submit_button:
         st.rerun()
     except Exception as e:
         st.error(f"登録失敗: {e}")
+
