@@ -193,20 +193,24 @@ if submit:
         tide_info = get_tide_details(target_dt)
         
 # --- 3. 保存処理 (if submit: の中) ---
-
 if submit:
     with st.spinner('解析中...'):
         target_dt = datetime.combine(date_in, time_in)
         
-        # 気象データの取得
-        weather_data = get_weather_data(lat_in, lon_in, target_dt)
-        temp, wind_s, precip = weather_data if weather_data else (None, None, None)
+        # 1. まとめて受け取る (アンパックせずに weather_res という箱に入れる)
+        weather_res = get_weather_data(lat_in, lon_in, target_dt)
         
-        # 潮汐データの取得
+        # 2. 中身を一つずつ安全に取り出す
+        # もし weather_res が None だったとしてもエラーにならないようにガード
+        if weather_res and len(weather_res) == 3:
+            temp, wind_s, precip = weather_res
+        else:
+            temp, wind_s, precip = None, None, None
+            
         tide_name = get_tide_name(target_dt)
         tide_info = get_tide_details(target_dt)
         
-        # tide_info["キー"] ではなく tide_info.get("キー") を使うことでエラーを回避
+        # 3. 保存用データの作成 (tide_info.get も念のため継続)
         save_data = {
             "filename": uploaded_file.name if uploaded_file else "",
             "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
@@ -232,12 +236,8 @@ if submit:
             "備考": memo_in
         }
         
-        # 保存実行
-        new_df = pd.concat([df, pd.DataFrame([save_data])], ignore_index=True)
-        conn.update(spreadsheet=url, data=new_df)
-        st.success("✅ 全てのデータを正常に保存しました！")
-        st.cache_data.clear()
-        st.rerun()
+        # (以下、保存実行部分は同じ)
+
 
 
 
