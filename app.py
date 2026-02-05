@@ -91,28 +91,36 @@ with st.form("input_form", clear_on_submit=True):
     
     submit_button = st.form_submit_button("🚀 気象を自動取得して保存", use_container_width=True)
 
-# --- 5. 保存処理 ---
 if submit_button:
-    with st.spinner('気象データ（48h降水量含む）を取得中...'):
+    with st.spinner('データを解析・保存中...'):
         target_dt = datetime.combine(date_in, time_in)
         temp, wind_s, precip_48h = get_weather_data(lat, lon, target_dt)
         
-        new_data = pd.DataFrame([{
+        # 保存するデータの辞書（ここを増やすだけでOK）
+        save_data = {
             "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
             "場所": place_in,
+            "group_id": int(current_id),
             "魚種": fish_in,
             "ルアー": lure_in,
             "全長_cm": length_in,
             "気温": temp,
             "風速": wind_s,
-            "48h降水量": precip_48h, # 追加項目
-            "備考": memo_in
-        }])
+            "48h降水量": precip_48h,
+            "備考": memo_in,
+            # 将来的に「潮名」などを追加したくなったらここに行を増やすだけ！
+            # "潮名": get_tide_name(target_dt), 
+        }
         
-        updated_df = pd.concat([df, new_data], ignore_index=True)
+        new_row_df = pd.DataFrame([save_data])
+        
+        # 既存のスプレッドシートに新しい列があれば、それを含めて結合
+        updated_df = pd.concat([df, new_row_df], ignore_index=True)
+        
+        # スプレッドシートを更新
         conn.update(spreadsheet=url, data=updated_df)
         
-        st.success(f"✅ 保存完了！ 48h降水量: {precip_48h}mm")
+        st.success("✅ 正常に記録されました！")
         st.cache_data.clear()
         st.rerun()
 
@@ -169,5 +177,6 @@ if submit_button:
         st.rerun()
     except Exception as e:
         st.error(f"登録失敗: {e}")
+
 
 
