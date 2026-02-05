@@ -24,9 +24,9 @@ def get_weather_data(lat, lon, dt):
         }
         response = requests.get(url, params=params).json()
 
-        def get_tide_name(dt):
-    # 簡易的な旧暦/潮汐計算ロジック（2025-2026年前後で有効）
-    # 基準日(新月)からの経過日数で判定
+       # --- 1. 潮名を判定する関数 ---
+def get_tide_name(dt):
+    # ここから下は全て「半角スペース4つ」右にずらします
     base_date = datetime(2023, 1, 22) # 2023年の新月の一つ
     diff = (dt - base_date).days % 30
     
@@ -35,7 +35,7 @@ def get_weather_data(lat, lon, dt):
     if diff in [5, 6, 7, 19, 20, 21]: return "小潮"
     if diff in [8, 22]: return "長潮"
     if diff in [9, 23]: return "若潮"
-    return "中潮" # その他は中潮とする
+    return "中潮"
         # 釣った瞬間のリスト内インデックスを計算
         # 48時間分(2日分) + 当日の経過時間
         current_idx = (len(response['hourly']['temperature_2m']) - 25) + dt.hour
@@ -161,4 +161,5 @@ if submit_button:
         st.cache_data.clear()
         st.rerun()
 st.write("---")
+
 
