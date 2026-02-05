@@ -189,50 +189,44 @@ if submit:
     final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 0
 
 # --- 保存処理の完全版（変数確定ロジック入り） ---
+# --- 修正版：位置とインデントを整えた保存処理 ---
+
 if submit:
-    # 1. フォームで選択・入力された値から「最終的な場所名」と「ID」を決定する
-    # ※ if submit の中で行うことで NameError を確実に防ぎます
+    # --- ここから下は、すべて「if submit:」より右に4マス下げます ---
     if place_selected != "-- 新規地点 or 手動入力 --":
         final_place_name = place_selected
         final_group_id = place_to_id.get(place_selected)
     else:
         final_place_name = place_manual
-        # 新規の場合は現在の最大ID + 1 を付与
         final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 0
 
-    # 2. 場所名が空でないかチェック
     if not final_place_name:
         st.error("⚠️ 場所名を選択するか、新しい場所名を入力してください。")
     else:
         with st.spinner('📊 解析中...'):
             try:
-                # 3. 確実に datetime オブジェクトをここで作成する
+                # 日時オブジェクトの作成
                 target_dt = datetime(
-                    year=date_in.year, 
-                    month=date_in.month, 
-                    day=date_in.day,
-                    hour=time_in.hour, 
-                    minute=time_in.minute
+                    year=date_in.year, month=date_in.month, day=date_in.day,
+                    hour=time_in.hour, minute=time_in.minute
                 )
 
-                # 4. 潮汐データの計算
+                # 潮汐・気象計算
                 tide_name = get_tide_name(target_dt)
                 tide_info = get_tide_details(target_dt)
-                
-                # 5. 気象データの取得
                 weather_res = get_weather_data(lat_in_final, lon_in_final, target_dt)
+                
+                # 気象データの展開
                 if weather_res and len(weather_res) == 4:
                     temp, wind_s, wind_d, precip = weather_res
                 else:
                     temp, wind_s, wind_d, precip = None, None, None, None
 
-                # 6. 保存データの作成
+                # 保存用辞書の作成
                 save_data = {
                     "group_id": final_group_id,
                     "場所": final_place_name,
                     "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
-                    "date": date_in.strftime('%Y-%m-%d'),
-                    "time": time_in.strftime('%H:%M'),
                     "lat": lat_in_final,
                     "lon": lon_in_final,
                     "気温": temp,
@@ -245,8 +239,6 @@ if submit:
                     "潮位フェーズ": tide_info.get("潮位フェーズ"),
                     "直前の満潮_時刻": tide_info.get("直前の満潮_時刻"),
                     "直前の干潮_時刻": tide_info.get("直前の干潮_時刻"),
-                    "次の満潮まで_分": tide_info.get("次の満潮まで_分"),
-                    "次の干潮まで_分": tide_info.get("次の干潮まで_分"),
                     "魚種": fish_in,
                     "全長_cm": length_in,
                     "ルアー": lure_in,
@@ -254,13 +246,13 @@ if submit:
                     "filename": uploaded_file.name if uploaded_file else ""
                 }
 
-                # 7. 書き込み実行
+                # スプレッドシートへ保存
                 new_row = pd.DataFrame([save_data])
                 updated_df = pd.concat([df, new_row], ignore_index=True)
                 conn.update(spreadsheet=url, data=updated_df)
                 
-                # 新規場所だった場合はマスター(place_masterシート)にも自動追加
-                if place_selected == "-- 新規地点 or 手動入力 --":
+                # 新規場所ならマスターにも追加
+                if place_selected == "-- 新規地点 or 手動入力 --" and final_place_name:
                     new_m = pd.DataFrame([{
                         "group_id": final_group_id, 
                         "place_name": final_place_name, 
