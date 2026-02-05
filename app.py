@@ -178,6 +178,16 @@ with st.form("main_form"):
     memo = st.text_area("📝 備考")
     submit = st.form_submit_button("🚀 データを保存")
 
+
+# --- 1. 場所とIDを確定させるロジック（ここが抜けている、または位置がズレているはずです） ---
+if place_selected != "-- 新規地点 or 手動入力 --":
+    final_place_name = place_selected
+    final_group_id = place_to_id.get(place_selected)
+else:
+    final_place_name = place_manual
+    # 新規の場合は現在の最大ID + 1
+    final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 0
+
 # --- 保存処理の完全版 ---
 if submit:
     # 1. 場所名が空でないかチェック
@@ -256,5 +266,6 @@ if submit:
 
             except Exception as e:
                 st.error(f"❌ 処理中にエラーが発生しました: {e}")
+
 
 
