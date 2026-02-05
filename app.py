@@ -32,7 +32,7 @@ except Exception as e:
 
 # --- 2. 釣り場追加機能 ---
 st.write("---")
-st.subheader("📍 釣り場マスターの管理")
+st.subheader("📍 新規地点追加")
 
 with st.expander("新しい釣り場を追加する"):
     new_place = st.text_input("追加する釣り場名", placeholder="例：〇〇堤防")
@@ -78,8 +78,8 @@ with st.form("input_form", clear_on_submit=True):
     time_in = st.time_input("⏰ 時刻", value=default_datetime.time())
     
     place_in = st.selectbox("📍 場所", options=place_options)
-    fish_in = st.text_input("🐟 魚種", placeholder="シーバス")
-    lure_in = st.text_input("🎣 ルアー", placeholder="セットアッパー 125DR")
+    fish_in = st.text_input("🐟 魚種", placeholder="スズキ")
+    lure_in = st.text_input("🎣 ルアー", placeholder="カゲロウ125MD")
     length_in = st.slider("📏 全長 (cm)", 0.0, 150.0, 40.0, 0.5)
     memo_in = st.text_area("📝 備考")
     
@@ -91,5 +91,6 @@ if submit_button:
     # ...
     st.success("登録完了！")
     st.rerun()
+
 
 
