@@ -177,41 +177,32 @@ with st.form("main_form"):
     length = st.number_input("📏 全長(cm)", value=0.0)
     memo = st.text_area("📝 備考")
     submit = st.form_submit_button("🚀 データを保存")
-    
-# --- 1. 場所とIDを確定させるロジック（ここが抜けている、または位置がズレているはずです） ---
-if submit:
-    if place_selected != "-- 新規地点 or 手動入力 --":
-    final_place_name = place_selected
-    final_group_id = place_to_id.get(place_selected)
-    else:
-    final_place_name = place_manual
-    # 新規の場合は現在の最大ID + 1
-    final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 0
 
-# --- 保存処理の完全版（変数確定ロジック入り） ---
-# --- 修正版：位置とインデントを整えた保存処理 ---
-
+# --- 保存処理の開始 ---
 if submit:
-    # --- ここから下は、すべて「if submit:」より右に4マス下げます ---
+    # ここから下は全て「if submit:」より右に4マス分下げています
+    # 1. 場所とIDを確定させるロジック
     if place_selected != "-- 新規地点 or 手動入力 --":
         final_place_name = place_selected
         final_group_id = place_to_id.get(place_selected)
     else:
         final_place_name = place_manual
+        # 新規の場合は現在の最大ID + 1
         final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 0
 
+    # 2. 入力チェック
     if not final_place_name:
         st.error("⚠️ 場所名を選択するか、新しい場所名を入力してください。")
     else:
         with st.spinner('📊 解析中...'):
             try:
-                # 日時オブジェクトの作成
+                # 3. 日時オブジェクトの作成
                 target_dt = datetime(
                     year=date_in.year, month=date_in.month, day=date_in.day,
                     hour=time_in.hour, minute=time_in.minute
                 )
 
-                # 潮汐・気象計算
+                # 4. 潮汐・気象計算
                 tide_name = get_tide_name(target_dt)
                 tide_info = get_tide_details(target_dt)
                 weather_res = get_weather_data(lat_in_final, lon_in_final, target_dt)
@@ -222,7 +213,7 @@ if submit:
                 else:
                     temp, wind_s, wind_d, precip = None, None, None, None
 
-                # 保存用辞書の作成
+                # 5. 保存用辞書の作成
                 save_data = {
                     "group_id": final_group_id,
                     "場所": final_place_name,
@@ -246,21 +237,21 @@ if submit:
                     "filename": uploaded_file.name if uploaded_file else ""
                 }
 
-                # スプレッドシートへ保存
+                # 6. スプレッドシートへ保存
                 new_row = pd.DataFrame([save_data])
                 updated_df = pd.concat([df, new_row], ignore_index=True)
                 conn.update(spreadsheet=url, data=updated_df)
                 
                 # 新規場所ならマスターにも追加
                 if place_selected == "-- 新規地点 or 手動入力 --" and final_place_name:
-                    new_m = pd.DataFrame([{
+                    new_master_row = pd.DataFrame([{
                         "group_id": final_group_id, 
                         "place_name": final_place_name, 
                         "latitude": lat_in_final, 
                         "longitude": lon_in_final
                     }])
-                    updated_m = pd.concat([m_df, new_m], ignore_index=True)
-                    conn.update(spreadsheet=url, worksheet="place_master", data=updated_m)
+                    updated_m_df = pd.concat([m_df, new_master_row], ignore_index=True)
+                    conn.update(spreadsheet=url, worksheet="place_master", data=updated_m_df)
 
                 st.success(f"✅ 保存成功: {final_place_name} (ID:{final_group_id})")
                 st.balloons()
