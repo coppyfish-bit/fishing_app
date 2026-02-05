@@ -60,7 +60,6 @@ def get_weather_data(lat, lon, dt):
     except: return None, None, None, None
 
 def get_tide_details(lat, lon, dt):
-    """気象庁テキスト（苓北RH等）のマイナス値とカラムズレに完全対応した解析"""
     STATIONS = [
         {"name": "本渡瀬戸", "lat": 32.26, "lon": 130.13, "code": "HS"},
         {"name": "苓北", "lat": 32.28, "lon": 130.20, "code": "RH"},
@@ -80,71 +79,65 @@ def get_tide_details(lat, lon, dt):
         if response.status_code != 200: return {}
         
         lines = response.text.splitlines()
-        # 日付マッチング: カラム73-78 (Python index 72:78) は " 2 1" のような形式
-        # 例: 2026年2月1日は " 2 1"
-        date_query = f"{dt.month:>2}{dt.day:>2}" # " 2 1" や "1231" の形式を作る
         
-        # 行の特定 (日付部分 74-78文字目あたりを柔軟に探す)
-        line = None
-        for l in lines:
-            if len(l) > 78 and l[74:78].replace(" ", "") == f"{dt.month}{dt.day}":
-                line = l
-                break
-        if not line: return {}
+        def parse_line(target_date):
+            """特定の日の行を解析してイベントリストを返す"""
+            d_str = f"{target_date.month:>2}{target_date.day:>2}"
+            row = next((l for l in lines if len(l) > 78 and l[74:78] == d_str), None)
+            if not row: return None, []
+            
+            evs = []
+            # 満潮(80-107), 干潮(108-135)
+            for b_start, e_type in [(80, "満潮"), (108, "干潮")]:
+                for i in range(4):
+                    base = b_start + (i * 7)
+                    t_raw = row[base : base+4].strip()
+                    h_raw = row[base+4 : base+7].strip()
+                    if t_raw and t_raw != "9999":
+                        t_str = t_raw.replace(" ", "0").zfill(4)
+                        ev_dt = datetime(target_date.year, target_date.month, target_date.day, int(t_str[:2]), int(t_str[2:]))
+                        evs.append({"type": e_type, "time": ev_dt, "tide": h_raw})
+            return row, evs
 
-        # 1. 毎時潮位の取得 (1-72文字目、3文字ずつ)
-        # strip()で空白を除去してから数値化することで、マイナス記号があっても正しく変換
-        tide_list = []
-        for i in range(24):
-            val = line[i*3 : i*3+3].strip()
-            tide_list.append(int(val) if val else 0)
+        # 今日のデータ
+        line_today, events_today = parse_line(dt)
+        # 明日のデータも取得（日付跨ぎ対策）
+        _, events_tomorrow = parse_line(dt + timedelta(days=1))
         
-        current_hour_tide = tide_list[dt.hour]
+        all_events = sorted(events_today + events_tomorrow, key=lambda x: x["time"])
 
-        # 2. 満潮・干潮イベントの抽出 (81文字目〜)
-        events = []
-        # 満潮(81-108) / 干潮(109-136)
-        for base_start, ev_type in [(80, "満潮"), (108, "干潮")]:
-            for i in range(4):
-                base = base_start + (i * 7)
-                time_raw = line[base : base+4].strip()
-                tide_raw = line[base+4 : base+7].strip()
-                if time_raw and time_raw != "9999":
-                    # 時刻が " 637" のように3桁の場合もあるのでzfill
-                    t_str = time_raw.replace(" ", "0").zfill(4)
-                    ev_dt = datetime(dt.year, dt.month, dt.day, int(t_str[:2]), int(t_str[2:]))
-                    events.append({"type": ev_type, "time": ev_dt, "tide": int(tide_raw)})
+        # 1. 現在の潮位
+        tide_val = line_today[dt.hour*3 : dt.hour*3+3].strip()
+        current_hour_tide = int(tide_val) if tide_val else 0
 
-        events.sort(key=lambda x: x["time"])
-
-        # 3. 各種情報の計算
-        next_high = next((e for e in events if e["type"] == "満潮" and e["time"] > dt), None)
-        next_low = next((e for e in events if e["type"] == "干潮" and e["time"] > dt), None)
+        # 2. 次のイベントを特定
+        next_high = next((e for e in all_events if e["type"] == "満潮" and e["time"] > dt), None)
+        next_low = next((e for e in all_events if e["type"] == "干潮" and e["time"] > dt), None)
         
-        # 4. フェーズ判定
-        prev_ev = next((e for e in reversed(events) if e["time"] <= dt), None)
-        next_ev = next((e for e in events if e["time"] > dt), None)
-        phase = "不明"
-        if prev_ev and next_ev:
-            direction = "下げ" if prev_ev["type"] == "満潮" else "上げ"
-            # 潮位の変化率から「分」を計算
-            diff_total = (next_ev["time"] - prev_ev["time"]).total_seconds()
-            diff_now = (dt - prev_ev["time"]).total_seconds()
-            phase = f"{direction}{max(1, min(9, round(diff_now / diff_total * 10)))}分"
+        # 3. 直前のイベント（フェーズ用）
+        prev_ev = next((e for e in reversed(all_events) if e["time"] <= dt), None)
+        next_ev = next((e for e in all_events if e["time"] > dt), None)
 
-        return {
+        # 4. 返却データ作成
+        res = {
             "潮位_cm": current_hour_tide,
-            "潮位フェーズ": phase,
-            "直前の満潮_時刻": next((e["time"].strftime("%H:%M") for e in reversed(events) if e["type"] == "満潮" and e["time"] <= dt), ""),
-            "直前の干潮_時刻": next((e["time"].strftime("%H:%M") for e in reversed(events) if e["type"] == "干潮" and e["time"] <= dt), ""),
+            "潮位フェーズ": "不明",
+            "直前の満潮_時刻": next((e["time"].strftime("%H:%M") for e in reversed(all_events) if e["type"] == "満潮" and e["time"] <= dt), ""),
+            "直前の干潮_時刻": next((e["time"].strftime("%H:%M") for e in reversed(all_events) if e["type"] == "干潮" and e["time"] <= dt), ""),
             "次の満潮まで_分": int((next_high["time"] - dt).total_seconds() / 60) if next_high else "",
             "次の干潮まで_分": int((next_low["time"] - dt).total_seconds() / 60) if next_low else "",
             "観測所": station["name"]
         }
-    except Exception as e:
-        st.error(f"潮汐解析エラー: {e}")
-        return {}
 
+        if prev_ev and next_ev:
+            direction = "下げ" if prev_ev["type"] == "満潮" else "上げ"
+            ratio = (dt - prev_ev["time"]).total_seconds() / (next_ev["time"] - prev_ev["time"]).total_seconds()
+            res["潮位フェーズ"] = f"{direction}{max(1, min(9, round(ratio * 10)))}分"
+
+        return res
+    except:
+        return {}
+        
 def get_tide_name(dt):
     base_new_moon = datetime(2023, 1, 22, 5, 53)
     lunar_cycle = 29.530588
@@ -294,6 +287,7 @@ with st.form("main_form", clear_on_submit=True):
                     st.cache_data.clear()
                 except Exception as e:
                     st.error(f"❌ 書き込みエラーが発生しました: {e}")
+
 
 
 
