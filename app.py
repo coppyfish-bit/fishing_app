@@ -23,7 +23,19 @@ def get_weather_data(lat, lon, dt):
             "timezone": "Asia/Tokyo"
         }
         response = requests.get(url, params=params).json()
-        
+
+        def get_tide_name(dt):
+    # 簡易的な旧暦/潮汐計算ロジック（2025-2026年前後で有効）
+    # 基準日(新月)からの経過日数で判定
+    base_date = datetime(2023, 1, 22) # 2023年の新月の一つ
+    diff = (dt - base_date).days % 30
+    
+    if diff in [0, 1, 14, 15, 29]: return "大潮"
+    if diff in [2, 3, 4, 16, 17, 18]: return "中潮"
+    if diff in [5, 6, 7, 19, 20, 21]: return "小潮"
+    if diff in [8, 22]: return "長潮"
+    if diff in [9, 23]: return "若潮"
+    return "中潮" # その他は中潮とする
         # 釣った瞬間のリスト内インデックスを計算
         # 48時間分(2日分) + 当日の経過時間
         current_idx = (len(response['hourly']['temperature_2m']) - 25) + dt.hour
@@ -100,37 +112,53 @@ with st.form("input_form", clear_on_submit=True):
     
     submit_button = st.form_submit_button("🚀 気象を自動取得して保存", use_container_width=True)
 
+# --- 5. 保存処理 ---
 if submit_button:
     with st.spinner('データを解析・保存中...'):
         target_dt = datetime.combine(date_in, time_in)
+        
+        # 気象データの取得 (lat, lon はマスターから取得済み)
         temp, wind_s, precip_48h = get_weather_data(lat, lon, target_dt)
         
-        # 保存するデータの辞書（ここを増やすだけでOK）
+        # 潮名の計算
+        tide_name = get_tide_name(target_dt)
+
+        # 共有いただいたカラム名に完全一致させる辞書
         save_data = {
             "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
-            "場所": place_in,
-            "group_id": int(current_id),
-            "魚種": fish_in,
-            "ルアー": lure_in,
-            "全長_cm": length_in,
+            "date": date_in.strftime('%Y-%m-%d'),
+            "time": time_in.strftime('%H:%M'),
+            "lat": lat,
+            "lon": lon,
             "気温": temp,
             "風速": wind_s,
-            "48h降水量": precip_48h,
+            "降水量": precip_48h, # ここに48h降水量を入れます
+            "潮名": tide_name,
+            "場所": place_in,
+            "魚種": fish_in,
+            "全長_cm": length_in,
+            "ルアー": lure_in,
             "備考": memo_in,
-            # 将来的に「潮名」などを追加したくなったらここに行を増やすだけ！
-            # "潮名": get_tide_name(target_dt), 
+            "group_id": int(current_id),
+            # 以下、今回は空欄だが列として保持しておく項目
+            "weather_station_name": "", 
+            "station_code": "",
+            "潮位_cm": "",
+            "月齢": "",
+            "filename": uploaded_file.name if uploaded_file else ""
         }
         
+        # 既存のカラム順序を維持しつつ、新しいデータを結合
         new_row_df = pd.DataFrame([save_data])
         
-        # 既存のスプレッドシートに新しい列があれば、それを含めて結合
+        # スプレッドシートにある列だけを抽出し、足りない列は補完して結合
         updated_df = pd.concat([df, new_row_df], ignore_index=True)
         
-        # スプレッドシートを更新
+        # 保存実行
         conn.update(spreadsheet=url, data=updated_df)
         
-        st.success("✅ 正常に記録されました！")
+        st.success("✅ 既存のカラム形式で保存が完了しました！")
         st.cache_data.clear()
         st.rerun()
-
 st.write("---")
+
