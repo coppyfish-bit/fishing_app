@@ -2,175 +2,150 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 from PIL import Image
-from PIL.ExifTags import TAGS
+from PIL.ExifTags import TAGS, GPSTAGS
 from datetime import datetime, timedelta
 import requests
 
-# --- 1. 関数定義エリア (独立させて並べる) ---
+# --- 1. 座標変換・取得関数 ---
+
+def get_geotagging(exif):
+    """EXIFからGPS情報を辞書形式で抽出"""
+    if not exif:
+        return None
+    geotagging = {}
+    for tag, value in exif.items():
+        decoded = TAGS.get(tag, tag)
+        if decoded == "GPSInfo":
+            for t in value:
+                sub_decoded = GPSTAGS.get(t, t)
+                geotagging[sub_decoded] = value[t]
+    return geotagging
+
+def get_decimal_from_dms(dms, ref):
+    """度分秒形式を10進数に変換"""
+    degrees = dms[0]
+    minutes = dms[1] / 60.0
+    seconds = dms[2] / 3600.0
+    if ref in ['S', 'W']:
+        degrees = -degrees
+        minutes = -minutes
+        seconds = -seconds
+    return round(degrees + minutes + seconds, 6)
+
+def get_coordinates(geotags):
+    """緯度と経度の10進数を取得"""
+    try:
+        lat = get_decimal_from_dms(geotags['GPSLatitude'], geotags['GPSLatitudeRef'])
+        lon = get_decimal_from_dms(geotags['GPSLongitude'], geotags['GPSLongitudeRef'])
+        return lat, lon
+    except:
+        return None, None
+
+# --- 2. 気象・潮汐関数 (以前のものを流用) ---
 
 def get_weather_data(lat, lon, dt):
-    """指定された緯度経度・日時の気象データ(気温・風速・48h降水量)を取得"""
     try:
         start_date = (dt - timedelta(days=2)).strftime('%Y-%m-%d')
         end_date = dt.strftime('%Y-%m-%d')
-        
         url = "https://archive-api.open-meteo.com/v1/archive"
         params = {
-            "latitude": lat,
-            "longitude": lon,
-            "start_date": start_date,
-            "end_date": end_date,
+            "latitude": lat, "longitude": lon,
+            "start_date": start_date, "end_date": end_date,
             "hourly": "temperature_2m,windspeed_10m,precipitation",
             "timezone": "Asia/Tokyo"
         }
-        response = requests.get(url, params=params).json()
-
-        # インデックスの計算 (48時間前からのリストなので調整)
-        current_idx = (len(response['hourly']['temperature_2m']) - 25) + dt.hour
-        
-        temp = response['hourly']['temperature_2m'][current_idx]
-        wind_s = response['hourly']['windspeed_10m'][current_idx]
-        
-        # 48時間合計降水量の計算
-        precip_list = response['hourly']['precipitation'][:current_idx+1]
-        total_precip_48h = sum(precip_list[-48:])
-        
-        return temp, wind_s, round(total_precip_48h, 1)
-    except Exception as e:
+        data = requests.get(url, params=params).json()
+        idx = (len(data['hourly']['temperature_2m']) - 25) + dt.hour
+        temp = data['hourly']['temperature_2m'][idx]
+        wind_s = data['hourly']['windspeed_10m'][idx]
+        precip_48h = sum(data['hourly']['precipitation'][:idx+1][-48:])
+        return temp, wind_s, round(precip_48h, 1)
+    except:
         return None, None, None
 
 def get_tide_name(dt):
-    """簡易的な潮名判定ロジック"""
-    base_date = datetime(2023, 1, 22) # 新月基準
+    base_date = datetime(2023, 1, 22)
     diff = (dt - base_date).days % 30
-    
-    if diff in [0, 1, 14, 15, 29]: return "大潮"
-    if diff in [2, 3, 4, 16, 17, 18]: return "中潮"
-    if diff in [5, 6, 7, 19, 20, 21]: return "小潮"
-    if diff in [8, 22]: return "長潮"
-    if diff in [9, 23]: return "若潮"
-    return "中潮"
+    tide_map = {0:"大潮", 1:"大潮", 14:"大潮", 15:"大潮", 29:"大潮",
+                2:"中潮", 3:"中潮", 4:"中潮", 16:"中潮", 17:"中潮", 18:"中潮",
+                5:"小潮", 6:"小潮", 7:"小潮", 19:"小潮", 20:"小潮", 21:"小潮",
+                8:"長潮", 22:"長潮", 9:"若潮", 23:"若潮"}
+    return tide_map.get(diff, "中潮")
 
-# --- 2. アプリ初期設定 ---
+# --- 3. アプリメイン処理 ---
 
-st.set_page_config(page_title="Fishing App", layout="wide")
-st.title("🎣 プロ仕様・自動補完ログ")
+st.set_page_config(page_title="Fishing GPS App", layout="wide")
+st.title("🎣 GPS・気象・潮汐 全自動ログ")
 
-# デフォルト日時の設定
-default_datetime = datetime.now()
+# 初期値
+default_dt = datetime.now()
+auto_lat, auto_lon = 35.0, 135.0
 
-# データの読み込み (キャッシュ設定 ttl="10m")
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    
-    df = conn.read(spreadsheet=url, ttl="10m")
-    m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
-    place_options = sorted(m_df["place_name"].unique().tolist())
-except Exception as e:
-    if "429" in str(e):
-        st.error("🚫 Google APIの制限に達しました。1分ほど待って再起動してください。")
-    else:
-        st.error(f"接続エラー: {e}")
-    st.stop()
+# データの読み込み
+conn = st.connection("gsheets", type=GSheetsConnection)
+url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+df = conn.read(spreadsheet=url, ttl="5m")
+m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
 
-# --- 3. マスター管理 (釣り場追加) ---
-
-with st.expander("📍 新しい釣り場をマスターに追加"):
-    new_place_name = st.text_input("追加する釣り場名")
-    new_lat = st.number_input("緯度 (Latitude)", value=35.0, format="%.6f")
-    new_lon = st.number_input("経度 (Longitude)", value=135.0, format="%.6f")
-    
-    if st.button("場所を登録"):
-        if new_place_name and new_place_name not in m_df["place_name"].values:
-            new_id = m_df["group_id"].max() + 1 if not m_df.empty else 0
-            new_row = pd.DataFrame([{
-                "group_id": int(new_id), 
-                "place_name": new_place_name,
-                "latitude": new_lat,
-                "longitude": new_lon
-            }])
-            updated_m_df = pd.concat([m_df, new_row], ignore_index=True)
-            conn.update(spreadsheet=url, worksheet="place_master", data=updated_m_df)
-            st.success(f"✅ 「{new_place_name}」を登録しました！")
-            st.cache_data.clear()
-            st.rerun()
-
-st.write("---")
-
-# --- 4. 釣果入力エリア ---
-
-uploaded_file = st.file_uploader("📸 写真を選択（日時を自動反映）", type=['jpg', 'jpeg', 'png'])
+# --- 4. 写真解析セクション ---
+uploaded_file = st.file_uploader("📸 写真をアップロード（位置・日時を自動取得）", type=['jpg', 'jpeg'])
 
 if uploaded_file:
-    try:
-        img = Image.open(uploaded_file)
-        exif = img._getexif()
-        if exif:
-            for tag_id, value in exif.items():
-                tag = TAGS.get(tag_id, tag_id)
-                if tag == 'DateTimeOriginal':
-                    default_datetime = datetime.strptime(value, '%Y:%m:%d %H:%M:%S')
-                    st.success(f"✅ 写真から日時を読み取りました: {default_datetime.strftime('%Y-%m-%d %H:%M')}")
-    except Exception:
-        st.warning("写真のメタデータを読み込めませんでした。")
+    img = Image.open(uploaded_file)
+    exif = img._getexif()
+    if exif:
+        # 日時の自動取得
+        for tag_id, value in exif.items():
+            if TAGS.get(tag_id) == 'DateTimeOriginal':
+                default_dt = datetime.strptime(value, '%Y:%m:%d %H:%M:%S')
+        
+        # GPSの自動取得
+        geotags = get_geotagging(exif)
+        if geotags:
+            lat, lon = get_coordinates(geotags)
+            if lat and lon:
+                auto_lat, auto_lon = lat, lon
+                st.success(f"📍 位置を特定しました: {auto_lat}, {auto_lon}")
+                st.info(f"⏰ 日時を特定しました: {default_dt}")
 
-with st.form("input_form", clear_on_submit=True):
-    date_in = st.date_input("📅 日付", value=default_datetime.date())
-    time_in = st.time_input("⏰ 時刻", value=default_datetime.time())
+# --- 5. 入力フォーム ---
+with st.form("fishing_form"):
+    c1, c2 = st.columns(2)
+    with c1:
+        date_in = st.date_input("📅 日付", value=default_dt.date())
+        time_in = st.time_input("⏰ 時刻", value=default_dt.time())
+    with c2:
+        lat_in = st.number_input("Lat (緯度)", value=auto_lat, format="%.6f")
+        lon_in = st.number_input("Lon (経度)", value=auto_lon, format="%.6f")
     
-    place_in = st.selectbox("📍 場所", options=place_options)
-    
-    # 選択した場所の情報を取得
-    loc_data = m_df.loc[m_df["place_name"] == place_in]
-    current_id = loc_data["group_id"].values[0] if not loc_data.empty else 0
-    lat = loc_data["latitude"].values[0] if "latitude" in m_df.columns and not loc_data.empty else 35.0
-    lon = loc_data["longitude"].values[0] if "longitude" in m_df.columns and not loc_data.empty else 135.0
-    
-    fish_in = st.text_input("🐟 魚種", placeholder="シーバス")
+    place_name = st.text_input("📍 場所名（未入力でも保存可）", placeholder="〇〇突堤")
+    fish_in = st.text_input("🐟 魚種")
+    length_in = st.slider("📏 全長 (cm)", 0.0, 150.0, 40.0)
     lure_in = st.text_input("🎣 ルアー")
-    length_in = st.slider("📏 全長 (cm)", 0.0, 150.0, 40.0, 1.0)
     memo_in = st.text_area("📝 備考")
     
-    submit_button = st.form_submit_button("🚀 気象を自動取得して保存", use_container_width=True)
+    submit = st.form_submit_button("🚀 データを解析して保存")
 
-# --- 5. 保存処理 ---
-
-if submit_button:
-    with st.spinner('データを解析・保存中...'):
+# --- 6. 保存処理 ---
+if submit:
+    with st.spinner('解析中...'):
         target_dt = datetime.combine(date_in, time_in)
-        temp, wind_s, precip_48h = get_weather_data(lat, lon, target_dt)
-        tide_name = get_tide_name(target_dt)
-
+        temp, wind_s, precip = get_weather_data(lat_in, lon_in, target_dt)
+        tide = get_tide_name(target_dt)
+        
         save_data = {
             "filename": uploaded_file.name if uploaded_file else "",
             "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
             "date": date_in.strftime('%Y-%m-%d'),
             "time": time_in.strftime('%H:%M'),
-            "lat": lat,
-            "lon": lon,
-            "気温": temp,
-            "風速": wind_s,
-            "降水量": precip_48h,
-            "潮名": tide_name,
-            "場所": place_in,
-            "魚種": fish_in,
-            "全長_cm": length_in,
-            "ルアー": lure_in,
-            "備考": memo_in,
-            "group_id": int(current_id),
-            "weather_station_name": "", 
-            "station_code": "",
-            "潮位_cm": "",
-            "月齢": ""
+            "lat": lat_in,
+            "lon": lon_in,
+            "気温": temp, "風速": wind_s, "降水量": precip, "潮名": tide,
+            "場所": place_name, "魚種": fish_in, "全長_cm": length_in,
+            "ルアー": lure_in, "備考": memo_in
         }
         
-        new_row_df = pd.DataFrame([save_data])
-        updated_df = pd.concat([df, new_row_df], ignore_index=True)
-        conn.update(spreadsheet=url, data=updated_df)
-        
-        st.success(f"✅ 保存完了！ 気温:{temp}℃ 降水量:{precip_48h}mm")
+        new_df = pd.concat([df, pd.DataFrame([save_data])], ignore_index=True)
+        conn.update(spreadsheet=url, data=new_df)
+        st.success(f"✅ 保存完了！当時の潮は「{tide}」、気温は「{temp}℃」でした。")
         st.cache_data.clear()
-        st.rerun()
-
-st.write("---")
