@@ -46,15 +46,24 @@ st.title("🎣 プロ仕様・自動補完ログ")
 # ★重要★ エラー回避のため、まず最初にデフォルト値を決める
 default_datetime = datetime.now()
 
-# データの読み込み
+## --- データの読み込み部分を修正 ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    df = conn.read(spreadsheet=url, ttl=0)
-    m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl=0)
+    
+    # ttl=0 (毎回読み込む) から ttl="10m" (10分間キャッシュ) に変更
+    # これで Google へのリクエスト回数が激減します
+    df = conn.read(spreadsheet=url, ttl="10m")
+    
+    # 場所マスターも同様にキャッシュ
+    m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
     place_options = sorted(m_df["place_name"].unique().tolist())
 except Exception as e:
-    st.error(f"接続エラー: {e}")
+    # 429エラーが出た時のための分かりやすい表示
+    if "429" in str(e):
+        st.error("🚫 Google APIの制限に達しました。1分ほど待ってから再読み込みしてください。")
+    else:
+        st.error(f"接続エラー: {e}")
     st.stop()
 
 # --- 3. 写真アップローダー（EXIF解析） ---
@@ -177,6 +186,7 @@ if submit_button:
         st.rerun()
     except Exception as e:
         st.error(f"登録失敗: {e}")
+
 
 
 
