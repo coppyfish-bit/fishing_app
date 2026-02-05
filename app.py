@@ -49,7 +49,7 @@ def get_wind_direction(deg):
 
 # --- 2. 気象データ取得関数（風向対応版） ---
 def get_weather_data(lat, lon, dt):
-    """気象データを取得。失敗時は必ず (None, None, None) を返す"""
+    """気象データを取得。気温・風速・風向・48h降水量の4つを返す"""
     try:
         start_date = (dt - timedelta(days=2)).strftime('%Y-%m-%d')
         end_date = dt.strftime('%Y-%m-%d')
@@ -59,26 +59,27 @@ def get_weather_data(lat, lon, dt):
             "longitude": float(lon),
             "start_date": start_date,
             "end_date": end_date,
-            "hourly": "temperature_2m,windspeed_10m,precipitation",
+            "hourly": "temperature_2m,windspeed_10m,winddirection_10m,precipitation",
             "timezone": "Asia/Tokyo"
         }
         res = requests.get(url, params=params, timeout=10)
         data = res.json()
         
         if "hourly" not in data:
-            return None, None, None # ← 3つ返す
+            return None, None, None, None # 4つ返す
 
         idx = (len(data['hourly']['temperature_2m']) - 25) + dt.hour
         idx = max(0, min(idx, len(data['hourly']['temperature_2m']) - 1))
         
         temp = data['hourly']['temperature_2m'][idx]
         wind_s = data['hourly']['windspeed_10m'][idx]
+        wind_d = data['hourly']['winddirection_10m'][idx] # 風向を追加
         precip_list = data['hourly']['precipitation'][:idx+1]
         precip_48h = sum(precip_list[-48:])
         
-        return temp, wind_s, round(precip_48h, 1) # ← 3つ返す
+        return temp, wind_s, wind_d, round(precip_48h, 1) # 4つ返す
     except:
-        return None, None, None # ← 失敗時も必ず 3つ返す
+        return None, None, None, None # 失敗時も4つ返す
 
 def get_tide_name(dt):
     base_date = datetime(2023, 1, 22)
@@ -237,6 +238,7 @@ if submit:
         }
         
         # (以下、保存実行部分は同じ)
+
 
 
 
