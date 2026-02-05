@@ -161,7 +161,7 @@ if not m_df.empty:
 else: place_to_id, place_options = {}, []
 
 # フォーム
-with st.form("main_form"):
+with st.form("main_form", clear_on_submit=True):
     c1, c2 = st.columns(2)
     with c1:
         date_in = st.date_input("📅 日付", value=default_dt.date())
@@ -176,15 +176,18 @@ with st.form("main_form"):
     fish = st.text_input("🐟 魚種")
     length = st.number_input("📏 全長(cm)", value=0.0)
     memo = st.text_area("📝 備考")
-    submit = st.form_submit_button("🚀 データを保存")
+    submit = st.form_submit_button("🚀 保存")
 
 # --- 保存処理の開始 ---
 if submit:
     # ここから下は全て「if submit:」より右に4マス分下げています
     # 1. 場所とIDを確定させるロジック
-    if place_selected != "-- 新規地点 or 手動入力 --":
-        final_place_name = place_selected
-        final_group_id = place_to_id.get(place_selected)
+    if place_selected = st.selectbox(
+        "📍 釣り場を選択", 
+        options=["-- 新規地点 or 手動入力 --"] + place_options,
+        index=default_index
+    )
+    place_manual = st.text_input("📍 新しい場所名を入力")
     else:
         final_place_name = place_manual
         # 新規の場合は現在の最大ID + 1
@@ -259,3 +262,4 @@ if submit:
 
             except Exception as e:
                 st.error(f"❌ 処理中にエラーが発生しました: {e}")
+
