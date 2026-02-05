@@ -177,41 +177,22 @@ with st.form("main_form", clear_on_submit=True):
 
 # --- 6. 保存処理 ---
 if submit:
-    with st.spinner('気象と潮汐を解析中...'):
+    with st.spinner('気象と潮汐を詳細に解析中...'):
+        # 1. 日時の確定
         target_dt = datetime.combine(date_in, time_in)
         
-        # 1. 気象データを取得 (戻り値が4つ [気温, 風速, 風向, 降水] になっています)
+        # 2. 気象データの取得 (4つの値を確実に受け取る)
         weather_res = get_weather_data(lat_in, lon_in, target_dt)
-        
-        # もしデータが取れなかった場合でも、空の値(None)で埋めてエラーを防ぐ
-        if weather_res:
+        if weather_res and len(weather_res) == 4:
             temp, wind_s, wind_d, precip = weather_res
         else:
             temp, wind_s, wind_d, precip = None, None, None, None
-        
-        # 2. 潮汐データの取得
-        tide_name = get_tide_name(target_dt)
-        tide_info = get_tide_details(target_dt)
-        
-# --- 3. 保存処理 (if submit: の中) ---
-if submit:
-    with st.spinner('解析中...'):
-        target_dt = datetime.combine(date_in, time_in)
-        
-        # 1. まとめて受け取る (アンパックせずに weather_res という箱に入れる)
-        weather_res = get_weather_data(lat_in, lon_in, target_dt)
-        
-        # 2. 中身を一つずつ安全に取り出す
-        # もし weather_res が None だったとしてもエラーにならないようにガード
-        if weather_res and len(weather_res) == 3:
-            temp, wind_s, precip = weather_res
-        else:
-            temp, wind_s, precip = None, None, None
             
+        # 3. 潮汐データの計算
         tide_name = get_tide_name(target_dt)
         tide_info = get_tide_details(target_dt)
         
-        # 3. 保存用データの作成 (tide_info.get も念のため継続)
+        # 4. 保存用データの作成 (既存のカラム名に完全一致)
         save_data = {
             "filename": uploaded_file.name if uploaded_file else "",
             "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
@@ -221,6 +202,7 @@ if submit:
             "lon": lon_in,
             "気温": temp,
             "風速": wind_s,
+            "風向": wind_d,
             "降水量": precip,
             "潮名": tide_name,
             "潮位_cm": tide_info.get("潮位_cm"),
@@ -237,8 +219,23 @@ if submit:
             "備考": memo_in
         }
         
-        # (以下、保存実行部分は同じ)
-
+        # 5. スプレッドシートへの書き込み実行
+        try:
+            # 既存のデータフレームに新しい行を追加
+            new_row_df = pd.DataFrame([save_data])
+            updated_df = pd.concat([df, new_row_df], ignore_index=True)
+            
+            # Google Sheetsを更新
+            conn.update(spreadsheet=url, data=updated_df)
+            
+            st.success(f"✅ 保存完了！当時の潮は {tide_name} ({tide_info.get('潮位フェーズ')}) でした。")
+            
+            # キャッシュをクリアして再読み込み
+            st.cache_data.clear()
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"保存中にエラーが発生しました: {e}")
 
 
 
