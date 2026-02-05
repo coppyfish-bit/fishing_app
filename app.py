@@ -115,7 +115,9 @@ def get_tide_details(dt):
     
     tide_cm = int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21)))
     return {
-        "潮位_cm": tide_cm, "月齢": moon_age, "潮位フェーズ": phase,
+        "潮位_cm": tide_cm,
+        "月齢": moon_age,
+        "潮位フェーズ": phase,
         "直前の満潮_時刻": (dt - timedelta(hours=hour_cycle)).strftime("%H:%M"),
         "直前の干潮_時刻": (dt - timedelta(hours=(hour_cycle-6.21 if hour_cycle>6.21 else hour_cycle+6.21))).strftime("%H:%M"),
         "次の満潮まで_分": int((12.42 - hour_cycle) * 60),
@@ -243,4 +245,5 @@ if submit:
         st.success(f"✅ 保存完了！ {wind_d}の風、フェーズは {tide_info['潮位フェーズ']} でした。")
         st.cache_data.clear()
         st.rerun()
+
 
