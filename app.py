@@ -56,6 +56,46 @@ def get_weather_data(lat, lon, dt):
     except:
         return None, None, None
 
+# --- 既存の get_weather_data の下あたりに追加 ---
+
+def get_tide_details(dt):
+    """
+    指定日時の詳細な潮汐情報を計算（簡易天文計算）
+    """
+    # 月齢計算
+    base_new_moon = datetime(2023, 1, 22, 5, 53) 
+    lunar_cycle = 29.530588
+    diff_days = (dt - base_new_moon).total_seconds() / 86400
+    moon_age = round(diff_days % lunar_cycle, 1)
+    
+    # 潮位サイクルの計算 (12.42時間周期)
+    hour_cycle = (dt.hour + dt.minute/60) % 12.42
+    
+    # フェーズ判定
+    if hour_cycle < 1.5: phase = "満潮付近"
+    elif hour_cycle < 4.5: phase = "下げ三分"
+    elif hour_cycle < 7.5: phase = "下げ七分"
+    elif hour_cycle < 9.0: phase = "干潮付近"
+    elif hour_cycle < 10.5: phase = "上げ三分"
+    else: phase = "上げ七分"
+    
+    # 潮位(cm)のシミュレーション
+    tide_cm = int(100 + 80 * math.cos(math.pi * (hour_cycle / 6.21)))
+    
+    # 干満時刻の算出（簡易）
+    prev_h_tide = (dt - timedelta(hours=hour_cycle)).strftime("%H:%M")
+    prev_l_tide = (dt - timedelta(hours=(hour_cycle-6.21 if hour_cycle>6.21 else hour_cycle+6.21))).strftime("%H:%M")
+
+    return {
+        "潮位_cm": tide_cm,
+        "月齢": moon_age,
+        "潮位フェーズ": phase,
+        "直前の満潮_時刻": prev_h_tide,
+        "直前の干潮_時刻": prev_l_tide,
+        "次の満潮まで_分": int((12.42 - hour_cycle) * 60),
+        "次の干潮まで_分": int((6.21 - hour_cycle) * 60 if hour_cycle < 6.21 else (18.63 - hour_cycle) * 60)
+    }
+
 def get_tide_name(dt):
     base_date = datetime(2023, 1, 22)
     diff = (dt - base_date).days % 30
@@ -146,11 +186,19 @@ with st.form("fishing_form", clear_on_submit=True):
 
 # --- 6. 保存処理 ---
 if submit:
-    with st.spinner('当時の気象データを解析中...'):
+    with st.spinner('気象と潮汐を解析中...'):
         target_dt = datetime.combine(date_in, time_in)
-        temp, wind_s, precip = get_weather_data(lat_in, lon_in, target_dt)
-        tide = get_tide_name(target_dt)
         
+        # 1. 気象（既存）
+        temp, wind_s, precip = get_weather_data(lat_in, lon_in, target_dt)
+        
+        # 2. 潮名（既存）
+        tide_name = get_tide_name(target_dt)
+        
+        # 3. ★詳細潮汐（今回追加）
+        tide_info = get_tide_details(target_dt)
+        
+        # 4. 全データの統合マッピング
         save_data = {
             "filename": uploaded_file.name if uploaded_file else "",
             "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
@@ -158,13 +206,28 @@ if submit:
             "time": time_in.strftime('%H:%M'),
             "lat": lat_in,
             "lon": lon_in,
-            "気温": temp, "風速": wind_s, "降水量": precip, "潮名": tide,
-            "場所": final_place_name, "魚種": fish_in, "全長_cm": length_in,
-            "ルアー": lure_in, "備考": memo_in
+            "気温": temp,
+            "風速": wind_s,
+            "降水量": precip,
+            "潮名": tide_name,
+            "潮位_cm": tide_info["潮位_cm"],
+            "月齢": tide_info["月齢"],
+            "潮位フェーズ": tide_info["潮位フェーズ"],
+            "直前の満潮_時刻": tide_info["直前の満潮_時刻"],
+            "直前の干潮_時刻": tide_info["直前の干潮_時刻"],
+            "次の満潮まで_分": tide_info["次の満潮まで_分"],
+            "次の干潮まで_分": tide_info["次の干潮まで_分"],
+            "場所": final_place_name,
+            "魚種": fish_in,
+            "全長_cm": length_in,
+            "ルアー": lure_in,
+            "備考": memo_in
         }
         
+        # 5. スプレッドシート更新（既存）
         new_df = pd.concat([df, pd.DataFrame([save_data])], ignore_index=True)
         conn.update(spreadsheet=url, data=new_df)
-        st.success(f"✅ 保存完了！当時の潮は「{tide}」、48h降水量は「{precip}mm」でした。")
+        st.success(f"✅ 保存完了！当時の潮は {tide_name} ({tide_info['潮位フェーズ']}) でした。")
         st.cache_data.clear()
         st.rerun()
+
