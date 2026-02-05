@@ -95,14 +95,50 @@ def get_tide_name(dt):
     return tide_map.get(diff, "中潮")
 
 # --- 3. 潮汐詳細（10段階表示） ---
-def get_tide_details(dt):
-    base_new_moon = datetime(2023, 1, 22, 5, 53) 
-    lunar_cycle = 29.530588
-    diff_days = (dt - base_new_moon).total_seconds() / 86400
-    moon_age = round(diff_days % lunar_cycle, 1)
-    
-    # 満潮から次の満潮まで約12.42時間、半分で6.21時間
-    hour_cycle = (dt.hour + dt.minute/60) % 12.42
+def get_tide_details(lat, lon, dt):
+    """
+    Open-Meteo APIを使用して、実際の予測データから直前の満潮・干潮時刻を取得する
+    """
+    try:
+        # 前日から当日までのデータを取得
+        start_date = (dt - timedelta(days=1)).strftime('%Y-%m-%d')
+        end_date = dt.strftime('%Y-%m-%d')
+        
+        url = "https://marine-api.open-meteo.com/v1/marine"
+        params = {
+            "latitude": lat, "longitude": lon,
+            "hourly": "tidal_height",
+            "start_date": start_date, "end_date": end_date,
+            "timezone": "Asia/Tokyo"
+        }
+        res = requests.get(url, params=params, timeout=10)
+        data = res.json()
+        
+        heights = data['hourly']['tidal_height']
+        times = [datetime.fromisoformat(t) for t in data['hourly']['time']]
+        
+        # 現在時刻より前のデータに絞る
+        past_indices = [i for i, t in enumerate(times) if t <= dt]
+        if not past_indices: return {}
+
+        # 直近の数件から極大値（満潮）と極小値（干潮）を探す
+        prev_high_t = "不明"
+        prev_low_t = "不明"
+        
+        # 簡易的な極値判定
+        for i in reversed(range(1, past_indices[-1])):
+            if heights[i] > heights[i-1] and heights[i] > heights[i+1]:
+                if prev_high_t == "不明":
+                    prev_high_t = times[i].strftime("%H:%M")
+            if heights[i] < heights[i-1] and heights[i] < heights[i+1]:
+                if prev_low_t == "不明":
+                    prev_low_t = times[i].strftime("%H:%M")
+            if prev_high_t != "不明" and prev_low_t != "不明":
+                break
+
+        # 潮位フェーズ（10段階）のロジック
+        hour_cycle = (dt.hour + dt.minute/60) % 12.42 # 判定用
+        # ... (前回のフェーズ判定ロジックをここに継続) ...
     
     # 6.21時間を10分割して判定
     step = 6.21 / 10
@@ -340,6 +376,7 @@ if submit:
                 # st.rerun() # 必要に応じて
             except Exception as e:
                 st.error(f"保存に失敗しました: {e}")
+
 
 
 
