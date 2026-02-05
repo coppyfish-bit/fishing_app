@@ -8,7 +8,20 @@ import requests
 import math
 
 # --- 1. 各種関数定義 ---
-
+def calculate_distance(lat1, lon1, lat2, lon2):
+    """
+    2点間の直線距離(km)を計算する関数（ハバーシン公式）
+    """
+    if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
+        return 999.0  # 座標がない場合は大きな値を返す
+    
+    R = 6371.0  # 地球の半径 (km)
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+    
 def get_geotagging(exif):
     if not exif: return None
     geotagging = {}
@@ -323,6 +336,7 @@ if submit:
                 # st.rerun() # 必要に応じて
             except Exception as e:
                 st.error(f"保存に失敗しました: {e}")
+
 
 
 
