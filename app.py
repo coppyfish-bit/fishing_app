@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import requests
 import math
 
-# --- 1. 各種関数定義（計算・変換系） ---
+# --- 1. 各種関数定義 ---
 def calculate_distance(lat1, lon1, lat2, lon2):
     if None in [lat1, lon1, lat2, lon2]: return 999.0
     R = 6371.0
@@ -32,10 +32,10 @@ def get_geotagging(exif):
     return geotagging
 
 def get_decimal_from_dms(dms, ref):
+    if not dms: return None
     res = dms[0] + dms[1] / 60.0 + dms[2] / 3600.0
     return -res if ref in ['S', 'W'] else round(res, 6)
 
-# --- 2. 気象・潮汐取得（外部データ連動） ---
 def get_weather_data(lat, lon, dt):
     try:
         url = "https://archive-api.open-meteo.com/v1/archive"
@@ -46,35 +46,31 @@ def get_weather_data(lat, lon, dt):
             "hourly": "temperature_2m,windspeed_10m,winddirection_10m,precipitation",
             "timezone": "Asia/Tokyo"
         }
-        data = requests.get(url, params=params, timeout=10).json()
-        idx = (len(data['hourly']['temperature_2m']) - 25) + dt.hour
-        h = data['hourly']
+        res = requests.get(url, params=params, timeout=10).json()
+        h = res['hourly']
+        # ターゲット時刻に最も近いインデックスを取得
+        idx = (len(h['temperature_2m']) - 25) + dt.hour
         return h['temperature_2m'][idx], h['windspeed_10m'][idx], h['winddirection_10m'][idx], round(sum(h['precipitation'][:idx+1][-48:]), 1)
     except: return None, None, None, None
 
 def get_tide_details(lat, lon, dt):
-    """気象庁データに基づく精密解析（観測所リスト連動）"""
     STATIONS = [
         {"name": "本渡瀬戸", "lat": 32.26, "lon": 130.13, "code": "HS"},
         {"name": "苓北", "lat": 32.28, "lon": 130.20, "code": "RH"},
         {"name": "口之津", "lat": 32.36, "lon": 130.12, "code": "KT"},
         {"name": "八代", "lat": 32.31, "lon": 130.34, "code": "O5"},
     ]
-    # 最寄りの観測所を判定
     station = STATIONS[0]
     min_dist = 999
     for s in STATIONS:
         d = calculate_distance(lat, lon, s["lat"], s["lon"])
         if d < min_dist: min_dist, station = d, s
-
     try:
         url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{dt.year}/{station['code']}.txt"
         lines = requests.get(url, timeout=10).text.splitlines()
         date_str = dt.strftime("%y%m%d")
         line = next((l for l in lines if l[72:78] == date_str), None)
         if not line: return {}
-
-        # 満干潮イベント抽出
         events = []
         for i in range(4):
             m = line[80+i*7:84+i*7].strip()
@@ -82,8 +78,6 @@ def get_tide_details(lat, lon, dt):
             k = line[108+i*7:112+i*7].strip()
             if k and k != "9999": events.append(("干潮", datetime(dt.year, dt.month, dt.day, int(k[:2]), int(k[2:]))))
         events.sort(key=lambda x: x[1])
-
-        # フェーズ判定
         prev_ev = next((e for e in reversed(events) if e[1] <= dt), None)
         next_ev = next((e for e in events if e[1] > dt), None)
         phase = "不明"
@@ -91,28 +85,19 @@ def get_tide_details(lat, lon, dt):
             ratio = (dt - prev_ev[1]).total_seconds() / (next_ev[1] - prev_ev[1]).total_seconds()
             direction = "下げ" if prev_ev[0] == "満潮" else "上げ"
             phase = f"{direction}{max(1, min(9, round(ratio * 10)))}分"
-            if ratio < 0.1: phase = prev_ev[0]
-            elif ratio > 0.9: phase = next_ev[0]
-
         return {
             "潮位_cm": int(line[dt.hour*3:dt.hour*3+3].strip() or 0),
             "潮位フェーズ": phase,
             "直前の満潮_時刻": next((e[1].strftime("%H:%M") for e in reversed(events) if e[0]=="満潮" and e[1]<=dt), ""),
             "直前の干潮_時刻": next((e[1].strftime("%H:%M") for e in reversed(events) if e[0]=="干潮" and e[1]<=dt), ""),
-            "観測所": station["name"]
         }
     except: return {}
 
 def get_tide_name(dt):
-    """
-    月齢から潮名（大潮・中潮など）を簡易的に判定
-    """
-    # 月齢を計算
     base_new_moon = datetime(2023, 1, 22, 5, 53)
     lunar_cycle = 29.530588
     diff_days = (dt - base_new_moon).total_seconds() / 86400
     age = diff_days % lunar_cycle
-    
     if age < 3.0 or age > 26.5: return "大潮"
     elif age < 7.0: return "中潮"
     elif age < 11.0: return "小潮"
@@ -145,121 +130,97 @@ if uploaded_file:
     if exif:
         geotags = get_geotagging(exif)
         if geotags:
-            lat, lon = get_decimal_from_dms(geotags['GPSLatitude'], geotags['GPSLatitudeRef']), get_decimal_from_dms(geotags['GPSLongitude'], geotags['GPSLongitudeRef'])
+            lat = get_decimal_from_dms(geotags.get('GPSLatitude'), geotags.get('GPSLatitudeRef'))
+            lon = get_decimal_from_dms(geotags.get('GPSLongitude'), geotags.get('GPSLongitudeRef'))
             if lat: auto_lat, auto_lon = lat, lon
         dt_str = exif.get(36867)
-        if dt_str: default_dt = datetime.strptime(dt_str, '%Y:%m:%d %H:%M:%S')
+        if dt_str: 
+            try: default_dt = datetime.strptime(dt_str, '%Y:%m:%d %H:%M:%S')
+            except: pass
 
 # 場所自動判定
 nearest_place = None
+place_to_id = {}
 if not m_df.empty:
     place_to_id = dict(zip(m_df["place_name"], m_df["group_id"]))
     for _, row in m_df.iterrows():
         if calculate_distance(auto_lat, auto_lon, row['latitude'], row['longitude']) < 0.5:
             nearest_place = row['place_name']; break
-    place_options = sorted(place_to_id.keys())
-else: place_to_id, place_options = {}, []
+place_options = sorted(place_to_id.keys())
 
-# フォーム
+# --- 4. フォーム ---
 with st.form("main_form", clear_on_submit=True):
     c1, c2 = st.columns(2)
     with c1:
         date_in = st.date_input("📅 日付", value=default_dt.date())
         time_in = st.time_input("⏰ 時刻", value=default_dt.time())
         default_idx = (place_options.index(nearest_place) + 1) if nearest_place in place_options else 0
-        place_sel = st.selectbox("📍 釣り場を選択", options=["-- 新規入力 --"] + place_options, index=default_idx)
+        place_sel = st.selectbox("📍 釣り場を選択", options=["-- 新規地点 or 手動入力 --"] + place_options, index=default_idx)
     with c2:
         lat_in = st.number_input("緯度", value=auto_lat, format="%.6f")
         lon_in = st.number_input("経度", value=auto_lon, format="%.6f")
         place_man = st.text_input("📍 新しい場所名（新規時のみ）")
 
-    fish = st.text_input("🐟 魚種")
-    length = st.number_input("📏 全長(cm)", value=0.0)
-    memo = st.text_area("📝 備考")
+    fish_in = st.text_input("🐟 魚種")
+    length_in = st.number_input("📏 全長(cm)", value=0.0)
+    lure_in = st.text_input("🪝 ルアー")
+    memo_in = st.text_area("📝 備考")
     submit = st.form_submit_button("🚀 保存")
 
-# --- 保存処理の開始 ---
-if submit:
-    # ここから下は全て「if submit:」より右に4マス分下げています
-    # 1. 場所とIDを確定させるロジック
-    if place_selected = st.selectbox(
-        "📍 釣り場を選択", 
-        options=["-- 新規地点 or 手動入力 --"] + place_options,
-        index=default_index
-    )
-    place_manual = st.text_input("📍 新しい場所名を入力")
-    else:
-        final_place_name = place_manual
-        # 新規の場合は現在の最大ID + 1
-        final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 0
+    # --- 保存処理の開始 ---
+    if submit:
+        # 場所の確定
+        if place_sel != "-- 新規地点 or 手動入力 --":
+            final_place_name = place_sel
+            final_group_id = place_to_id.get(place_sel)
+        else:
+            final_place_name = place_man
+            final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 1
 
-    # 2. 入力チェック
-    if not final_place_name:
-        st.error("⚠️ 場所名を選択するか、新しい場所名を入力してください。")
-    else:
-        with st.spinner('📊 解析中...'):
-            try:
-                # 3. 日時オブジェクトの作成
-                target_dt = datetime(
-                    year=date_in.year, month=date_in.month, day=date_in.day,
-                    hour=time_in.hour, minute=time_in.minute
-                )
+        if not final_place_name:
+            st.error("⚠️ 場所名を入力してください。")
+        else:
+            with st.spinner('📊 解析中...'):
+                try:
+                    # 日時オブジェクト作成
+                    target_dt = datetime(date_in.year, date_in.month, date_in.day, time_in.hour, time_in.minute)
+                    
+                    # 潮汐・気象計算
+                    t_name = get_tide_name(target_dt)
+                    t_info = get_tide_details(lat_in, lon_in, target_dt)
+                    temp, wind_s, wind_d, prec = get_weather_data(lat_in, lon_in, target_dt)
 
-                # 4. 潮汐・気象計算
-                tide_name = get_tide_name(target_dt)
-                tide_info = get_tide_details(target_dt)
-                weather_res = get_weather_data(lat_in_final, lon_in_final, target_dt)
-                
-                # 気象データの展開
-                if weather_res and len(weather_res) == 4:
-                    temp, wind_s, wind_d, precip = weather_res
-                else:
-                    temp, wind_s, wind_d, precip = None, None, None, None
+                    # 保存データの作成
+                    save_data = {
+                        "group_id": final_group_id,
+                        "場所": final_place_name,
+                        "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
+                        "lat": lat_in, "lon": lon_in,
+                        "気温": temp, "風速": wind_s,
+                        "風向": get_wind_direction_label(wind_d),
+                        "降水量": prec, "潮名": t_name,
+                        "潮位_cm": t_info.get("潮位_cm"),
+                        "潮位フェーズ": t_info.get("潮位フェーズ"),
+                        "直前の満潮_時刻": t_info.get("直前の満潮_時刻"),
+                        "直前の干潮_時刻": t_info.get("直前の干潮_時刻"),
+                        "魚種": fish_in, "全長_cm": length_in,
+                        "ルアー": lure_in, "備考": memo_in,
+                        "filename": uploaded_file.name if uploaded_file else ""
+                    }
 
-                # 5. 保存用辞書の作成
-                save_data = {
-                    "group_id": final_group_id,
-                    "場所": final_place_name,
-                    "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
-                    "lat": lat_in_final,
-                    "lon": lon_in_final,
-                    "気温": temp,
-                    "風速": wind_s,
-                    "風向": get_wind_direction_label(wind_d),
-                    "降水量": precip,
-                    "潮名": tide_name,
-                    "潮位_cm": tide_info.get("潮位_cm"),
-                    "月齢": tide_info.get("月齢"),
-                    "潮位フェーズ": tide_info.get("潮位フェーズ"),
-                    "直前の満潮_時刻": tide_info.get("直前の満潮_時刻"),
-                    "直前の干潮_時刻": tide_info.get("直前の干潮_時刻"),
-                    "魚種": fish_in,
-                    "全長_cm": length_in,
-                    "ルアー": lure_in,
-                    "備考": memo_in,
-                    "filename": uploaded_file.name if uploaded_file else ""
-                }
+                    # メインデータ更新
+                    new_row = pd.DataFrame([save_data])
+                    updated_df = pd.concat([df, new_row], ignore_index=True)
+                    conn.update(spreadsheet=url, data=updated_df)
 
-                # 6. スプレッドシートへ保存
-                new_row = pd.DataFrame([save_data])
-                updated_df = pd.concat([df, new_row], ignore_index=True)
-                conn.update(spreadsheet=url, data=updated_df)
-                
-                # 新規場所ならマスターにも追加
-                if place_selected == "-- 新規地点 or 手動入力 --" and final_place_name:
-                    new_master_row = pd.DataFrame([{
-                        "group_id": final_group_id, 
-                        "place_name": final_place_name, 
-                        "latitude": lat_in_final, 
-                        "longitude": lon_in_final
-                    }])
-                    updated_m_df = pd.concat([m_df, new_master_row], ignore_index=True)
-                    conn.update(spreadsheet=url, worksheet="place_master", data=updated_m_df)
+                    # 新規場所ならマスターにも追加
+                    if place_sel == "-- 新規地点 or 手動入力 --":
+                        new_m = pd.DataFrame([{"group_id": final_group_id, "place_name": final_place_name, "latitude": lat_in, "longitude": lon_in}])
+                        updated_m = pd.concat([m_df, new_m], ignore_index=True)
+                        conn.update(spreadsheet=url, worksheet="place_master", data=updated_m)
 
-                st.success(f"✅ 保存成功: {final_place_name} (ID:{final_group_id})")
-                st.balloons()
-                st.cache_data.clear()
-
-            except Exception as e:
-                st.error(f"❌ 処理中にエラーが発生しました: {e}")
-
+                    st.success(f"✅ {final_place_name} での釣果を保存しました！")
+                    st.balloons()
+                    st.cache_data.clear()
+                except Exception as e:
+                    st.error(f"❌ 処理中にエラーが発生しました: {e}")
