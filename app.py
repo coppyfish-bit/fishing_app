@@ -45,7 +45,8 @@ def get_weather_data(lat, lon, dt):
         params = {
             "latitude": lat, "longitude": lon,
             "start_date": start_date, "end_date": end_date,
-            "hourly": "temperature_2m,windspeed_10m,precipitation",
+            # wind_direction_10m を追加
+            "hourly": "temperature_2m,windspeed_10m,wind_direction_10m,precipitation",
             "timezone": "Asia/Tokyo"
         }
         response = requests.get(url, params=params)
@@ -53,22 +54,26 @@ def get_weather_data(lat, lon, dt):
 
         # データが空っぽでないかチェック
         if "hourly" not in data:
-            return "", "", "" # Noneではなく空文字を返す
+            return "", "", "", "" # 戻り値を4つに増やす
 
         idx = (len(data['hourly']['temperature_2m']) - 25) + dt.hour
-        
-        # インデックスが範囲外にならないよう安全策
         idx = max(0, min(idx, len(data['hourly']['temperature_2m']) - 1))
         
         temp = data['hourly']['temperature_2m'][idx]
         wind_s = data['hourly']['windspeed_10m'][idx]
+        
+        # --- 風向きの取得と変換を追加 ---
+        wind_deg = data['hourly'].get('wind_direction_10m', [0])[idx]
+        wind_dir = get_wind_direction(wind_deg) # 方位文字列に変換
+        # -----------------------------
+
         precip_list = data['hourly']['precipitation'][:idx+1]
         precip_48h = sum(precip_list[-48:])
         
-        return temp, wind_s, round(precip_48h, 1)
+        # 風向き(wind_dir)を含めた4つの値を返す
+        return temp, wind_s, round(precip_48h, 1), wind_dir
     except Exception as e:
-        # エラー時は空文字を返して、アプリが落ちるのを防ぐ
-        return "", "", ""
+        return "", "", "", ""
         
 def get_wind_direction(degrees):
     """度数を16方位の文字列に変換"""
@@ -270,6 +275,7 @@ if submit:
         st.success(f"✅ 保存完了！当時の潮は {tide_name} ({tide_info['潮位フェーズ']}) でした。")
         st.cache_data.clear()
         st.rerun()
+
 
 
 
