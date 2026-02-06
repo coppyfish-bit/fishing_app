@@ -236,35 +236,107 @@ if uploaded_file:
         if dt_str: 
             try: default_dt = datetime.strptime(dt_str, '%Y:%m:%d %H:%M:%S')
             except: pass
+    # --- 3. メイン UI ---
+st.set_page_config(page_title="Fishing AI Log", layout="centered") # スマホ向けにcenteredを推奨
+st.title("🎣 釣果統合ログシステム")
 
-# 場所自動判定
-nearest_place = None
-place_to_id = {}
-if not m_df.empty:
-    place_to_id = dict(zip(m_df["place_name"], m_df["group_id"]))
-    for _, row in m_df.iterrows():
-        if calculate_distance(auto_lat, auto_lon, row['latitude'], row['longitude']) < 0.5:
-            nearest_place = row['place_name']; break
-place_options = sorted(place_to_id.keys())
+# データ接続
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    df = conn.read(spreadsheet=url, ttl="5m")
+    m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
+except:
+    st.error("スプレッドシート接続エラー"); st.stop()
 
-# --- 4. フォーム ---
-with st.form("main_form", clear_on_submit=True):
-    c1, c2 = st.columns(2)
-    with c1:
-        date_in = st.date_input("📅 日付", value=default_dt.date())
-        time_in = st.time_input("⏰ 時刻", value=default_dt.time())
-        default_idx = (place_options.index(nearest_place) + 1) if nearest_place in place_options else 0
-        place_sel = st.selectbox("📍 釣り場を選択", options=["-- 新規地点 or 手動入力 --"] + place_options, index=default_idx)
-    with c2:
-        lat_in = st.number_input("緯度", value=auto_lat, format="%.6f")
-        lon_in = st.number_input("経度", value=auto_lon, format="%.6f")
-        place_man = st.text_input("📍 新しい場所名（新規時のみ）")
+# 写真アップロード
+uploaded_file = st.file_uploader("📸 写真を選択", type=['jpg', 'jpeg'])
+auto_lat, auto_lon, default_dt = 32.5, 130.0, datetime.now()
 
-    fish_in = st.text_input("🐟 魚種")
-    length_in = st.number_input("📏 全長(cm)", value=0.0)
-    lure_in = st.text_input("🪝 ルアー")
-    memo_in = st.text_area("📝 備考")
-    submit = st.form_submit_button("🚀 保存")
+if uploaded_file:
+    img = Image.open(uploaded_file)
+    exif = img._getexif()
+    if exif:
+        geotags = get_geotagging(exif)
+        if geotags:
+            lat = get_decimal_from_dms(geotags.get('GPSLatitude'), geotags.get('GPSLatitudeRef'))
+            lon = get_decimal_from_dms(geotags.get('GPSLongitude'), geotags.get('GPSLongitudeRef'))
+            if lat: auto_lat, auto_lon = lat, lon
+        dt_str = exif.get(36867)
+        if dt_str: 
+            try: default_dt = datetime.strptime(dt_str, '%Y:%m:%d %H:%M:%S')
+            except: pass
+
+# --- ここから追加：場所の自動判定 ---
+def find_nearest_place(current_lat, current_lon, master_df, threshold_m=500):
+    if master_df.empty: return None, None
+    nearest_place, min_dist = None, float('inf')
+    for _, row in master_df.iterrows():
+        # calculate_distance関数が定義されている前提
+        dist = calculate_distance(current_lat, current_lon, row['latitude'], row['longitude'])
+        if dist < min_dist:
+            min_dist, nearest_place = dist, row
+    if min_dist <= (threshold_m / 1000):
+        return nearest_place['place_name'], nearest_place['group_id']
+    return None, None
+
+detected_name, detected_id = find_nearest_place(auto_lat, auto_lon, m_df)
+
+# --- 4. 自動入力項目（場所）の表示 ---
+st.markdown("### 📍 釣り場")
+if detected_name:
+    st.success(f"✅ **{detected_name}** (付近にいます)")
+    final_place_name = detected_name
+    final_group_id = detected_id
+else:
+    st.warning("🆕 500m以内に登録地点がありません。新規登録します。")
+    final_place_name = st.text_input("新規釣り場名を入力", placeholder="例: 苓北港 北堤防")
+    final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 1
+
+# 誤判定時のための予備
+with st.expander("場所を手動で変更する"):
+    # place_to_id は m_df から作成した辞書を想定
+    place_to_id = dict(zip(m_df['place_name'], m_df['group_id'])) if not m_df.empty else {}
+    manual_sel = st.selectbox("登録済み地点から選ぶ", ["-- 選択なし --"] + list(place_to_id.keys()))
+    if manual_sel != "-- 選択なし --":
+        final_place_name = manual_sel
+        final_group_id = place_to_id[manual_sel]
+
+# --- 5. 釣果入力（スマホ向けデカ表示） ---
+st.markdown("---")
+st.markdown("## 🐟 釣果を記録")
+
+# 魚種
+fish_in = st.radio("**魚種**", ["アジ", "メバル", "カサゴ", "シーバス", "チヌ", "マダイ", "ガラカブ", "アオリイカ", "その他"], horizontal=True)
+if fish_in == "その他":
+    fish_in = st.text_input("魚種名を入力")
+
+# 全長（大きな数字を表示しつつスライダー）
+current_len = st.session_state.get('len_slider', 20.0)
+st.markdown(f"### 全長: <span style='font-size:32px; color:#1E90FF;'>{current_len}</span> cm", unsafe_allow_html=True)
+length_in = st.slider("", 0.0, 120.0, 20.0, step=0.5, key="len_slider", label_visibility="collapsed")
+
+# ルアー
+st.markdown("**ルアー・仕掛け**")
+lure_sel = st.multiselect("", ["ジグヘッド", "メタルジグ", "ミノー", "エギ", "ワーム", "タイラバ", "青イソメ"], label_visibility="collapsed")
+lure_extra = st.text_input("詳細・カラー (任意)")
+lure_in = ", ".join(lure_sel) + (f" ({lure_extra})" if lure_extra else "")
+
+# 備考
+st.markdown("**メモ**")
+memo_in = st.text_area("", placeholder="ヒットパターンなど", label_visibility="collapsed")
+
+# 日時（自動取得分をデフォルトに、変更も可能）
+with st.expander("日時・座標を確認"):
+    date_in = st.date_input("日付", default_dt.date())
+    time_in = st.time_input("時刻", default_dt.time())
+    lat_in = st.number_input("緯度", value=auto_lat, format="%.6f")
+    lon_in = st.number_input("経度", value=auto_lon, format="%.6f")
+
+# 保存ボタン
+st.markdown("---")
+submit = st.button("🚀 釣果を保存する", use_container_width=True, type="primary")
+
 
     # --- 保存処理の開始 ---
     if submit:
@@ -341,6 +413,7 @@ with st.form("main_form", clear_on_submit=True):
                     st.cache_data.clear()
                 except Exception as e:
                     st.error(f"❌ 書き込みエラーが発生しました: {e}")
+
 
 
 
