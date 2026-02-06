@@ -251,7 +251,7 @@ st.markdown("""
         height: 0;
         border-left: 18px solid transparent;
         border-right: 18px solid transparent;
-        border-bottom: 25px solid #001f3f; /* ポインターも紺で統一 */
+        border-bottom: 25px solid #FF4B4B; 
         margin-top: 85px; 
     }
     </style>
@@ -259,7 +259,7 @@ st.markdown("""
 # --- 2. スライダーと目盛り表示部分 ---
 # 全長入力（大きな数字を表示しつつ、目盛りガイド付きスライダー）
 current_len = st.session_state.get('len_slider', 20.0)
-st.markdown(f"### 全長: <span style='font-size:40px; color:#001f3f; font-weight:900;'>{current_len}</span> cm", unsafe_allow_html=True)
+st.markdown(f"### 全長: <span style='font-size:40px; color:#FF4B4B; font-weight:900;'>{current_len}</span> cm", unsafe_allow_html=True)
 # ※ key="len_slider" が重複しないよう、これ1つだけにしてください
 length_in = st.slider("", 0.0, 120.0, 0.0, step=1.0, key="len_slider", label_visibility="collapsed")
 # 10cmごとの目盛り
@@ -333,6 +333,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
