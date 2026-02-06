@@ -296,7 +296,7 @@ st.markdown("## 🐟 釣果を記録")
 
 # 魚種
 fish_in = st.radio("**魚種**", ["アジ", "メバル", "カサゴ", "シーバス", "チヌ", "マダイ", "ガラカブ", "アオリイカ", "その他"], horizontal=True)
-    if fish_in == "その他":
+if fish_in == "その他":
     fish_in = st.text_input("魚種名を入力")
 
 # 全長（大きな数字を表示しつつスライダー）
@@ -401,6 +401,7 @@ submit = st.button("🚀 釣果を保存する", use_container_width=True, type=
                     st.cache_data.clear()
                 except Exception as e:
                     st.error(f"❌ 書き込みエラーが発生しました: {e}")
+
 
 
 
