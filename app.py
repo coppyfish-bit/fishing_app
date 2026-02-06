@@ -218,7 +218,7 @@ st.markdown("""
     <style>
     .stSlider [data-baseweb="slider"] {
         height: 60px !important;
-        width: calc(100% - 24px) !important; 
+        width: calc(100% - 12px) !important; 
         margin: 0 auto !important;
         background-color: #FFFFFF !important;
         border: 2px solid #001f3f !important;
@@ -344,6 +344,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
