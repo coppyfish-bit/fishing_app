@@ -222,45 +222,41 @@ if fish_in == "その他":
 current_len = st.session_state.get('len_slider', 00.0)
 st.markdown("""
     <style>
-    /* 1. スライダー全体の操作エリアを広げる */
+    /* 1. スライダー全体の余白調整 */
     .stSlider {
-        padding-top: 20px;
+        padding-top: 50px; /* 上の目盛り用のスペース */
         padding-bottom: 20px;
     }
-    /* 2. レール（棒）を太くして指が触れやすくする */
+    /* 2. レール（バー）の設定 */
     .stSlider [data-baseweb="slider"] {
         height: 12px !important;
+        background: #ddd !important;
     }
-    /* 3. つまみの設定（ここが重要） */
+    /* 3. つまみの設定（透明な土台） */
     .stSlider [role="slider"] {
-        background-color: transparent !important; /* 元の丸を透明にする（でも判定は残る） */
+        background-color: transparent !important;
         box-shadow: none !important;
         border: none !important;
-        height: 40px !important; /* タップ範囲を縦に広げる */
-        width: 40px !important;  /* タップ範囲を横に広げる */
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
+        height: 45px !important;
+        width: 45px !important;
     }
-    /* 4. 透明なつまみの中に「↑」を描く */
+    /* 4. つまみの下に「▲」を描く（バーを指すポインター） */
     .stSlider [role="slider"]::after {
         content: "";
         display: block;
         width: 0;
         height: 0;
-        border-left: 15px solid transparent;
-        border-right: 15px solid transparent;
-        border-bottom: 25px solid #1E90FF; /* 矢印の色 */
-        margin-top: -30px; /* 位置をレールより少し上に上げる */
+        border-left: 12px solid transparent;
+        border-right: 12px solid transparent;
+        border-bottom: 20px solid #1E90FF; /* 矢印の色 */
+        margin-top: 40px; /* バーの下側に配置 */
     }
     </style>
     """, unsafe_allow_html=True)
-
 # --- 2. スライダーと目盛り表示部分 ---
 # 全長入力（大きな数字を表示しつつ、目盛りガイド付きスライダー）
 current_len = st.session_state.get('len_slider', 00.0)
-st.markdown(f"### 全長: <span style='font-size:32px; color:#1E90FF;'>{current_len}</span> cm", unsafe_allow_html=True)
-
+st.markdown(f"### 全長: <span style='font-size:36px; color:#1E90FF;'>{current_len}</span> cm", unsafe_allow_html=True)
 # ※ key="len_slider" が重複しないよう、これ1つだけにしてください
 length_in = st.slider("", 0.0, 120.0, 20.0, step=1.0, key="len_slider", label_visibility="collapsed")
 
@@ -336,6 +332,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
