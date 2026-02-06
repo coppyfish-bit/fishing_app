@@ -255,7 +255,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 # --- 2. スライダーと目盛り表示部分 ---
-current_len = st.session_state.get('len_slider', 20.0)
+current_len = st.session_state.get('len_slider', 0.0)
 st.markdown(f"### 全長: <span style='font-size:40px; color:#FF4B4B; font-weight:900;'>{current_len}</span> cm", unsafe_allow_html=True)
 
 # 【重要：順番を入れ替える】スライダーの「前」に数字を書く
@@ -296,7 +296,7 @@ st.markdown("---")
 submit = st.button("🚀 釣果を保存する", use_container_width=True, type="primary")
 
 st.markdown("**ルアー・仕掛け**")
-lure_sel = st.text_input("例：カゲロウ125MD ←数字、英字は半角でお願いします。コピペ用 50s 60f 60s 60ES 70f 70s 70ES 80f 80s 82s 88 95f 95ss 100f 100s 100ss 110f 110s　111f 120f 120s 124f 125f 125ss 130f 130s 140f 140s 150f 150s 156MD 160f 160s 170f 170J 180f 190f 190ss")
+lure_sel = st.text_input("例：カゲロウ125MD ←数字、英字は半角でお願いします。コピペ用 50s 60f 60s 60ES 70f 70s 70ES 80f 80s 82s 88 95f 95ss 100f 100s 100ss 110f 110s　111f 120f 120s 124f 125f 125ss 130f 130s 140f 140s 150f 150s 156MD 160f 160s 165f 170f 170J 180f 190f 190ss")
 lure_extra = st.text_input("詳細・カラー (任意)")
 lure_in = ", ".join(lure_sel) + (f" ({lure_extra})" if lure_extra else "")
 
@@ -350,6 +350,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
