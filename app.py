@@ -265,8 +265,9 @@ st.markdown("""
     <div style="
         display: flex; 
         justify-content: space-between; 
-        padding: 0 12px;        /* 左右の位置微調整 */
-        font-size: 24px; 
+      /* 左の数字を大きく、右の数字を小さくすると、全体が左に寄ります */
+        padding: 0 20px 0 5px;  /* 上 右 下 左 の順番です */
+        font-size: 18px; 
         color: #FF4B4B;        /* 数字も赤に変更（お好みで） */
         font-weight: 900; 
         margin-bottom: -72px;  /* ここを大きくマイナスにすると、数字が下の要素（バー）に重なります */
@@ -347,6 +348,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
