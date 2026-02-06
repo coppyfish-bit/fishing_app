@@ -263,8 +263,22 @@ st.markdown(f"### 全長: <span style='font-size:40px; color:#FF4B4B; font-weigh
 # ※ key="len_slider" が重複しないよう、これ1つだけにしてください
 length_in = st.slider("", 0.0, 120.0, 0.0, step=1.0, key="len_slider", label_visibility="collapsed")
 # 10cmごとの目盛り
+# 10cmごとの目盛り（メジャーの内部に配置）
 st.markdown("""
-    <div style="display: flex; justify-content: space-between; padding: 0 2px; font-size: 22px; color: #001f3f; font-weight: 900; margin-bottom: -55px; position: relative; z-index: 10; pointer-events: none; font-family: 'Arial Black', sans-serif;">
+    <div style="
+        display: flex; 
+        justify-content: space-between; 
+        padding: 0 10px;        /* 左右の余白（0と120の位置調整） */
+        font-size: 24px;       /* 数字の大きさ */
+        color: #001f3f;        /* 数字の色（紺） */
+        font-weight: 900; 
+        margin-bottom: -48px;  /* ここを -40px 〜 -50px の間で微調整してください */
+        position: relative; 
+        z-index: 10; 
+        pointer-events: none; 
+        line-height: 60px;     /* バーの高さ(60px)と同じにすると中央にきます */
+        font-family: 'Arial Black', sans-serif;
+    ">
         <span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
         <span>70</span><span>80</span><span>90</span><span>100</span><span>110</span><span>120</span>
     </div>
@@ -333,6 +347,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
