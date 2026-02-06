@@ -233,7 +233,7 @@ st.markdown("""
         background-size: calc((100% / 12)) 100%, calc((100% / 24)) 50% !important;
         
         /* ↓【微調整】線の開始位置をスライダーのポインタの「芯」に合わせる */
-        background-position: 2.5px center !important; 
+        background-position: 4.0px center !important; 
         background-repeat: repeat-x !important;
     }
 
@@ -344,6 +344,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
