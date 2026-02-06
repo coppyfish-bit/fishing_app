@@ -233,12 +233,10 @@ st.markdown("""
         background-image: 
             linear-gradient(90deg, #001f3f 3px, transparent 3px), /* 10cm単位（太） */
             linear-gradient(90deg, #001f3f 1px, transparent 1px) !important; /* 5cm単位（細） */
-       /* 120cmの場合、100 ÷ 12 = 8.333...% です */
-    /* 線が数字より右にズレていくなら、この数字を「小さく」する（例: 8.31%） */
-    /* 線が数字より左にズレていくなら、この数字を「大きく」する（例: 8.35%） */
-    background-size: 8.333% 100%, 4.166% 50% !important; 
+   /* ↓【最重要】線の間隔を120cmの「区切り数」で正確に指定 */
+        background-size: calc((100% / 12)) 100%, calc((100% / 24)) 50% !important;
 }
-        background-position: left center !important;
+        background-position: 1.5px center !important; 
         background-repeat: repeat-x !important;
     }
     /* 3. つまみの設定（透明な土台） */
@@ -354,6 +352,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
