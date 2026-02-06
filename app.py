@@ -230,7 +230,9 @@ st.markdown("""
             linear-gradient(90deg, #001f3f 1px, transparent 1px) !important;
         
         /* ↓【最重要】線の間隔を120cmの「区切り数」で正確に指定 */
-        background-size: calc((100% / 12)) 100%, calc((100% / 24)) 50% !important;
+        /* 120に行くにつれて「矢印が線より左に遅れる」なら、数字を小さく（例: 8.32%） */
+        /* 120に行くにつれて「矢印が線より右に追い越す」なら、数字を大きく（例: 8.34%） */
+        background-size: 8.32% 100%, 4.166% 50% !important;
         
         /* ↓【微調整】線の開始位置をスライダーのポインタの「芯」に合わせる */
         background-position: 4.0px center !important; 
@@ -344,6 +346,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
