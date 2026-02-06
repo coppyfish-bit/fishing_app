@@ -327,7 +327,7 @@ submit = st.button("🚀 釣果を保存する", use_container_width=True, type=
 
 
     # --- 保存処理の開始 ---
-    if submit:
+if submit:
         # 場所の確定
         if place_sel != "-- 新規地点 or 手動入力 --":
             final_place_name = place_sel
@@ -401,6 +401,7 @@ submit = st.button("🚀 釣果を保存する", use_container_width=True, type=
                     st.cache_data.clear()
                 except Exception as e:
                     st.error(f"❌ 書き込みエラーが発生しました: {e}")
+
 
 
 
