@@ -224,6 +224,8 @@ st.markdown("""
     /* 2. バーを白メジャー風にする */
     .stSlider [data-baseweb="slider"] {
         height: 60px !important; /* さらに少し太く */
+        /* ↓ここが重要：スライダーの左右の余白を考慮して幅を調整 */
+        width: calc(100% - 24px) !important;
         background-color: #FFFFFF !important; /* 背景は白 */
         border: 2px solid #001f3f !important; /* 紺の枠線 */
         border-radius: 4px !important;
@@ -352,6 +354,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
