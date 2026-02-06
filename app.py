@@ -236,7 +236,7 @@ st.markdown("""
    /* ↓【最重要】線の間隔を120cmの「区切り数」で正確に指定 */
         background-size: calc((100% / 12)) 100%, calc((100% / 24)) 50% !important;
 }
-        background-position: 1.5px center !important; 
+        background-position: 2.0px center !important; 
         background-repeat: repeat-x !important;
     }
     /* 3. つまみの設定（透明な土台） */
@@ -352,6 +352,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
