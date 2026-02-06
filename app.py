@@ -274,7 +274,7 @@ st.markdown("""
         pointer-events: none; 
         line-height: 60px;     /* バーの高さと同じにする */
         font-family: 'Arial Black', sans-serif;
-        transform: translateX(-2px); /* ←これを追加・調整！ */
+        transform: translateX(10px); /* ←これを追加・調整！ */
         <div style="
         ...
     ">
@@ -349,6 +349,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
