@@ -275,7 +275,7 @@ st.markdown("""
         line-height: 60px;     /* バーの高さと同じにする */
         font-family: 'Arial Black', sans-serif;
         transform: translateX(8px); /* ←これを追加・調整！ */
-        padding: 0 2px;  /* ←ここを調整！ (0 左右の余白) */
+        padding: 0px;  /* ←ここを調整！ (0 左右の余白) */
         <div style="
         ...
     ">
@@ -350,6 +350,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
