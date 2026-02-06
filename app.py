@@ -224,7 +224,7 @@ st.markdown(f"### 全長: <span style='font-size:32px; color:#1E90FF;'>{current_
 length_in = st.slider("", 0.0, 120.0, 00.0, step=1.0, key="len_slider", label_visibility="collapsed")
 
 st.markdown("**ルアー・仕掛け**")
-lure_sel = st.text_input("ルアー名、仕掛け")
+lure_sel = st.text_input("例：カゲロウ125MD ←数字、英字は半角でお願いします。")
 lure_extra = st.text_input("詳細・カラー (任意)")
 lure_in = ", ".join(lure_sel) + (f" ({lure_extra})" if lure_extra else "")
 
@@ -287,4 +287,5 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
