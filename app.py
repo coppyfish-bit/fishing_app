@@ -234,7 +234,7 @@ st.markdown("""
        /* 120cmの場合、100 ÷ 12 = 8.333...% です */
     /* 線が数字より右にズレていくなら、この数字を「小さく」する（例: 8.31%） */
     /* 線が数字より左にズレていくなら、この数字を「大きく」する（例: 8.35%） */
-    background-size: 8.5% 100%, 4.166% 50% !important; 
+    background-size: 8.333% 100%, 4.166% 50% !important; 
 }
         background-position: left center !important;
         background-repeat: repeat-x !important;
@@ -352,6 +352,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
