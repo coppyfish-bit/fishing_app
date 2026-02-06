@@ -236,6 +236,21 @@ st.markdown("""
     """, unsafe_allow_html=True)
 st.markdown(f"### 全長: <span style='font-size:32px; color:#1E90FF;'>{current_len}</span> cm", unsafe_allow_html=True)
 length_in = st.slider("", 0.0, 120.0, 00.0, step=1.0, key="len_slider", label_visibility="collapsed")
+# --- 2. スライダーと目盛り表示部分 ---
+# 全長入力（大きな数字を表示しつつ、目盛りガイド付きスライダー）
+current_len = st.session_state.get('len_slider', 20.0)
+st.markdown(f"### 全長: <span style='font-size:32px; color:#1E90FF;'>{current_len}</span> cm", unsafe_allow_html=True)
+
+# スライダー本体
+length_in = st.slider("", 0.0, 120.0, 20.0, step=0.5, key="len_slider", label_visibility="collapsed")
+
+# 10cmごとの目盛りを表示するガイド（スマホで見やすい幅に調整）
+st.markdown("""
+    <div style="display: flex; justify-content: space-between; padding: 0 10px; font-size: 12px; color: #888;">
+        <span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
+        <span>70</span><span>80</span><span>90</span><span>100</span><span>110</span><span>120</span>
+    </div>
+    """, unsafe_allow_html=True)
 
 st.markdown("**ルアー・仕掛け**")
 lure_sel = st.text_input("例：カゲロウ125MD ←数字、英字は半角でお願いします。")
@@ -301,6 +316,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
