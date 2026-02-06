@@ -213,52 +213,53 @@ with st.expander("場所を手動で修正・選択"):
         is_new_place = False
 
 # 釣果入力
-st.markdown("---")
-st.markdown("## 🐟 釣果を記録")
-fish_in = st.radio("**魚種**", ["スズキ", "ヒラスズキ", "ターポン", "タチウオ", "チヌ", "キビレ", "マダイ", "アオリイカ", "その他"], horizontal=True)
-if fish_in == "その他":
-    fish_in = st.text_input("魚種名を手入力")
-
-current_len = st.session_state.get('len_slider', 00.0)
+# --- カスタムCSS（フィッシュメジャー風） ---
 st.markdown("""
     <style>
-    /* 1. スライダー全体の余白調整 */
+    /* 1. 全体の余白 */
     .stSlider {
-        padding-top: 50px; /* 上の目盛り用のスペース */
-        padding-bottom: 20px;
+        padding-top: 10px;
+        padding-bottom: 50px;
     }
-    /* 2. レール（バー）の設定 */
+    /* 2. バーを極太のメジャーにする */
     .stSlider [data-baseweb="slider"] {
-        height: 12px !important;
-        background: #ddd !important;
+        height: 50px !important; /* メジャーの太さ */
+        background-color: #333 !important; /* メジャーのベース色（黒/濃灰） */
+        border-radius: 4px !important;
+        /* バーの中に目盛りを背景として描画（10cmごとの太線と5cmごとの細線） */
+        background-image: 
+            linear-gradient(90deg, #fff 2px, transparent 2px), /* 10cm単位 */
+            linear-gradient(90deg, #999 1px, transparent 1px) !important; /* 5cm単位 */
+        background-size: 8.33% 100%, 4.16% 60% !important; /* 120cmを12分割/24分割 */
+        background-repeat: repeat-x !important;
     }
     /* 3. つまみの設定（透明な土台） */
     .stSlider [role="slider"] {
         background-color: transparent !important;
         box-shadow: none !important;
         border: none !important;
-        height: 45px !important;
-        width: 45px !important;
+        height: 60px !important;
+        width: 60px !important;
     }
-    /* 4. つまみの下に「▲」を描く（バーを指すポインター） */
+    /* 4. バーの下にポインター「↑」を配置 */
     .stSlider [role="slider"]::after {
         content: "";
         display: block;
         width: 0;
         height: 0;
-        border-left: 12px solid transparent;
-        border-right: 12px solid transparent;
-        border-bottom: 20px solid #1E90FF; /* 矢印の色 */
-        margin-top: 40px; /* バーの下側に配置 */
+        border-left: 15px solid transparent;
+        border-right: 15px solid transparent;
+        border-bottom: 25px solid #FF4B4B; /* 視認性の高い赤色 */
+        margin-top: 75px; /* バーの下側に配置 */
     }
     </style>
     """, unsafe_allow_html=True)
 # --- 2. スライダーと目盛り表示部分 ---
 # 全長入力（大きな数字を表示しつつ、目盛りガイド付きスライダー）
 current_len = st.session_state.get('len_slider', 00.0)
-st.markdown(f"### 全長: <span style='font-size:36px; color:#1E90FF;'>{current_len}</span> cm", unsafe_allow_html=True)
+st.markdown(f"### 全長: <span style='font-size:38px; color:#FF4B4B; font-weight:bold;'>{current_len}</span> cm", unsafe_allow_html=True)
 # ※ key="len_slider" が重複しないよう、これ1つだけにしてください
-length_in = st.slider("", 0.0, 120.0, 20.0, step=1.0, key="len_slider", label_visibility="collapsed")
+length_in = st.slider("", 0.0, 120.0, 00.0, step=1.0, key="len_slider", label_visibility="collapsed")
 
 # 10cmごとの目盛り
 st.markdown("""
@@ -332,6 +333,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
