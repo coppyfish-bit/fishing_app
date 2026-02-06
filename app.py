@@ -222,30 +222,42 @@ if fish_in == "その他":
 current_len = st.session_state.get('len_slider', 00.0)
 st.markdown("""
     <style>
-    /* スライダーの本体（棒部分）を太くする */
-    .stSlider [data-baseweb="slider"] {
-        height: 25px;
+    /* スライダー全体の高さを確保 */
+    .stSlider {
+        padding-bottom: 20px;
     }
-    /* スライダーのつまみを大きくして掴みやすくする */
+    /* スライダーの棒（レール）を太くする */
+    .stSlider [data-baseweb="slider"] {
+        height: 15px;
+        background: linear-gradient(to right, #1E90FF, #ddd);
+        border-radius: 5px;
+    }
+    /* つまみを「↑」の形に変える */
     .stSlider [role="slider"] {
-        height: 35px;
-        width: 35px;
-        background-color: #1E90FF;
+        height: 0 !important;
+        width: 0 !important;
+        background-color: transparent !important; /* 元の丸を消す */
+        border-left: 15px solid transparent !important;
+        border-right: 15px solid transparent !important;
+        border-bottom: 30px solid #1E90FF !important; /* これが矢印の色と形 */
+        border-radius: 0 !important;
+        transform: translateY(10px) !important; /* 位置調整 */
+        box-shadow: none !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 2. スライダーと目盛り表示部分 ---
 # 全長入力（大きな数字を表示しつつ、目盛りガイド付きスライダー）
-current_len = st.session_state.get('len_slider', 20.0)
+current_len = st.session_state.get('len_slider', 00.0)
 st.markdown(f"### 全長: <span style='font-size:32px; color:#1E90FF;'>{current_len}</span> cm", unsafe_allow_html=True)
 
-# スライダー本体
-length_in = st.slider("", 0.0, 120.0, 00.0, step=1.0, key="len_slider", label_visibility="collapsed")
+# ※ key="len_slider" が重複しないよう、これ1つだけにしてください
+length_in = st.slider("", 0.0, 120.0, 20.0, step=1.0, key="len_slider", label_visibility="collapsed")
 
-# 10cmごとの目盛りを表示するガイド（スマホで見やすい幅に調整）
+# 10cmごとの目盛り
 st.markdown("""
-    <div style="display: flex; justify-content: space-between; padding: 0 10px; font-size: 12px; color: #888;">
+    <div style="display: flex; justify-content: space-between; padding: 0 15px; font-size: 14px; color: #333; font-weight: bold; margin-top: -10px;">
         <span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
         <span>70</span><span>80</span><span>90</span><span>100</span><span>110</span><span>120</span>
     </div>
@@ -315,6 +327,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
