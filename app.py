@@ -257,32 +257,32 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 # --- 2. スライダーと目盛り表示部分 ---
-# 全長入力（大きな数字を表示しつつ、目盛りガイド付きスライダー）
 current_len = st.session_state.get('len_slider', 20.0)
 st.markdown(f"### 全長: <span style='font-size:40px; color:#FF4B4B; font-weight:900;'>{current_len}</span> cm", unsafe_allow_html=True)
-# ※ key="len_slider" が重複しないよう、これ1つだけにしてください
-length_in = st.slider("", 0.0, 120.0, 0.0, step=1.0, key="len_slider", label_visibility="collapsed")
-# 10cmごとの目盛り
-# 10cmごとの目盛り（メジャーの内部に配置）
+
+# 【重要：順番を入れ替える】スライダーの「前」に数字を書く
 st.markdown("""
     <div style="
         display: flex; 
         justify-content: space-between; 
-        padding: 0 10px;        /* 左右の余白（0と120の位置調整） */
-        font-size: 24px;       /* 数字の大きさ */
-        color: #001f3f;        /* 数字の色（紺） */
+        padding: 0 12px;        /* 左右の位置微調整 */
+        font-size: 24px; 
+        color: #FF4B4B;        /* 数字も赤に変更（お好みで） */
         font-weight: 900; 
-        margin-bottom:-40px;  /* ここを -40px 〜 -50px の間で微調整してください */
+        margin-bottom: -72px;  /* ここを大きくマイナスにすると、数字が下の要素（バー）に重なります */
         position: relative; 
         z-index: 10; 
         pointer-events: none; 
-        line-height: -100px;     /* バーの高さ(60px)と同じにすると中央にきます */
+        line-height: 60px;     /* バーの高さと同じにする */
         font-family: 'Arial Black', sans-serif;
     ">
         <span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
         <span>70</span><span>80</span><span>90</span><span>100</span><span>110</span><span>120</span>
     </div>
     """, unsafe_allow_html=True)
+
+# スライダー本体（数字の後に書く）
+length_in = st.slider("", 0.0, 120.0, 0.0, step=1.0, key="len_slider", label_visibility="collapsed")
 with st.expander("日時・座標の微調整"):
     date_in = st.date_input("日付", default_dt.date())
     time_in = st.time_input("時刻", default_dt.time())
@@ -347,6 +347,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
