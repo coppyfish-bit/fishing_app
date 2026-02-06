@@ -210,6 +210,50 @@ def get_tide_name(dt):
 st.set_page_config(page_title="Fishing AI Log", layout="wide")
 st.title("🎣 釣果統合ログシステム")
 
+# --- UIの改善：タブを使って画面をスッキリさせる ---
+tab1, tab2, tab3 = st.tabs(["📸 写真・場所", "🐟 釣果記録", "📝 備考"])
+
+with tab1:
+    # 写真アップロード
+    uploaded_file = st.file_uploader("写真をアップロード", type=["jpg", "jpeg", "png"])
+    
+    # 場所選択（セレクトボックスを大きく）
+    place_sel = st.selectbox("釣り場を選択", ["-- 新規地点 or 手動入力 --"] + list(place_to_id.keys()))
+    
+    if place_sel == "-- 新規地点 or 手動入力 --":
+        place_man = st.text_input("新しい場所名を入力")
+    
+    # 座標入力（スライダーや現在地取得ボタンが理想ですが、まずは数値入力を横並びに）
+    col_lat, col_lon = st.columns(2)
+    with col_lat:
+        lat_in = st.number_input("緯度", value=lat_in, format="%.6f")
+    with col_lon:
+        lon_in = st.number_input("経度", value=lon_in, format="%.6f")
+
+with tab2:
+    # 魚種とサイズ（よく釣れる魚を候補に出す）
+    fish_in = st.selectbox("魚種", ["アジ", "メバル", "カサゴ", "シーバス", "チヌ", "クロダイ", "真鯛", "その他"])
+    if fish_in == "その他":
+        fish_in = st.text_input("魚種名を入力")
+        
+    # 全長（スライダーにするとスマホで操作しやすい）
+    length_in = st.slider("全長 (cm)", 0.0, 150.0, 20.0, step=0.5)
+    
+    # ルアー（履歴から選べるようにするか、よく使うものをリスト化）
+    lure_in = st.text_input("使用ルアー・仕掛け")
+
+with tab3:
+    # 日時（デフォルトで「今」が入るように）
+    col_d, col_t = st.columns(2)
+    with col_d:
+        date_in = st.date_input("日付", date_in)
+    with col_t:
+        time_in = st.time_input("時刻", time_in)
+        
+    memo_in = st.text_area("メモ・備考", placeholder="ヒットパターンや状況など")
+
+# 保存ボタンを大きく目立たせる
+submit = st.button("🚀 釣果を保存する", use_container_width=True, type="primary")
 # データ接続
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
@@ -341,6 +385,7 @@ with st.form("main_form", clear_on_submit=True):
                     st.cache_data.clear()
                 except Exception as e:
                     st.error(f"❌ 書き込みエラーが発生しました: {e}")
+
 
 
 
