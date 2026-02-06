@@ -268,7 +268,7 @@ st.markdown("""
         font-size: 16px; 
         color: #FF4B4B;        /* 数字も赤に変更（お好みで） */
         font-weight: 900; 
-        margin-bottom: -52px;  /* ここを大きくマイナスにすると、数字が下の要素（バー）に重なります */
+        margin-bottom: 20px;  /* ここを大きくマイナスにすると、数字が下の要素（バー）に重なります */
         position: relative; 
         z-index: 10; 
         pointer-events: none; 
@@ -346,6 +346,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
