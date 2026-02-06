@@ -206,19 +206,6 @@ def get_tide_name(dt):
     elif age < 22.0: return "中潮"
     else: return "小潮"
 
-# --- 3. メイン UI ---
-st.set_page_config(page_title="Fishing AI Log", layout="wide")
-st.title("🎣 釣果統合ログシステム")
-
-# データ接続
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    df = conn.read(spreadsheet=url, ttl="5m")
-    m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
-except:
-    st.error("スプレッドシート接続エラー"); st.stop()
-
 # 写真アップロード
 uploaded_file = st.file_uploader("📸 写真を選択", type=['jpg', 'jpeg'])
 auto_lat, auto_lon, default_dt = 32.5, 130.0, datetime.now()
@@ -236,6 +223,7 @@ if uploaded_file:
         if dt_str: 
             try: default_dt = datetime.strptime(dt_str, '%Y:%m:%d %H:%M:%S')
             except: pass
+
     # --- 3. メイン UI ---
 st.set_page_config(page_title="Fishing AI Log", layout="centered") # スマホ向けにcenteredを推奨
 st.title("🎣 釣果統合ログシステム")
@@ -308,7 +296,7 @@ st.markdown("## 🐟 釣果を記録")
 
 # 魚種
 fish_in = st.radio("**魚種**", ["アジ", "メバル", "カサゴ", "シーバス", "チヌ", "マダイ", "ガラカブ", "アオリイカ", "その他"], horizontal=True)
-if fish_in == "その他":
+    if fish_in == "その他":
     fish_in = st.text_input("魚種名を入力")
 
 # 全長（大きな数字を表示しつつスライダー）
@@ -413,6 +401,7 @@ submit = st.button("🚀 釣果を保存する", use_container_width=True, type=
                     st.cache_data.clear()
                 except Exception as e:
                     st.error(f"❌ 書き込みエラーが発生しました: {e}")
+
 
 
 
