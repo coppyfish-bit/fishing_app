@@ -206,24 +206,6 @@ def get_tide_name(dt):
     elif age < 22.0: return "中潮"
     else: return "小潮"
 
-# 写真アップロード
-uploaded_file = st.file_uploader("📸 写真を選択", type=['jpg', 'jpeg'])
-auto_lat, auto_lon, default_dt = 32.5, 130.0, datetime.now()
-
-if uploaded_file:
-    img = Image.open(uploaded_file)
-    exif = img._getexif()
-    if exif:
-        geotags = get_geotagging(exif)
-        if geotags:
-            lat = get_decimal_from_dms(geotags.get('GPSLatitude'), geotags.get('GPSLatitudeRef'))
-            lon = get_decimal_from_dms(geotags.get('GPSLongitude'), geotags.get('GPSLongitudeRef'))
-            if lat: auto_lat, auto_lon = lat, lon
-        dt_str = exif.get(36867)
-        if dt_str: 
-            try: default_dt = datetime.strptime(dt_str, '%Y:%m:%d %H:%M:%S')
-            except: pass
-
     # --- 3. メイン UI ---
 st.set_page_config(page_title="Fishing AI Log", layout="centered") # スマホ向けにcenteredを推奨
 st.title("🎣 釣果統合ログシステム")
@@ -401,6 +383,7 @@ if submit:
                     st.cache_data.clear()
                 except Exception as e:
                     st.error(f"❌ 書き込みエラーが発生しました: {e}")
+
 
 
 
