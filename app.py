@@ -218,19 +218,21 @@ st.markdown("""
     <style>
     /* 1. 全体の余白 */
     .stSlider {
-        padding-top: 10px;
+        padding-top: 30px;
         padding-bottom: 50px;
     }
-    /* 2. バーを極太のメジャーにする */
+    /* 2. バーを白メジャー風にする */
     .stSlider [data-baseweb="slider"] {
-        height: 50px !important; /* メジャーの太さ */
-        background-color: #333 !important; /* メジャーのベース色（黒/濃灰） */
+        height: 60px !important; /* さらに少し太く */
+        background-color: #FFFFFF !important; /* 背景は白 */
+        border: 2px solid #001f3f !important; /* 紺の枠線 */
         border-radius: 4px !important;
-        /* バーの中に目盛りを背景として描画（10cmごとの太線と5cmごとの細線） */
+        /* バーの中に紺の目盛り線を背景として描画 */
         background-image: 
-            linear-gradient(90deg, #fff 2px, transparent 2px), /* 10cm単位 */
-            linear-gradient(90deg, #999 1px, transparent 1px) !important; /* 5cm単位 */
-        background-size: 8.33% 100%, 4.16% 60% !important; /* 120cmを12分割/24分割 */
+            linear-gradient(90deg, #001f3f 3px, transparent 3px), /* 10cm単位（太） */
+            linear-gradient(90deg, #001f3f 1px, transparent 1px) !important; /* 5cm単位（細） */
+        background-size: 8.333% 100%, 4.166% 50% !important; /* 120cmを分割 */
+        background-position: left center !important;
         background-repeat: repeat-x !important;
     }
     /* 3. つまみの設定（透明な土台） */
@@ -238,7 +240,7 @@ st.markdown("""
         background-color: transparent !important;
         box-shadow: none !important;
         border: none !important;
-        height: 60px !important;
+        height: 70px !important;
         width: 60px !important;
     }
     /* 4. バーの下にポインター「↑」を配置 */
@@ -247,28 +249,26 @@ st.markdown("""
         display: block;
         width: 0;
         height: 0;
-        border-left: 15px solid transparent;
-        border-right: 15px solid transparent;
-        border-bottom: 25px solid #FF4B4B; /* 視認性の高い赤色 */
-        margin-top: 75px; /* バーの下側に配置 */
+        border-left: 18px solid transparent;
+        border-right: 18px solid transparent;
+        border-bottom: 25px solid #001f3f; /* ポインターも紺で統一 */
+        margin-top: 85px; 
     }
     </style>
     """, unsafe_allow_html=True)
 # --- 2. スライダーと目盛り表示部分 ---
 # 全長入力（大きな数字を表示しつつ、目盛りガイド付きスライダー）
-current_len = st.session_state.get('len_slider', 00.0)
-st.markdown(f"### 全長: <span style='font-size:38px; color:#FF4B4B; font-weight:bold;'>{current_len}</span> cm", unsafe_allow_html=True)
+current_len = st.session_state.get('len_slider', 20.0)
+st.markdown(f"### 全長: <span style='font-size:40px; color:#001f3f; font-weight:900;'>{current_len}</span> cm", unsafe_allow_html=True)
 # ※ key="len_slider" が重複しないよう、これ1つだけにしてください
-length_in = st.slider("", 0.0, 120.0, 00.0, step=1.0, key="len_slider", label_visibility="collapsed")
-
+length_in = st.slider("", 0.0, 120.0, 0.0, step=1.0, key="len_slider", label_visibility="collapsed")
 # 10cmごとの目盛り
 st.markdown("""
-    <div style="display: flex; justify-content: space-between; padding: 0 15px; font-size: 14px; color: #333; font-weight: bold; margin-top: -10px;">
+    <div style="display: flex; justify-content: space-between; padding: 0 2px; font-size: 22px; color: #001f3f; font-weight: 900; margin-bottom: -55px; position: relative; z-index: 10; pointer-events: none; font-family: 'Arial Black', sans-serif;">
         <span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
         <span>70</span><span>80</span><span>90</span><span>100</span><span>110</span><span>120</span>
     </div>
     """, unsafe_allow_html=True)
-
 with st.expander("日時・座標の微調整"):
     date_in = st.date_input("日付", default_dt.date())
     time_in = st.time_input("時刻", default_dt.time())
@@ -333,6 +333,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
