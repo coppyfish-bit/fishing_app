@@ -216,47 +216,39 @@ with st.expander("場所を手動で修正・選択"):
 # --- カスタムCSS（フィッシュメジャー風） ---
 st.markdown("""
     <style>
-    /* 1. 全体の余白 */
-    .stSlider {
-        padding-top: 30px;
-        padding-bottom: 50px;
-    }
-    /* 2. バーを白メジャー風にする */
     .stSlider [data-baseweb="slider"] {
-        height: 60px !important; /* さらに少し太く */
-        /* ↓ここが重要：スライダーの左右の余白を考慮して幅を調整 */
-        width: calc(100% - 12px) !important;
-        background-color: #FFFFFF !important; /* 背景は白 */
-        border: 2px solid #001f3f !important; /* 紺の枠線 */
+        height: 60px !important;
+        width: calc(100% - 24px) !important; 
+        margin: 0 auto !important;
+        background-color: #FFFFFF !important;
+        border: 2px solid #001f3f !important;
         border-radius: 4px !important;
-        /* バーの中に紺の目盛り線を背景として描画 */
+
+        /* 目盛り線の描画 */
         background-image: 
-            linear-gradient(90deg, #001f3f 3px, transparent 3px), /* 10cm単位（太） */
-            linear-gradient(90deg, #001f3f 1px, transparent 1px) !important; /* 5cm単位（細） */
-   /* ↓【最重要】線の間隔を120cmの「区切り数」で正確に指定 */
+            linear-gradient(90deg, #001f3f 3px, transparent 3px),
+            linear-gradient(90deg, #001f3f 1px, transparent 1px) !important;
+        
+        /* ↓【最重要】線の間隔を120cmの「区切り数」で正確に指定 */
         background-size: calc((100% / 12)) 100%, calc((100% / 24)) 50% !important;
-}
-        background-position: 6.0px center !important; 
+        
+        /* ↓【微調整】線の開始位置をスライダーのポインタの「芯」に合わせる */
+        background-position: 1.5px center !important; 
         background-repeat: repeat-x !important;
     }
-    /* 3. つまみの設定（透明な土台） */
-    .stSlider [role="slider"] {
-        background-color: transparent !important;
-        box-shadow: none !important;
-        border: none !important;
-        height: 70px !important;
-        width: 60px !important;
-    }
-    /* 4. バーの下にポインター「↑」を配置 */
+
+    /* ポインタ（赤矢印）の芯出し */
     .stSlider [role="slider"]::after {
         content: "";
         display: block;
         width: 0;
         height: 0;
-        border-left: 18px solid transparent;
-        border-right: 18px solid transparent;
+        border-left: 15px solid transparent;
+        border-right: 15px solid transparent;
         border-bottom: 25px solid #FF4B4B; 
         margin-top: 85px; 
+        /* ポインタの真ん中を目盛りに合わせるための位置補正 */
+        transform: translateX(0px); 
     }
     </style>
     """, unsafe_allow_html=True)
@@ -352,6 +344,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
