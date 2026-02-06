@@ -222,27 +222,36 @@ if fish_in == "その他":
 current_len = st.session_state.get('len_slider', 00.0)
 st.markdown("""
     <style>
-    /* スライダー全体の高さを確保 */
+    /* 1. スライダー全体の操作エリアを広げる */
     .stSlider {
+        padding-top: 20px;
         padding-bottom: 20px;
     }
-    /* スライダーの棒（レール）を太くする */
+    /* 2. レール（棒）を太くして指が触れやすくする */
     .stSlider [data-baseweb="slider"] {
-        height: 15px;
-        background: linear-gradient(to right, #1E90FF, #ddd);
-        border-radius: 5px;
+        height: 12px !important;
     }
-    /* つまみを「↑」の形に変える */
+    /* 3. つまみの設定（ここが重要） */
     .stSlider [role="slider"] {
-        height: 0 !important;
-        width: 0 !important;
-        background-color: transparent !important; /* 元の丸を消す */
-        border-left: 15px solid transparent !important;
-        border-right: 15px solid transparent !important;
-        border-bottom: 30px solid #1E90FF !important; /* これが矢印の色と形 */
-        border-radius: 0 !important;
-        transform: translateY(10px) !important; /* 位置調整 */
+        background-color: transparent !important; /* 元の丸を透明にする（でも判定は残る） */
         box-shadow: none !important;
+        border: none !important;
+        height: 40px !important; /* タップ範囲を縦に広げる */
+        width: 40px !important;  /* タップ範囲を横に広げる */
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    /* 4. 透明なつまみの中に「↑」を描く */
+    .stSlider [role="slider"]::after {
+        content: "";
+        display: block;
+        width: 0;
+        height: 0;
+        border-left: 15px solid transparent;
+        border-right: 15px solid transparent;
+        border-bottom: 25px solid #1E90FF; /* 矢印の色 */
+        margin-top: -30px; /* 位置をレールより少し上に上げる */
     }
     </style>
     """, unsafe_allow_html=True)
@@ -327,6 +336,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
