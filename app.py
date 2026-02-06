@@ -215,16 +215,16 @@ with st.expander("場所を手動で修正・選択"):
 # 釣果入力
 st.markdown("---")
 st.markdown("## 🐟 釣果を記録")
-fish_in = st.radio("**魚種**", ["アジ", "メバル", "カサゴ", "シーバス", "チヌ", "マダイ", "ガラカブ", "アオリイカ", "その他"], horizontal=True)
+fish_in = st.radio("**魚種**", ["スズキ", "ヒラスズキ", "ターポン", "タチウオ", "チヌ", "キビレ", "マダイ", "アオリイカ", "その他"], horizontal=True)
 if fish_in == "その他":
     fish_in = st.text_input("魚種名を手入力")
 
-current_len = st.session_state.get('len_slider', 20.0)
+current_len = st.session_state.get('len_slider', 00.0)
 st.markdown(f"### 全長: <span style='font-size:32px; color:#1E90FF;'>{current_len}</span> cm", unsafe_allow_html=True)
-length_in = st.slider("", 0.0, 120.0, 20.0, step=0.5, key="len_slider", label_visibility="collapsed")
+length_in = st.slider("", 0.0, 120.0, 00.0, step=1.0, key="len_slider", label_visibility="collapsed")
 
 st.markdown("**ルアー・仕掛け**")
-lure_sel = st.multiselect("", ["ジグヘッド", "メタルジグ", "ミノー", "エギ", "ワーム", "タイラバ", "青イソメ"], label_visibility="collapsed")
+lure_sel = st.text_input("ルアー名、仕掛け")
 lure_extra = st.text_input("詳細・カラー (任意)")
 lure_in = ", ".join(lure_sel) + (f" ({lure_extra})" if lure_extra else "")
 
@@ -287,3 +287,4 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
