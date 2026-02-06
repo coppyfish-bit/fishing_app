@@ -272,7 +272,7 @@ st.markdown("""
         font-size: 24px;       /* 数字の大きさ */
         color: #001f3f;        /* 数字の色（紺） */
         font-weight: 900; 
-        margin-bottom:200px;  /* ここを -40px 〜 -50px の間で微調整してください */
+        margin-bottom:-200px;  /* ここを -40px 〜 -50px の間で微調整してください */
         position: relative; 
         z-index: 10; 
         pointer-events: none; 
@@ -347,6 +347,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
