@@ -296,7 +296,7 @@ st.markdown("---")
 submit = st.button("🚀 釣果を保存する", use_container_width=True, type="primary")
 
 st.markdown("**ルアー・仕掛け**")
-lure_sel = st.text_input("例：カゲロウ125MD ←数字、英字は半角でお願いします。コピペ用 60ES 70f 70s 80f 80s 82s 100f 100s 110f 110s 120f 120s 124f 125f 130f 130s 140f 140s 150f 150s 160f 160s")
+lure_sel = st.text_input("例：カゲロウ125MD ←数字、英字は半角でお願いします。コピペ用 50s 60f 60s 60ES 70f 70s 70ES 80f 80s 82s 88 95f 95ss 100f 100s 100ss 110f 110s　111f 120f 120s 124f 125f 125ss 130f 130s 140f 140s 150f 150s 156MD 160f 160s 170f 170J 180f 190f 190ss")
 lure_extra = st.text_input("詳細・カラー (任意)")
 lure_in = ", ".join(lure_sel) + (f" ({lure_extra})" if lure_extra else "")
 
@@ -350,6 +350,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
