@@ -277,11 +277,6 @@ st.markdown("""
         <div style="
         ...
     ">
-    <div style="
-        ...
-        transform: translateX(-2px); /* ←これを追加・調整！ */
-        ...
-    ">
         <span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
         <span>70</span><span>80</span><span>90</span><span>100</span><span>110</span><span>120</span>
     </div>
@@ -353,6 +348,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
