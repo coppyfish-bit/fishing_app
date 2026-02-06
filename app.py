@@ -195,12 +195,12 @@ is_new_place = False
 
 st.markdown("### 📍 釣り場")
 if detected_name:
-    st.success(f"✅ **{detected_name}** (付近にいます)")
+    st.success(f"✅ **{detected_name}** (付近の写真です)")
     final_place_name = detected_name
     final_group_id = detected_id
 else:
     st.warning("🆕 500m以内に登録地点がありません")
-    final_place_name = st.text_input("新規釣り場名を入力", placeholder="例: 苓北港 北堤防")
+    final_place_name = st.text_input("新規釣り場名を入力", placeholder="例: 〇〇港 堤防")
     final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 1
     is_new_place = True
 
@@ -220,6 +220,20 @@ if fish_in == "その他":
     fish_in = st.text_input("魚種名を手入力")
 
 current_len = st.session_state.get('len_slider', 00.0)
+st.markdown("""
+    <style>
+    /* スライダーの本体（棒部分）を太くする */
+    .stSlider [data-baseweb="slider"] {
+        height: 25px;
+    }
+    /* スライダーのつまみを大きくして掴みやすくする */
+    .stSlider [role="slider"] {
+        height: 35px;
+        width: 35px;
+        background-color: #1E90FF;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 st.markdown(f"### 全長: <span style='font-size:32px; color:#1E90FF;'>{current_len}</span> cm", unsafe_allow_html=True)
 length_in = st.slider("", 0.0, 120.0, 00.0, step=1.0, key="len_slider", label_visibility="collapsed")
 
@@ -287,5 +301,6 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
