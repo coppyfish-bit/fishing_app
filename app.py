@@ -276,7 +276,7 @@ st.markdown("""
         position: relative; 
         z-index: 10; 
         pointer-events: none; 
-        line-height: 100px;     /* バーの高さ(60px)と同じにすると中央にきます */
+        line-height: -100px;     /* バーの高さ(60px)と同じにすると中央にきます */
         font-family: 'Arial Black', sans-serif;
     ">
         <span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
@@ -347,6 +347,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
