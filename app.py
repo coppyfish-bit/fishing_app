@@ -266,7 +266,7 @@ st.markdown("""
         display: flex; 
         justify-content: space-between; 
       /* 左の数字を大きく、右の数字を小さくすると、全体が左に寄ります */
-        padding: 0 40px 0 40px;  /* 上 右 下 左 の順番です */
+        padding: 0 -40px 0 -40px;  /* 上 右 下 左 の順番です */
         font-size: 18px; 
         color: #FF4B4B;        /* 数字も赤に変更（お好みで） */
         font-weight: 900; 
@@ -348,6 +348,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
