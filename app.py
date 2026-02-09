@@ -12,49 +12,33 @@ from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2 import service_account
 
 def upload_to_drive(uploaded_file):
-    # 1. 認証情報の取得
     creds_dict = st.secrets["connections"]["gsheets"]
     creds = service_account.Credentials.from_service_account_info(creds_dict)
-    
-    # 2. サービス構築
     service = build('drive', 'v3', credentials=creds)
     
-    # 3. 保存先フォルダID
+    # 【重要】フォルダIDは今のままでOK
     folder_id = "1bmgT1IBAZd7U37dKkUBBoFx2TpR6BMXI" 
     
-    # 4. ファイルの設定
     file_metadata = {
         'name': f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uploaded_file.name}",
         'parents': [folder_id]
     }
     
-    # 5. ファイルをバイナリとして読み込み
     media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), 
                               mimetype='image/jpeg', 
                               resumable=True)
     
-    # 6. アップロード実行
+    # アップロード
     file = service.files().create(body=file_metadata, 
                                   media_body=media, 
                                   fields='id').execute()
-    
-    # 重要：ここで file_id を取得します
     file_id = file.get('id')
 
-    # 7. 所有権を自分に移す（容量制限回避のため）
-    try:
-        permission = {
-            'type': 'user',
-            'role': 'owner',
-            'emailAddress': 'coppy.fish@gmail.com'
-        }
-        # transferOwnership=True で所有権を完全に移譲
-        service.permissions().create(fileId=file_id, body=permission, transferOwnership=True).execute()
-    except Exception as e:
-        # 所有権移譲に失敗しても、リンク作成は試みるため警告のみ表示
-        st.warning(f"所有権の移譲に失敗しました（容量制限に注意）: {e}")
+    # 【重要】ファイルを「リンクを知っている人全員」に公開する設定
+    # これをしないと、タブ2で画像が表示されません
+    world_permission = {'type': 'anyone', 'role': 'viewer'}
+    service.permissions().create(fileId=file_id, body=world_permission).execute()
     
-    # 8. 画像の直リンクURLを返す
     return f"https://drive.google.com/uc?id={file_id}"
     
 def get_moon_age(dt):
@@ -547,6 +531,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
