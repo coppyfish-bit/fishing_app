@@ -378,20 +378,37 @@ with tab1:
         if not final_place_name:
             st.error("⚠️ 釣り場名を入力してください。")
         else:
-            # 1. 画像アップロード (Cloudinary)
-            drive_url = "" # 初期化
+          # 1. 画像アップロード (Cloudinary)
+            drive_url = "" 
             if uploaded_file:
-                with st.spinner('📸 画像をCloudinaryへアップロード中...'):
+                with st.spinner('📸 画像を処理中...'):
                     try:
-                        # 関数を介さず、ここで直接設定してアップロード（確実性を優先）
+                        import io
+                        from PIL import Image
+                        
+                        # 重要：ファイルの読み取り位置を先頭に戻す
+                        uploaded_file.seek(0)
+                        
+                        # 画像を開いて変換（念のためRGB変換して確実に有効なJPEGデータにする）
+                        input_image = Image.open(uploaded_file)
+                        rgb_image = input_image.convert('RGB')
+                        
+                        # メモリ上にJPEGとして書き出し
+                        img_byte_arr = io.BytesIO()
+                        rgb_image.save(img_byte_arr, format='JPEG', quality=85)
+                        img_data = img_byte_arr.getvalue()
+
+                        # Cloudinary設定
                         cloudinary.config(
                             cloud_name = st.secrets["cloudinary"]["cloud_name"],
                             api_key = st.secrets["cloudinary"]["api_key"],
                             api_secret = st.secrets["cloudinary"]["api_secret"],
                             secure = True
                         )
+                        
+                        # 変換後のデータをアップロード
                         upload_result = cloudinary.uploader.upload(
-                            uploaded_file,
+                            img_data,
                             folder = "fishing_app",
                             transformation = [
                                 {'width': 800, 'crop': "limit"},
@@ -400,9 +417,11 @@ with tab1:
                         )
                         drive_url = upload_result.get("secure_url")
                         st.success(f"✅ 画像のアップロードに成功しました！")
+                        
                     except Exception as e:
-                        st.error(f"❌ 画像アップロードに失敗しました: {e}")
-                        st.stop() # 失敗した場合は保存を中断
+                        # ここで具体的なエラー内容を表示
+                        st.error(f"❌ アップロード失敗: {e}")
+                        st.stop()
 
             # 2. データの解析と保存
             with st.spinner('📊 データを解析して保存中...'):
@@ -695,6 +714,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
