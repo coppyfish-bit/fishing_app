@@ -220,7 +220,7 @@ with tab2:
         conn.update(spreadsheet=url, data=updated_df)
         # キャッシュをクリアして、次の読み込み時に最新を取得させる
         st.cache_data.clear() 
-        if 'df' in st.session_state:
+            if 'df' in st.session_state:
             del st.session_state.df
         st.rerun()
             else:
@@ -513,6 +513,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
