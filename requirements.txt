@@ -9,3 +9,4 @@ st-gsheets-connection
 gspread
 google-api-python-client
 google-auth
+cloudinary
