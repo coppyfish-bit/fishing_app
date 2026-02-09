@@ -660,16 +660,20 @@ with tab3:
             selected_log_label = st.selectbox("過去の記録を選択して詳細を表示", ["選択してください"] + past_logs['list_label'].tolist())
             
             if selected_log_label != "選択してください":
+                # 選択された行を抽出
                 selected_row = past_logs[past_logs['list_label'] == selected_log_label].iloc[0]
+                
                 with st.container(border=True):
                     st.info(f"📋 過去ログ詳細: {selected_log_label}")
                     col_p_img, col_p_info = st.columns([1, 1])
-                    with col_img:
-                img_url = str(row.get('filename', '')).strip()
-                if img_url.startswith('http'):
-                    st.image(img_url, use_container_width=True) # ← ここに半角スペース4つ分を入れる
-                else:
-                    st.info("📷 画像なし") # ← ここも同様に字下げ
+                    
+                    with col_p_img:
+                        p_img_url = str(selected_row.get('filename', '')).strip()
+                        # インデントに注意：if の中はさらに4スペース下げる
+                        if p_img_url.startswith('http'):
+                            st.image(p_img_url, use_container_width=True)
+                        else:
+                            st.info("📷 画像なし")
                     
                     with col_p_info:
                         st.write(f"👤 **釣り人:** {selected_row.get(ANGLER_COL, '---')}")
@@ -680,6 +684,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
