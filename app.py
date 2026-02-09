@@ -503,6 +503,7 @@ with tab2:
                             angler_list, 
                             index=angler_list.index(current_angler) if current_angler in angler_list else 0,
                             key=f"edit_angler_{index}"
+                        )
                         
                         col_edit1, col_edit2 = st.columns(2)
                         with col_edit1:
@@ -528,7 +529,6 @@ with tab2:
                                 df.at[index, '場所'] = new_place
                                 df.at[index, 'サイズ(cm)'] = new_size
                                 df.at[index, 'ルアー'] = new_lure
-                                df.at[index, '天気'] = new_weather
                                 df.at[index, '風速(m/s)'] = new_wind_speed
                                 df.at[index, '風向'] = new_wind_dir
                                 df.at[index, '潮位'] = new_tide
@@ -639,6 +639,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
