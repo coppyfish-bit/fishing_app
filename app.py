@@ -213,11 +213,11 @@ with st.expander("場所を手動で修正・選択"):
         is_new_place = False
 
 # --- 魚種登録セクション ---
-st.subheader("🐟 魚種の情報")
+st.subheader("🐟 魚種")
 
 # 選択肢のリスト（よく釣れるものを入れておくと楽です）
 fish_options = ["スズキ", "ヒラスズキ", "ターポン", "タチウオ", "コチ", "ヒラメ","カサゴ", "クロダイ", "キビレ","キジハタ","マダイ","その他（手入力）"]
-
+selected_fish = st.selectbox("魚種を選択", fish_options)
 # 2. 手入力欄（常に表示）
 # placeholder を入れることで、何を書けばいいか分かりやすくします
 manual_fish_name = st.text_input("魚種名（手入力）", placeholder="例：アカハタ、または魚種の補足など")
@@ -366,6 +366,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
