@@ -440,6 +440,20 @@ with tab1:
 
                         st.success(f"🎉 保存しました！")
                         st.balloons()
+                        # --- 保存処理の締めくくり ---
+                        st.cache_data.clear()
+                        if "df" in st.session_state: del st.session_state.df
+                        st.rerun()
+
+                    except Exception as e:
+                        st.error(f"❌ スプレッドシート保存エラー: {e}")
+            # --- ここまでが try-except の終わり ---
+
+# ==========================================
+# タブ2: 釣果の修正・削除
+# ==========================================
+with tab2:
+    # ...
 
 # ==========================================
 # タブ2: 釣果の修正・削除
@@ -673,6 +687,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
