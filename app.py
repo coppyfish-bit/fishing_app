@@ -188,6 +188,23 @@ def find_nearest_place(current_lat, current_lon, master_df, threshold_m=500):
         return nearest_place['place_name'], nearest_place['group_id']
     return None, None
 
+def update_spreadsheet(df):
+    """
+    アプリ上で編集・削除した後のDataFrameをスプレッドシートに丸ごと上書きする
+    """
+    try:
+        # スプレッドシートを開く
+        sh = gc.open_by_key(st.secrets["gcp_service_account"]["spreadsheet_id"])
+        worksheet = sh.get_worksheet(0)
+        
+        # 既存の内容を消去して、新しいデータを書き込む
+        worksheet.clear()
+        # ヘッダーとデータをリスト形式に変換して書き込み
+        set_with_dataframe(worksheet, df)
+        st.success("スプレッドシートを更新しました！")
+    except Exception as e:
+        st.error(f"更新に失敗しました: {e}")
+
 
 # --- 3. 接続の初期化 (ここで conn を作る) ---
 try:
@@ -462,38 +479,47 @@ with tab2:
                 
               # --- 履歴表示のメイン処理 ---
                 try:
-                    # タイトルに基本情報を表示
                     expander_label = f"📌 {row['date']} | {row['魚種']} | {row['場所']}"
                     
-                    with st.expander(expander_label, expanded=is_expanded):
-                        # 画像の表示（withより一段右へ）
+                    with st.expander(expander_label):
+                        # --- 画像表示 ---
                         img_url = str(row.get('filename', ''))
                         if img_url and img_url.strip():
                             st.image(img_url, use_container_width=True)
-                        else:
-                            st.caption("📷 画像データがありません")
                         
-                        # 詳細情報の表示
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            st.write(f"📏 **サイズ:** {row.get('サイズ(cm)', '---')} cm")
-                            st.write(f"🎣 **ルアー:** {row.get('ルアー', '---')}")
-                            st.write(f"📍 **場所:** {row.get('場所', '---')}")
-                        with c2:
-                            st.write(f"☀️ **天気:** {row.get('天気', '---')} ({row.get('風向', '---')} {row.get('風速(m/s)', '0')}m)")
-                            st.write(f"🌊 **潮位:** {row.get('潮位', '---')}")
-                            st.write(f"☔ **降水:** {row.get('降水量(mm)', '0')} mm")
+                        # --- 修正用入力フォーム ---
+                        # 既存のデータを初期値として入力欄を作成
+                        new_fish = st.text_input("魚種を修正", value=row['魚種'], key=f"edit_fish_{index}")
+                        new_place = st.text_input("場所を修正", value=row['場所'], key=f"edit_place_{index}")
+                        new_size = st.number_input("サイズ(cm)", value=float(row.get('サイズ(cm)', 0)), key=f"edit_size_{index}")
                         
-                        st.write(f"💬 **備考:** {row.get('備考', '---')}")
+                        # ... 他の項目（天気、ルアーなど）も同様に追加可能 ...
+
+                        col_btn1, col_btn2 = st.columns(2)
                         
-                        # 削除ボタン
-                        if st.button("この記録を削除", key=f"del_{index}"):
-                            st.warning("削除機能はスプレッドシートから直接行ってください")
-                            
+                        with col_btn1:
+                            if st.button("🆙 修正を保存", key=f"update_{index}"):
+                                # DataFrameの該当行を書き換え
+                                df.at[index, '魚種'] = new_fish
+                                df.at[index, '場所'] = new_place
+                                df.at[index, 'サイズ(cm)'] = new_size
+                                # スプレッドシートへ上書き
+                                update_spreadsheet(df)
+                                st.rerun() # 画面を更新して反映
+                        
+                        with col_btn2:
+                            if st.button("🗑️ この記録を削除", key=f"del_{index}"):
+                                # DataFrameからこの行を削除
+                                df = df.drop(index)
+                                # スプレッドシートへ上書き
+                                update_spreadsheet(df)
+                                st.rerun()
+
                 except Exception as e:
-                    st.error(f"個別の履歴表示中にエラーが発生しました: {e}")
+                    st.error(f"操作中にエラーが発生しました: {e}")
     except Exception as e:
         st.error(f"アプリの実行中にエラーが発生しました: {e}")
+
 
 
 
