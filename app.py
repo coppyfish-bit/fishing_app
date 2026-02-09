@@ -212,49 +212,51 @@ def convert_google_drive_url(url):
     
 with tab2:
     st.subheader("📸 直近5件の履歴（詳細修正・削除）")
-    
+
+    # API制限対策：手動リロードボタン
+    if st.button("🔄 最新の履歴に更新"):
+        st.cache_data.clear()
+        if 'df' in st.session_state:
+            del st.session_state.df
+        st.rerun()
+
     try:
+        # 共通部分で読み込んだ session_state のデータを使用
         edit_df = st.session_state.df
         
-            # 最新5件を抽出して逆順に
+        if edit_df is None or edit_df.empty:
+            st.info("履歴がまだありません。")
+        else:
+            # 【ここから重要】tryの直下のインデントを正しく揃える
             target_df = edit_df.tail(5).copy().iloc[::-1]
             
             for index, row in target_df.iterrows():
                 # タイトルに基本情報を表示
                 with st.expander(f"📌 {row['date']} | {row['魚種']} | {row['場所']}"):
                     
-                    # --- 1. 画像のプレビュー ---
-                    # 注意: filenameから画像を表示するには、ストレージ(S3/GDRIVE等)との連携が必要ですが、
-                    # ここでは一旦「登録時のファイル名」を表示し、必要ならプレビュー枠を設けます。
-                    st.write(f"🖼️ ファイル名: {row['filename']}")
-                    # もし画像URLがスプレッドシートにある場合は st.image(row['url']) が使えます
                     # --- 1. 画像の直接表示 ---
-                    if pd.notnull(row['filename']) and "http" in row['filename']:
-                        direct_url = convert_google_drive_url(row['filename'])
-                        try:
-                            # 画像を表示（横幅いっぱいに設定）
-                            st.image(direct_url, caption=f"登録時の写真: {row['魚種']}", use_container_width=True)
-                        except:
-                            st.warning("⚠️ 画像の読み込みに失敗しました。共有設定が「リンクを知っている全員」になっているか確認してください。")
-                    
-                    # --- 2. 修正項目のレイアウト ---
-                    # (以下、以前提案した修正項目コードを継続)
+                    # filenameにURLが入っている場合のみ表示を試みる
+                    img_url = str(row.get('filename', ''))
+                    if "http" in img_url:
+                        direct_url = convert_google_drive_url(img_url)
+                        st.image(direct_url, caption=f"登録写真: {row['魚種']}", use_container_width=True)
                     
                     # --- 2. 修正項目のレイアウト ---
                     col1, col2 = st.columns(2)
-                    
                     with col1:
                         u_fish = st.text_input("🐟 魚種", value=row['魚種'], key=f"f_{index}")
                         u_place = st.text_input("📍 場所", value=row['場所'], key=f"p_{index}")
-                        # 0.5cm刻みのサイズ修正
                         u_size = st.number_input("📏 サイズ(cm)", value=float(row['全長_cm']), step=0.5, key=f"s_{index}")
                         u_lure = st.text_input("🏹 ルアー・仕掛け", value=row['ルアー'], key=f"l_{index}")
 
                     with col2:
-                        u_tide = st.number_input("🌊 潮位(cm)", value=int(row['潮位_cm']) if pd.notnull(row['潮位_cm']) else 0, key=f"t_{index}")
-                        u_temp = st.number_input("🌡️ 気温(℃)", value=float(row['気温']) if pd.notnull(row['気温']) else 0.0, step=0.1, key=f"te_{index}")
+                        # 潮位や気温が空(NaN)の場合の対策
+                        t_val = int(row['潮位_cm']) if pd.notnull(row['潮位_cm']) else 0
+                        te_val = float(row['気温']) if pd.notnull(row['気温']) else 0.0
+                        
+                        u_tide = st.number_input("🌊 潮位(cm)", value=t_val, key=f"t_{index}")
+                        u_temp = st.number_input("🌡️ 気温(℃)", value=te_val, step=0.1, key=f"te_{index}")
                         u_wind = st.text_input("💨 風情報", value=f"{row['風向']} {row['風速']}m/s", key=f"w_{index}")
-                        # 風向・風速は個別に分けることも可能ですが、ここでは簡易的に表示
 
                     u_memo = st.text_area("📝 メモ", value=row['備考'], key=f"m_{index}")
 
@@ -271,17 +273,24 @@ with tab2:
                         edit_df.at[index, '備考'] = u_memo
                         
                         conn.update(spreadsheet=url, data=edit_df)
-                        st.success("修正内容をスプレッドシートに反映しました！")
+                        # キャッシュを消してリロード
+                        st.cache_data.clear()
+                        if 'df' in st.session_state:
+                            del st.session_state.df
+                        st.success("修正を反映しました！")
                         st.rerun()
 
                     if b_col2.button("🗑️ データを削除", key=f"del_btn_{index}", use_container_width=True):
                         edit_df = edit_df.drop(index)
                         conn.update(spreadsheet=url, data=edit_df)
+                        st.cache_data.clear()
+                        if 'df' in st.session_state:
+                            del st.session_state.df
                         st.warning("データを削除しました。")
                         st.rerun()
 
     except Exception as e:
-        st.error(f"エラーが発生しました: {e}")
+        st.error(f"履歴の表示中にエラーが発生しました: {e}")
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
@@ -505,6 +514,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
