@@ -231,10 +231,10 @@ tab1, tab2 = st.tabs(["📝 釣果登録", "🔧 履歴の修正・削除"])
 with tab1:
     # (ここに今までの写真アップロード〜保存処理のコードをすべて入れます)
     try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-        df = conn.read(spreadsheet=url, ttl="5m")
-        m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
+            conn = st.connection("gsheets", type=GSheetsConnection)
+            url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+            df = conn.read(spreadsheet=url, ttl="5m")
+            m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
 except:
     st.error("スプレッドシート接続エラー"); st.stop()
 
@@ -558,6 +558,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
