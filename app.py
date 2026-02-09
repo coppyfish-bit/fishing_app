@@ -460,28 +460,32 @@ with tab2:
                 # 最初から開いておくかどうかを判定（0〜4番目、つまり直近5件なら True）
                 is_expanded = True if i < 5 else False
                 
-              # タイトルに基本情報を表示
-                expander_label = f"📌 {row['date']} | {row['魚種']} | {row['場所']}"
-                
-                with st.expander(expander_label, expanded=is_expanded):
-                    # 画像の表示
-                    img_url = str(row.get('filename', ''))
-                    if img_url and img_url.strip():
-                        st.image(img_url, caption=f"登録写真: {row['魚種']}", use_container_width=True)
-                    else:
-                        st.caption("📷 画像データがありません")
-
-                    # 詳細情報の表示（col1を使わず、そのまま箇条書きにします）
-                    st.write(f"**サイズ:** {row.get('サイズ(cm)', '---')} cm")
-                    st.write(f"**仕掛け:** {row.get('仕掛け', '---')}")
-                    st.write(f"**メモ:** {row.get('備考', '---')}")
+              # --- 履歴表示のメイン処理 ---
+                try:
+                    # タイトルに基本情報を表示
+                    expander_label = f"📌 {row['date']} | {row['魚種']} | {row['場所']}"
                     
-                    # 削除ボタン（必要であれば）
-                    if st.button("この記録を削除", key=f"del_{index}"):
-                        st.warning("削除機能はスプレッドシートから直接行ってください")
-                    except Exception as e:
-        st.error(f"履歴の表示中にエラーが発生しました: {e}")
+                    with st.expander(expander_label, expanded=is_expanded):
+                        # 画像の表示
+                        img_url = str(row.get('filename', ''))
+                        if img_url and img_url.strip():
+                            st.image(img_url, caption=f"登録写真: {row['魚種']}", use_container_width=True)
+                        else:
+                            st.caption("📷 画像データがありません")
+
+                        # 詳細情報の表示
+                        st.write(f"**サイズ:** {row.get('サイズ(cm)', '---')} cm")
+                        st.write(f"**仕掛け:** {row.get('仕掛け', '---')}")
+                        st.write(f"**メモ:** {row.get('備考', '---')}")
                         
+                        # 削除ボタン
+                        if st.button("この記録を削除", key=f"del_{index}"):
+                            st.warning("削除機能はスプレッドシートから直接行ってください")
+                            
+                except Exception as e:
+                    st.error(f"個別の履歴表示中にエラーが発生しました: {e}")
+                        
+
 
 
 
