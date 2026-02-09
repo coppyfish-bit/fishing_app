@@ -161,15 +161,11 @@ def find_nearest_place(current_lat, current_lon, master_df, threshold_m=500):
     return None, None
 
 
-# --- 2. 接続準備（必ずタブやUIの前に書く！） ---
-# ここで conn を作っておけば、どのタブの中でも conn が使えます
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    # 最初の読み込み
+# --- 2. 接続準備（共通部分） ---
 if "df" not in st.session_state:
     # 最初に1回だけ読み込んで Session State に保存する
     st.session_state.df = conn.read(spreadsheet=url, ttl="1m")
+
 # タブ2の中では、APIを叩かずに Session State のデータを見る
 with tab2:
     latest_df = st.session_state.df.tail(5).copy().iloc[::-1]
@@ -505,6 +501,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
