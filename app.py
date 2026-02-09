@@ -161,20 +161,28 @@ def find_nearest_place(current_lat, current_lon, master_df, threshold_m=500):
     return None, None
 
 
-# --- 2. 接続準備（共通部分） ---
-if "df" not in st.session_state:
-    # 最初に1回だけ読み込んで Session State に保存する
-    st.session_state.df = conn.read(spreadsheet=url, ttl="1m")
+# --- 3. 接続の初期化 (ここで conn を作る) ---
+try:
+    # 接続オブジェクトの作成
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    
+    # 【節約術】Session State を使って読み込み回数を減らす
+    # 1分間（60s）はAPIを叩かず、手元のデータ(session_state)を使います
+    if "df" not in st.session_state:
+        st.session_state.df = conn.read(spreadsheet=url, ttl="60s")
+    
+    # 場所マスターも同様に保持
+    if "m_df" not in st.session_state:
+        st.session_state.m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="60s")
 
-# タブ2の中では、APIを叩かずに Session State のデータを見る
-with tab2:
-    latest_df = st.session_state.df.tail(5).copy().iloc[::-1]
-    # ... 編集処理 ...
-    if update_button:
-        # 更新した時だけ API を叩く
-        conn.update(spreadsheet=url, data=new_df)
-        st.session_state.df = new_df # 手元のデータも更新
-        st.rerun()
+    # 共通変数として使いやすくしておく
+    df = st.session_state.df
+    m_df = st.session_state.m_df
+
+except Exception as e:
+    st.error(f"接続の初期化に失敗しました: {e}")
+    st.stop()  # ここで止めれば、これ以降の NameError は起きません
     
 # --- 2. メイン UI 制御 ---
 st.set_page_config(page_title="Fishing AI Log", layout="centered")
@@ -501,6 +509,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
