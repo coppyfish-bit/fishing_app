@@ -460,13 +460,10 @@ with tab2:
                 # 最初から開いておくかどうかを判定（0〜4番目、つまり直近5件なら True）
                 is_expanded = True if i < 5 else False
                 
-                # タイトルに基本情報を表示
+              # タイトルに基本情報を表示
                 expander_label = f"📌 {row['date']} | {row['魚種']} | {row['場所']}"
                 
                 with st.expander(expander_label, expanded=is_expanded):
-
-                   # --- タブ2の画像表示部分（これだけで Cloudinary も Base64 も両方表示できます） ---
-                    with st.expander(expander_label, expanded=is_expanded):
                     # --- タブ2の画像表示部分（ここから下を一段右へずらします） ---
                     img_url = str(row.get('filename', ''))
                     if img_url:
@@ -525,6 +522,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
