@@ -496,7 +496,7 @@ with tab2:
                         new_place = st.text_input("場所を修正", value=str(row.get('場所', '')), key=f"edit_place_{index}")
                         # --- 釣り人の修正欄を追加 ---
                         # リストにご友人の名前も入れてください
-                        angler_list = ["あなたの名前", "ご友人の名前"]
+                        angler_list = ["長元", "川口", "山川"]
                         current_angler = row.get('釣り人', 'あなたの名前')
                         new_angler = st.selectbox(
                             "👤 釣り人を修正", 
@@ -639,6 +639,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
