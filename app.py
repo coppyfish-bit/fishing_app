@@ -235,8 +235,8 @@ with tab1:
             url = st.secrets["connections"]["gsheets"]["spreadsheet"]
             df = conn.read(spreadsheet=url, ttl="5m")
             m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
-except:
-        st.error("スプレッドシート接続エラー"); st.stop()
+    except:
+            st.error("スプレッドシート接続エラー"); st.stop()
 
 uploaded_file = st.file_uploader("📸 写真を選択", type=['jpg', 'jpeg'], key="main_uploader")
 auto_lat, auto_lon, default_dt = 32.5, 130.0, datetime.now()
@@ -558,6 +558,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
