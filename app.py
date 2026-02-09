@@ -191,6 +191,14 @@ with tab1:
 # ==========================================
 # タブ2: 釣果の修正・削除
 # ==========================================
+# --- Googleドライブのリンクを直接表示用に変換する関数 ---
+def convert_google_drive_url(url):
+    # 通常の表示用URLを直接参照用URLに書き換える
+    if "drive.google.com" in url:
+        file_id = url.split('/')[-2] if "/view" in url else url.split('id=')[-1]
+        return f"https://lh3.googleusercontent.com/u/0/d/{file_id}"
+    return url
+    
 with tab2:
     st.subheader("📸 直近5件の履歴（詳細修正・削除）")
     
@@ -213,6 +221,17 @@ with tab2:
                     # ここでは一旦「登録時のファイル名」を表示し、必要ならプレビュー枠を設けます。
                     st.write(f"🖼️ ファイル名: {row['filename']}")
                     # もし画像URLがスプレッドシートにある場合は st.image(row['url']) が使えます
+                    # --- 1. 画像の直接表示 ---
+                    if pd.notnull(row['filename']) and "http" in row['filename']:
+                        direct_url = convert_google_drive_url(row['filename'])
+                        try:
+                            # 画像を表示（横幅いっぱいに設定）
+                            st.image(direct_url, caption=f"登録時の写真: {row['魚種']}", use_container_width=True)
+                        except:
+                            st.warning("⚠️ 画像の読み込みに失敗しました。共有設定が「リンクを知っている全員」になっているか確認してください。")
+                    
+                    # --- 2. 修正項目のレイアウト ---
+                    # (以下、以前提案した修正項目コードを継続)
                     
                     # --- 2. 修正項目のレイアウト ---
                     col1, col2 = st.columns(2)
@@ -479,6 +498,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
