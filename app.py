@@ -466,13 +466,14 @@ with tab2:
                 with st.expander(expander_label, expanded=is_expanded):
 
                    # --- タブ2の画像表示部分（これだけで Cloudinary も Base64 も両方表示できます） ---
-                img_url = str(row.get('filename', ''))
-                if img_url:
-                    st.image(img_url, caption=f"登録写真: {row['魚種']}", use_container_width=True)
-                else:
-                    st.caption("📷 画像データがありません")
-                    # --- 2. 修正項目のレイアウト ---
-                    col1, col2 = st.columns(2)
+                    with st.expander(expander_label, expanded=is_expanded):
+                    # --- タブ2の画像表示部分（ここから下を一段右へずらします） ---
+                    img_url = str(row.get('filename', ''))
+                    if img_url:
+                        # 画像URL（Cloudinary）またはBase64データがあれば表示
+                        st.image(img_url, caption=f"登録写真: {row['魚種']}", use_container_width=True)
+                    else:
+                        st.caption("📷 画像データがありません")
                     with col1:
                         u_fish = st.text_input("🐟 魚種", value=row['魚種'], key=f"f_{index}")
                         u_place = st.text_input("📍 場所", value=row['場所'], key=f"p_{index}")
@@ -524,6 +525,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
