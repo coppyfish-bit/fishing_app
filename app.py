@@ -550,26 +550,41 @@ with tab3:
     st.subheader("🖼️ 釣果フォトギャラリー")
 
     if 'df' in st.session_state and not st.session_state.df.empty:
+        # 元のデータを壊さないようにコピー
         df_gallery = st.session_state.df.copy()
 
-        # --- サイドバーまたは上部にフィルターを設置 ---
+        # 列名の定義（スプレッドシートに合わせて固定）
+        SIZE_COL = "全長_cm"
+        FISH_COL = "魚種"
+
         st.write("🔍 絞り込み条件")
         col_f1, col_f2 = st.columns(2)
         
         with col_f1:
             # 魚種で絞り込み
-            unique_fish = ["すべて"] + sorted(df_gallery["魚種"].unique().tolist())
-            select_fish = st.selectbox("魚種を選択", unique_fish)
+            if FISH_COL in df_gallery.columns:
+                unique_fish = ["すべて"] + sorted(df_gallery[FISH_COL].dropna().unique().tolist())
+                select_fish = st.selectbox("魚種を選択", unique_fish, key="gallery_fish_select")
+            else:
+                st.warning(f"列 '{FISH_COL}' が見つかりません")
+                select_fish = "すべて"
         
         with col_f2:
             # サイズで絞り込み
-            min_size = st.number_input("◯◯cm以上を表示", min_value=0.0, step=1.0, value=0.0)
+            min_size = st.number_input("◯◯cm以上を表示", min_value=0.0, step=1.0, value=0.0, key="gallery_size_input")
 
-        # フィルタリング実行
+        # --- フィルタリング実行 ---
+        # 1. 魚種の絞り込み
         if select_fish != "すべて":
-            df_gallery = df_gallery[df_gallery["魚種"] == select_fish]
+            df_gallery = df_gallery[df_gallery[FISH_COL] == select_fish]
         
-        df_gallery = df_gallery[df_gallery["サイズ(cm)"].astype(float) >= min_size]
+        # 2. サイズの絞り込み（全長_cm 列がある場合のみ）
+        if SIZE_COL in df_gallery.columns:
+            # 数字以外の文字が含まれていても強制的に数字に変換（エラーはNaNにする）
+            df_gallery[SIZE_COL] = pd.to_numeric(df_gallery[SIZE_COL], errors='coerce').fillna(0)
+            df_gallery = df_gallery[df_gallery[SIZE_COL] >= min_size]
+        else:
+            st.warning(f"列 '{SIZE_COL}' が見つかりません。スプレッドシートの1行目を確認してください。")
 
         # 新しい順に並び替え、直近10件を取得
         df_gallery = df_gallery.iloc[::-1].head(10)
@@ -580,26 +595,27 @@ with tab3:
             # ギャラリー表示
             for idx, row in df_gallery.iterrows():
                 st.write("---")
-                col_img, col_info = st.columns([1, 1]) # 画面を左右に分割
+                col_img, col_info = st.columns([1, 1])
                 
                 with col_img:
                     img_url = str(row.get('filename', ''))
-                    if img_url and img_url.strip():
+                    if img_url and img_url.strip() and img_url != 'None':
                         st.image(img_url, use_container_width=True)
                     else:
                         st.caption("📷 画像なし")
                 
                 with col_info:
-                    st.markdown(f"### {row['魚種']} ({row['サイズ(cm)']}cm)")
-                    st.write(f"📅 **日付:** {row['date']}")
+                    current_size = row.get(SIZE_COL, '---')
+                    st.markdown(f"### {row.get(FISH_COL, '不明')} ({current_size}cm)")
+                    st.write(f"📅 **日付:** {row.get('date', '---')}")
                     st.write(f"📍 **場所:** {row.get('場所', '---')}")
                     st.write(f"🌊 **潮位:** {row.get('潮位', '---')}")
-                    st.write(f"☀️ **天気:** {row.get('天気', '---')} ({row.get('風速(m/s)', '0')}m)")
+                    st.write(f"☀️ **天気:** {row.get('天気', '---')}")
                     if row.get('ルアー'):
                         st.write(f"🎣 **ルアー:** {row['ルアー']}")
 
     else:
-        st.info("履歴がまだありません。まずは釣果を登録しましょう！")
+        st.info("履歴がまだありません。")
 
 
 
