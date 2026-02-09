@@ -7,33 +7,34 @@ from datetime import datetime, timedelta
 import requests
 import math
 import io
+import cloudinary
+import cloudinary.uploader
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2 import service_account
 
 def upload_to_drive(uploaded_file):
-    import base64
-    from PIL import Image
-    import io
-
-    # 1. 画像を開く
-    img = Image.open(uploaded_file)
+    # Secretsから設定を読み込み
+    cloudinary.config(
+        cloud_name = st.secrets["cloudinary"]["cloud_name"],
+        api_key = st.secrets["cloudinary"]["api_key"],
+        api_secret = st.secrets["cloudinary"]["api_secret"],
+        secure = True
+    )
     
-    # 2. RGB形式に変換（PNGなどの透明度情報を消して軽くする）
-    img = img.convert("RGB")
+    # Cloudinaryへアップロード（自動でリサイズ＆最適化）
+    # transformationで横幅を800pxに調整しつつ、画質を自動最適化
+    response = cloudinary.uploader.upload(
+        uploaded_file,
+        folder = "fishing_app",
+        transformation = [
+            {'width': 800, 'crop': "limit"},
+            {'quality': "auto", 'fetch_format': "auto"}
+        ]
+    )
     
-    # 3. 【さらに軽量化】長辺を500pxに制限
-    # スマホの画面で見る分には500pxあれば十分綺麗です
-    img.thumbnail((500, 500)) 
-    
-    # 4. 【さらに軽量化】画質（quality）を50に落とし、最適化（optimize）を有効に
-    buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=50, optimize=True) 
-    
-    # 5. 文字列に変換
-    base64_img = base64.b64encode(buffer.getvalue()).decode('utf-8')
-    
-    return f"data:image/jpeg;base64,{base64_img}"
+    # 保存された画像のURLを返す（スプレッドシートにはこの短いURLが書かれます）
+    return response['secure_url']
     
 def get_moon_age(dt):
     base_new_moon = datetime(2023, 1, 22, 5, 53)
@@ -464,15 +465,12 @@ with tab2:
                 
                 with st.expander(expander_label, expanded=is_expanded):
 
-                    # --- タブ2の画像表示部分 ---
-                    # この下の行からすべて、withより右側（半角スペース4つ分）から書き始めます
-                    img_data = str(row.get('filename', ''))
-                    if img_data.startswith("data:image"):
-                        st.image(img_data, caption=f"登録写真: {row['魚種']}", use_container_width=True)
-                    elif "http" in img_data:
-                        st.image(img_data.replace("open?", "uc?"), caption=f"登録写真: {row['魚種']}", use_container_width=True)
-                    else:
-                        st.caption("📷 画像データがありません")
+                   # --- タブ2の画像表示部分（これだけで Cloudinary も Base64 も両方表示できます） ---
+                img_url = str(row.get('filename', ''))
+                if img_url:
+                    st.image(img_url, caption=f"登録写真: {row['魚種']}", use_container_width=True)
+                else:
+                    st.caption("📷 画像データがありません")
                     # --- 2. 修正項目のレイアウト ---
                     col1, col2 = st.columns(2)
                     with col1:
@@ -526,6 +524,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
