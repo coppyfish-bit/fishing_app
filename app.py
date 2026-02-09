@@ -418,7 +418,7 @@ with tab1:
                         }
 
                         # データフレームの更新
-                        cols = ["filename", "datetime", "date", "time", "lat", "lon", "気温", "風速", "風向", "降水量", "潮位_cm", "月齢", "潮名", "次の満潮まで_分", "次の干潮まで_分", "直前の満潮_時刻", "直前の干潮_時刻", "潮位フェーズ", "場所", "魚種", "全長_cm", "ルアー", "備考", "group_id", "観測所"]
+                        cols = ["filename", "datetime", "date", "time", "lat", "lon", "気温", "風速", "風向", "降水量", "潮位_cm", "月齢", "潮名", "次の満潮まで_分", "次の干潮まで_分", "直前の満潮_時刻", "直前の干潮_時刻", "潮位フェーズ", "場所", "魚種", "全長_cm", "ルアー", "備考", "group_id", "観測所", "釣り人"]
                         new_row = pd.DataFrame([save_data])[cols]
                         updated_df = pd.concat([df, new_row], ignore_index=True)
                         conn.update(spreadsheet=url, data=updated_df)
@@ -627,11 +627,12 @@ with tab3:
             st.write("---")
             col_img, col_info = st.columns([1, 1])
             with col_img:
-                img_url = str(row.get('filename', ''))
-                if img_url and img_url.strip() and img_url != 'None':
+                img_url = str(row.get('filename', '')).strip()
+                # 「http」から始まる正規のURLがある場合のみ表示
+                if img_url.startswith('http'):
                     st.image(img_url, use_container_width=True)
                 else:
-                    st.caption("📷 画像なし")
+                    st.info("📷 画像なし")
             with col_info:
                 st.markdown(f"### {row.get(FISH_COL, '不明')} ({row.get(SIZE_COL, '---')}cm)")
                 st.write(f"👤 **釣り人:** {row.get(ANGLER_COL, '---')}")
@@ -664,9 +665,12 @@ with tab3:
                     st.info(f"📋 過去ログ詳細: {selected_log_label}")
                     col_p_img, col_p_info = st.columns([1, 1])
                     with col_p_img:
-                        p_img_url = str(selected_row.get('filename', ''))
-                        if p_img_url and p_img_url.strip() and p_img_url != 'None':
-                            st.image(p_img_url, use_container_width=True)
+                        img_url = str(row.get('filename', '')).strip()
+                # 「http」から始まる正規のURLがある場合のみ表示
+                        if img_url.startswith('http'):
+                        st.image(img_url, use_container_width=True)
+                else:
+                    st.info("📷 画像なし")
                     with col_p_info:
                         st.write(f"👤 **釣り人:** {selected_row.get(ANGLER_COL, '---')}")
                         st.write(f"🌊 **潮汐:** {selected_row.get(TIDE_NAME_COL, '---')} / {selected_row.get(PHASE_COL, '---')}")
@@ -676,6 +680,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
