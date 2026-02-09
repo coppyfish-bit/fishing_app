@@ -14,7 +14,8 @@ from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2 import service_account
 
 def upload_to_drive(uploaded_file):
-    # Secretsから設定を読み込み
+    # Secretsから設定を読み込み（関数を呼ぶたびに確実に設定）
+    import cloudinary.uploader # 追加
     cloudinary.config(
         cloud_name = st.secrets["cloudinary"]["cloud_name"],
         api_key = st.secrets["cloudinary"]["api_key"],
@@ -22,8 +23,7 @@ def upload_to_drive(uploaded_file):
         secure = True
     )
     
-    # Cloudinaryへアップロード（自動でリサイズ＆最適化）
-    # transformationで横幅を800pxに調整しつつ、画質を自動最適化
+    # Cloudinaryへアップロード
     response = cloudinary.uploader.upload(
         uploaded_file,
         folder = "fishing_app",
@@ -32,6 +32,7 @@ def upload_to_drive(uploaded_file):
             {'quality': "auto", 'fetch_format': "auto"}
         ]
     )
+    return response['secure_url']
     
     # 保存された画像のURLを返す（スプレッドシートにはこの短いURLが書かれます）
     return response['secure_url']
@@ -684,6 +685,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
