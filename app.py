@@ -461,16 +461,17 @@ with tab2:
                 
                 with st.expander(expander_label, expanded=is_expanded):
 
-                    # --- タブ2の画像表示部分をこれに差し替え ---
-                    img_data = str(row.get('filename', ''))
-                    if img_data.startswith("data:image"):
-                    # Base64データがある場合はそれを表示
-                    st.image(img_data, caption=f"登録写真: {row['魚種']}", use_container_width=True)
-                    elif "http" in img_data:
-                    # 以前のドライブURLがある場合も一応残しておく
-                            st.image(img_data.replace("open?", "uc?"), caption=f"登録写真: {row['魚種']}", use_container_width=True)
-                    else:
-                            st.caption("📷 画像データがありません")
+                    # --- タブ2の画像表示部分 ---
+        img_data = str(row.get('filename', ''))
+        if img_data.startswith("data:image"):
+            # ifの後は、必ずこのように「4つスペース」で下げます
+            st.image(img_data, caption=f"登録写真: {row['魚種']}", use_container_width=True)
+        elif "http" in img_data:
+            # elifの後も同様に下げます
+            st.image(img_data.replace("open?", "uc?"), caption=f"登録写真: {row['魚種']}", use_container_width=True)
+        else:
+            # elseの後も同様です
+            st.caption("📷 画像データがありません")
 
                     # --- 2. 修正項目のレイアウト ---
                     col1, col2 = st.columns(2)
@@ -525,6 +526,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
