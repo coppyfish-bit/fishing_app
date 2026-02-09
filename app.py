@@ -464,65 +464,21 @@ with tab2:
                 expander_label = f"📌 {row['date']} | {row['魚種']} | {row['場所']}"
                 
                 with st.expander(expander_label, expanded=is_expanded):
-                    # --- タブ2の画像表示部分（ここから下を一段右へずらします） ---
+                    # 画像の表示
                     img_url = str(row.get('filename', ''))
-                    if img_url:
-                        # 画像URL（Cloudinary）またはBase64データがあれば表示
+                    if img_url and img_url.strip():
                         st.image(img_url, caption=f"登録写真: {row['魚種']}", use_container_width=True)
                     else:
                         st.caption("📷 画像データがありません")
-                    with col1:
-                        u_fish = st.text_input("🐟 魚種", value=row['魚種'], key=f"f_{index}")
-                        u_place = st.text_input("📍 場所", value=row['場所'], key=f"p_{index}")
-                        u_size = st.number_input("📏 サイズ(cm)", value=float(row['全長_cm']), step=0.5, key=f"s_{index}")
-                        u_lure = st.text_input("🏹 ルアー・仕掛け", value=row['ルアー'], key=f"l_{index}")
 
-                    with col2:
-                        # 潮位や気温が空(NaN)の場合の対策
-                        t_val = int(row['潮位_cm']) if pd.notnull(row['潮位_cm']) else 0
-                        te_val = float(row['気温']) if pd.notnull(row['気温']) else 0.0
-                        
-                        u_tide = st.number_input("🌊 潮位(cm)", value=t_val, key=f"t_{index}")
-                        u_temp = st.number_input("🌡️ 気温(℃)", value=te_val, step=0.1, key=f"te_{index}")
-                        
-                        # 風情報は表示のみ（またはテキスト入力）
-                        wind_val = f"{row['風向']} {row['風速']}m/s" if pd.notnull(row['風向']) else "情報なし"
-                        st.text_input("💨 風情報（参考）", value=wind_val, key=f"w_{index}", disabled=True)
-
-                    u_memo = st.text_area("📝 メモ", value=row['備考'], key=f"m_{index}")
-
-                    # --- 3. 更新・削除ボタン ---
-                    b_col1, b_col2 = st.columns(2)
+                    # 詳細情報の表示（col1を使わず、そのまま箇条書きにします）
+                    st.write(f"**サイズ:** {row.get('サイズ(cm)', '---')} cm")
+                    st.write(f"**仕掛け:** {row.get('仕掛け', '---')}")
+                    st.write(f"**メモ:** {row.get('備考', '---')}")
                     
-                    if b_col1.button("🆙 修正を保存", key=f"up_btn_{index}", use_container_width=True, type="primary"):
-                        edit_df.at[index, '魚種'] = u_fish
-                        edit_df.at[index, '場所'] = u_place
-                        edit_df.at[index, '全長_cm'] = u_size
-                        edit_df.at[index, 'ルアー'] = u_lure
-                        edit_df.at[index, '潮位_cm'] = u_tide
-                        edit_df.at[index, '気温'] = u_temp
-                        edit_df.at[index, '備考'] = u_memo
-                        
-                        conn.update(spreadsheet=url, data=edit_df)
-                        st.cache_data.clear()
-                        if 'df' in st.session_state:
-                            del st.session_state.df
-                        st.success("修正を反映しました！")
-                        st.rerun()
-
-                    if b_col2.button("🗑️ データを削除", key=f"del_btn_{index}", use_container_width=True):
-                        # 削除確認（簡易）
-                        edit_df = edit_df.drop(index)
-                        conn.update(spreadsheet=url, data=edit_df)
-                        st.cache_data.clear()
-                        if 'df' in st.session_state:
-                            del st.session_state.df
-                        st.warning("データを削除しました。")
-                        st.rerun()
-
-    except Exception as e:
-        st.error(f"履歴の表示中にエラーが発生しました: {e}")
-
+                    # 削除ボタン（必要であれば）
+                    if st.button("この記録を削除", key=f"del_{index}"):
+                        st.warning("削除機能はスプレッドシートから直接行ってください")
 
 
 
