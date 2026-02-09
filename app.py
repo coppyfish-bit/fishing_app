@@ -160,6 +160,19 @@ def find_nearest_place(current_lat, current_lon, master_df, threshold_m=500):
         return nearest_place['place_name'], nearest_place['group_id']
     return None, None
 
+
+# --- 2. 接続準備（必ずタブやUIの前に書く！） ---
+# ここで conn を作っておけば、どのタブの中でも conn が使えます
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    # 最初の読み込み
+    df = conn.read(spreadsheet=url, ttl="5m")
+    m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
+except Exception as e:
+    st.error(f"接続エラー: {e}")
+    st.stop()
+    
 # --- 2. メイン UI 制御 ---
 st.set_page_config(page_title="Fishing AI Log", layout="centered")
 st.title("🎣 釣果統合ログシステム")
@@ -451,6 +464,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
