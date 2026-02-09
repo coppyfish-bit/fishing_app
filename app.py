@@ -12,46 +12,25 @@ from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2 import service_account
 
 def upload_to_drive(uploaded_file):
-    # 1. 認証情報の取得
-    creds_dict = st.secrets["connections"]["gsheets"]
-    creds = service_account.Credentials.from_service_account_info(creds_dict)
-    
-    # 2. ドライブサービスの構築
-    service = build('drive', 'v3', credentials=creds)
-    
-    # 3. 保存先フォルダID (ご自身のものか確認してください)
-    folder_id = "1bmgT1IBAZd7U37dKkUBBoFx2TpR6BMXI" 
-    
-    # 4. ファイルの設定
-    file_metadata = {
-        'name': f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uploaded_file.name}",
-        'parents': [folder_id]
-    }
-    
-    # 5. 画像をアップロード用に準備
-    media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), 
-                              mimetype='image/jpeg', 
-                              resumable=True)
-    
-    # 6. アップロード実行
-    file = service.files().create(body=file_metadata, 
-                                  media_body=media, 
-                                  fields='id').execute()
-    file_id = file.get('id')
+    import base64
+    from PIL import Image
+    import io
 
-    # 7. 【重要】閲覧権限の付与（これがないとタブ2で表示されません）
-    # 「リンクを知っている全員」に閲覧を許可する設定
-    try:
-        permission = {
-            'type': 'anyone',
-            'role': 'viewer'
-        }
-        service.permissions().create(fileId=file_id, body=permission).execute()
-    except Exception as e:
-        st.warning(f"閲覧権限の設定中にエラーが発生しました: {e}")
+    # 1. 画像を開く
+    img = Image.open(uploaded_file)
     
-    # 8. 直接表示用のURLを生成して返す
-    return f"https://drive.google.com/uc?id={file_id}"
+    # 2. 軽量化：長辺を800pxにリサイズ（これでスプレッドシートの負担が激減します）
+    img.thumbnail((800, 800)) 
+    
+    # 3. 圧縮：JPEG形式、画質70%でバイトデータに変換
+    buffer = io.BytesIO()
+    img.save(buffer, format="JPEG", quality=70) 
+    
+    # 4. 文字列に変換
+    base64_img = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    
+    # スプレッドシートにはこの文字列を保存
+    return f"data:image/jpeg;base64,{base64_img}"
     
 def get_moon_age(dt):
     base_new_moon = datetime(2023, 1, 22, 5, 53)
@@ -481,15 +460,18 @@ with tab2:
                 expander_label = f"📌 {row['date']} | {row['魚種']} | {row['場所']}"
                 
                 with st.expander(expander_label, expanded=is_expanded):
-                    
-                    # --- 1. 画像の直接表示 ---
-                    img_url = str(row.get('filename', ''))
-                    if "http" in img_url:
-                        direct_url = convert_google_drive_url(img_url)
-                        st.image(direct_url, caption=f"登録写真: {row['魚種']}", use_container_width=True)
-                    else:
-                        st.caption("📷 画像URLが登録されていません")
-                    
+
+                    # --- タブ2の画像表示部分をこれに差し替え ---
+img_data = str(row.get('filename', ''))
+if img_data.startswith("data:image"):
+    # Base64データがある場合はそれを表示
+    st.image(img_data, caption=f"登録写真: {row['魚種']}", use_container_width=True)
+elif "http" in img_data:
+    # 以前のドライブURLがある場合も一応残しておく
+    st.image(img_data.replace("open?", "uc?"), caption=f"登録写真: {row['魚種']}", use_container_width=True)
+else:
+    st.caption("📷 画像データがありません")
+
                     # --- 2. 修正項目のレイアウト ---
                     col1, col2 = st.columns(2)
                     with col1:
@@ -543,6 +525,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
