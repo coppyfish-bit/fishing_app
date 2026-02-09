@@ -450,35 +450,42 @@ with tab1:
 # タブ2: 釣果の修正・削除
 # ==========================================
 with tab2:
-    st.subheader("📸 直近5件の履歴（詳細修正・削除）")
+    st.subheader("📸 釣果履歴（直近5件は自動展開）")
 
     # API制限対策：手動リロードボタン
-    if st.button("🔄 最新の履歴に更新"):
+    if st.button("🔄 最新の履歴に更新", key="reload_history"):
         st.cache_data.clear()
         if 'df' in st.session_state:
             del st.session_state.df
         st.rerun()
 
     try:
-        # 共通部分で読み込んだ session_state のデータを使用
         edit_df = st.session_state.df
         
         if edit_df is None or edit_df.empty:
             st.info("履歴がまだありません。")
         else:
-            # 【ここから重要】tryの直下のインデントを正しく揃える
-            target_df = edit_df.tail(5).copy().iloc[::-1]
+            # データを逆順（新しい順）にする
+            target_df = edit_df.iloc[::-1]
             
-            for index, row in target_df.iterrows():
+            # enumerateを使って「何番目のデータか」を判定
+            for i, (index, row) in enumerate(target_df.iterrows()):
+                
+                # 最初から開いておくかどうかを判定（0〜4番目、つまり直近5件なら True）
+                is_expanded = True if i < 5 else False
+                
                 # タイトルに基本情報を表示
-                with st.expander(f"📌 {row['date']} | {row['魚種']} | {row['場所']}"):
+                expander_label = f"📌 {row['date']} | {row['魚種']} | {row['場所']}"
+                
+                with st.expander(expander_label, expanded=is_expanded):
                     
                     # --- 1. 画像の直接表示 ---
-                    # filenameにURLが入っている場合のみ表示を試みる
                     img_url = str(row.get('filename', ''))
                     if "http" in img_url:
                         direct_url = convert_google_drive_url(img_url)
                         st.image(direct_url, caption=f"登録写真: {row['魚種']}", use_container_width=True)
+                    else:
+                        st.caption("📷 画像URLが登録されていません")
                     
                     # --- 2. 修正項目のレイアウト ---
                     col1, col2 = st.columns(2)
@@ -495,7 +502,10 @@ with tab2:
                         
                         u_tide = st.number_input("🌊 潮位(cm)", value=t_val, key=f"t_{index}")
                         u_temp = st.number_input("🌡️ 気温(℃)", value=te_val, step=0.1, key=f"te_{index}")
-                        u_wind = st.text_input("💨 風情報", value=f"{row['風向']} {row['風速']}m/s", key=f"w_{index}")
+                        
+                        # 風情報は表示のみ（またはテキスト入力）
+                        wind_val = f"{row['風向']} {row['風速']}m/s" if pd.notnull(row['風向']) else "情報なし"
+                        st.text_input("💨 風情報（参考）", value=wind_val, key=f"w_{index}", disabled=True)
 
                     u_memo = st.text_area("📝 メモ", value=row['備考'], key=f"m_{index}")
 
@@ -512,7 +522,6 @@ with tab2:
                         edit_df.at[index, '備考'] = u_memo
                         
                         conn.update(spreadsheet=url, data=edit_df)
-                        # キャッシュを消してリロード
                         st.cache_data.clear()
                         if 'df' in st.session_state:
                             del st.session_state.df
@@ -520,6 +529,7 @@ with tab2:
                         st.rerun()
 
                     if b_col2.button("🗑️ データを削除", key=f"del_btn_{index}", use_container_width=True):
+                        # 削除確認（簡易）
                         edit_df = edit_df.drop(index)
                         conn.update(spreadsheet=url, data=edit_df)
                         st.cache_data.clear()
@@ -530,6 +540,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
