@@ -234,7 +234,7 @@ st.set_page_config(page_title="Fishing AI Log", layout="centered")
 st.title("🎣 釣果統合ログシステム")
 
 # --- タブの作成 ---
-tab1, tab2 = st.tabs(["📝 釣果登録", "🔧 履歴の修正・削除"])
+tab1, tab2, tab3 = st.tabs(["📝 釣果登録", "🔧 履歴の修正・削除","🖼️ ギャラリー"])
 
 # ==========================================
 # タブ1: 釣果登録
@@ -600,6 +600,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。まずは釣果を登録しましょう！")
+
 
 
 
