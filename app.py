@@ -306,176 +306,145 @@ with tab1:
         final_fish_name = manual_fish_name
     else:
         final_fish_name = selected_fish
-# --- カスタムCSS（フィッシュメジャー風） ---
-st.markdown("""
-    <style>
-    .stSlider [data-baseweb="slider"] {
-        height: 60px !important;
-        width: calc(100% - 12px) !important; 
-        margin: 0 auto !important;
-        background-color: #FFFFFF !important;
-        border: 2px solid #001f3f !important;
-        border-radius: 4px !important;
 
-        /* 目盛り線の描画 */
-        background-image: 
-            linear-gradient(90deg, #001f3f 3px, transparent 3px),
-            linear-gradient(90deg, #001f3f 1px, transparent 1px) !important;
-        
-        /* ↓【最重要】線の間隔を120cmの「区切り数」で正確に指定 */
-        /* 120に行くにつれて「矢印が線より左に遅れる」なら、数字を小さく（例: 8.32%） */
-        /* 120に行くにつれて「矢印が線より右に追い越す」なら、数字を大きく（例: 8.34%） */
-        background-size: 8.08% 100%, 4.04% 50% !important;
-        
-        /* ↓【微調整】線の開始位置をスライダーのポインタの「芯」に合わせる */
-        background-position: 4.0px center !important; 
-        background-repeat: repeat-x !important;
-    }
+    # --- 5. フィッシュメジャー風スライダー ---
+    current_len = st.session_state.get('len_slider', 0.0)
+    st.markdown(f"### 全長: <span style='font-size:40px; color:#FF4B4B; font-weight:900;'>{current_len}</span> cm", unsafe_allow_html=True)
 
-    /* ポインタ（赤矢印）の芯出し */
-    .stSlider [role="slider"]::after {
-        content: "";
-        display: block;
-        width: 0;
-        height: 0;
-        border-left: 15px solid transparent;
-        border-right: 15px solid transparent;
-        border-bottom: 25px solid #FF4B4B; 
-        margin-top: 85px; 
-        /* ポインタの真ん中を目盛りに合わせるための位置補正 */
-        transform: translateX(0px); 
-    }
-    </style>
-    """, unsafe_allow_html=True)
-# --- 2. スライダーと目盛り表示部分 ---
-current_len = st.session_state.get('len_slider', 0.0)
-st.markdown(f"### 全長: <span style='font-size:40px; color:#FF4B4B; font-weight:900;'>{current_len}</span> cm", unsafe_allow_html=True)
+    st.markdown("""
+        <style>
+        .stSlider [data-baseweb="slider"] {
+            height: 60px !important;
+            width: calc(100% - 12px) !important; 
+            margin: 0 auto !important;
+            background-color: #FFFFFF !important;
+            border: 2px solid #001f3f !important;
+            border-radius: 4px !important;
+            background-image: 
+                linear-gradient(90deg, #001f3f 3px, transparent 3px),
+                linear-gradient(90deg, #001f3f 1px, transparent 1px) !important;
+            background-size: 8.08% 100%, 4.04% 50% !important;
+            background-position: 4.0px center !important; 
+            background-repeat: repeat-x !important;
+        }
+        .stSlider [role="slider"]::after {
+            content: "";
+            display: block;
+            width: 0; height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-bottom: 25px solid #FF4B4B; 
+            margin-top: 85px; 
+            transform: translateX(0px); 
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
-# 【重要：順番を入れ替える】スライダーの「前」に数字を書く
-st.markdown("""
-    <div style="
-        display: flex; 
-        justify-content: space-between; 
-      /* 左の数字を大きく、右の数字を小さくすると、全体が左に寄ります */
-        padding: 0 -40px 0 -120px;  /* 上 右 下 左 の順番です */
-        font-size: 16px; 
-        color: #FF4B4B;        /* 数字も赤に変更（お好みで） */
-        font-weight: 900; 
-        margin-bottom: -20px;  /* ここを大きくマイナスにすると、数字が下の要素（バー）に重なります */
-        position: relative; 
-        z-index: 10; 
-        pointer-events: none; 
-        line-height: 60px;     /* バーの高さと同じにする */
-        font-family: 'Arial Black', sans-serif;
-        transform: translateX(8px); /* ←これを追加・調整！ */
-        padding: 0px;  /* ←ここを調整！ (0 左右の余白) */
-        <div style="
-        ...
-    ">
-        <span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
-        <span>70</span><span>80</span><span>90</span><span>100</span><span>110</span><span>120</span>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("""
+        <div style="display: flex; justify-content: space-between; font-size: 16px; color: #FF4B4B; font-weight: 900; margin-bottom: -20px; position: relative; z-index: 10; pointer-events: none; line-height: 60px; font-family: 'Arial Black', sans-serif; transform: translateX(8px); padding: 0px;">
+            <span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
+            <span>70</span><span>80</span><span>90</span><span>100</span><span>110</span><span>120</span>
+        </div>
+        """, unsafe_allow_html=True)
 
-# スライダー本体（数字の後に書く）
-length_in = st.slider("", 0.0, 120.0, 0.0, step=1.0, key="len_slider", label_visibility="collapsed")
-with st.expander("日時・座標の微調整"):
-    date_in = st.date_input("日付", default_dt.date())
-    time_in = st.time_input("時刻", default_dt.time())
-    lat_in = st.number_input("緯度", value=auto_lat, format="%.6f")
-    lon_in = st.number_input("経度", value=auto_lon, format="%.6f")
+    length_in = st.slider("", 0.0, 120.0, 0.0, step=1.0, key="len_slider", label_visibility="collapsed")
 
-st.markdown("**ルアー・仕掛け**")
-lure_sel = st.text_input("例：カゲロウ125MD ←数字、英字は半角でお願いします。コピペ用 50s 55 60f 60s 60ES 70f 70s 70ES 73 80f 80s 82s 87 88 95f 95ss 100f 100s 100ss 110f 110s　111f 120f 120s 124f 125f 125ss 130f 130s 140f 140s 150f 150s 156MD 160f 160s 165f 170f 170J 180f 190f 190ss")
-lure_extra = st.text_input("詳細・カラー (任意)")
-lure_in = ", ".join(lure_sel) + (f" ({lure_extra})" if lure_extra else "")
+    # --- 6. 詳細情報の入力 ---
+    with st.expander("日時・座標の微調整"):
+        date_in = st.date_input("日付", default_dt.date())
+        time_in = st.time_input("時刻", default_dt.time())
+        lat_in = st.number_input("緯度", value=auto_lat, format="%.6f")
+        lon_in = st.number_input("経度", value=auto_lon, format="%.6f")
 
-st.markdown("**メモ**")
-memo_in = st.text_area("", placeholder="ヒットパターンなど", label_visibility="collapsed")
+    st.markdown("**ルアー・仕掛け**")
+    lure_sel = st.text_input("ルアー名（例：カゲロウ125MD）")
+    lure_extra = st.text_input("詳細・カラー (任意)")
+    lure_in = lure_sel + (f" ({lure_extra})" if lure_extra else "")
 
-st.markdown("---")
-submit = st.button("🚀 釣果を保存する", use_container_width=True, type="primary")
+    st.markdown("**メモ**")
+    memo_in = st.text_area("", placeholder="ヒットパターンなど", label_visibility="collapsed", key="memo_main")
 
-# --- 保存処理 ---
-if submit:
-    if not final_place_name:
-        st.error("⚠️ 場所名を入力してください。")
-    else:
-        with st.spinner('📸 画像をアップロード中...'):
-            # --- ここを追加 ---
-            drive_url = ""
-            if uploaded_file:
-                try:
-                    drive_url = upload_to_drive(uploaded_file)
-                except Exception as e:
-                    st.error(f"画像アップロード失敗: {e}")
-            # -----------------
-        with st.spinner('📊 解析・保存中...'):
-            try:
-                target_dt = datetime.combine(date_in, time_in)
-                t_name = get_tide_name(target_dt)
-                t_info = get_tide_details(lat_in, lon_in, target_dt, final_place_name)
-                temp, wind_s, wind_d, prec = get_weather_data(lat_in, lon_in, target_dt)
+    st.markdown("---")
+    submit = st.button("🚀 釣果を保存する", use_container_width=True, type="primary")
 
-                save_data = {
-                    "filename": uploaded_file.name if uploaded_file else "",
-                    "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
-                    "date": date_in.strftime('%Y-%m-%d'),
-                    "time": time_in.strftime('%H:%M'),
-                    "lat": lat_in, "lon": lon_in,
-                    "気温": temp, "風速": wind_s, "風向": get_wind_direction_label(wind_d), "降水量": prec,
-                    "潮位_cm": t_info.get("潮位_cm"),
-                    "月齢": get_moon_age(target_dt),
-                    "潮名": t_name,
-                    "次の満潮まで_分": t_info.get("次の満潮まで_分", ""),
-                    "次の干潮まで_分": t_info.get("次の干潮まで_分", ""),
-                    "直前の満潮_時刻": t_info.get("直前の満潮_時刻"),
-                    "直前の干潮_時刻": t_info.get("直前の干潮_時刻"),
-                    "潮位フェーズ": t_info.get("潮位フェーズ"),
-                    "場所": final_place_name,
-                    "魚種": fish_in, "全長_cm": length_in, "ルアー": lure_in, "備考": memo_in,
-                    "group_id": final_group_id, "観測所": t_info.get("観測所", "不明")
-                }
-
-                cols = ["filename", "datetime", "date", "time", "lat", "lon", "気温", "風速", "風向", "降水量", "潮位_cm", "月齢", "潮名", "次の満潮まで_分", "次の干潮まで_分", "直前の満潮_時刻", "直前の干潮_時刻", "潮位フェーズ", "場所", "魚種", "全長_cm", "ルアー", "備考", "group_id", "観測所"]
-                new_row = pd.DataFrame([save_data])[cols]
-                updated_df = pd.concat([df[cols], new_row], ignore_index=True)
-                conn.update(spreadsheet=url, data=updated_df)
-
-                if is_new_place:
-                    new_m = pd.DataFrame([{"group_id": final_group_id, "place_name": final_place_name, "latitude": lat_in, "longitude": lon_in}])
-                    updated_m = pd.concat([m_df, new_m], ignore_index=True)
-                    conn.update(spreadsheet=url, worksheet="place_master", data=updated_m)
-
-                st.success(f"✅ {final_place_name} での釣果を保存しました！")
-                st.success(f"✅ {final_place_name} での釣果を保存しました！")
-                st.balloons()
-
-                # --- 保存した情報のサマリー表示を追加 ---
-                st.markdown("### 📊 保存されたフィールドデータ")
+    # --- 7. 保存処理 ---
+    if submit:
+        if not final_place_name:
+            st.error("⚠️ 場所名を入力してください。")
+        else:
+            with st.spinner('📸 画像をアップロード中...'):
+                drive_url = ""
+                if uploaded_file:
+                    try:
+                        drive_url = upload_to_drive(uploaded_file)
+                    except Exception as e:
+                        st.error(f"画像アップロード失敗: {e}")
                 
-                # 3列で見やすく表示
-                m1, m2, m3 = st.columns(3)
-                with m1:
-                    st.metric("潮位", f"{t_info.get('潮位_cm')} cm")
-                    st.caption(f"潮名: {t_name}")
-                with m2:
-                    st.metric("気温", f"{temp} ℃")
-                    st.caption(f"降水: {prec} mm")
-                with m3:
-                    st.metric("風速", f"{wind_s} m/s")
-                    st.caption(f"風向: {get_wind_direction_label(wind_d)}")
+                with st.spinner('📊 解析・保存中...'):
+                    try:
+                        target_dt = datetime.combine(date_in, time_in)
+                        t_name = get_tide_name(target_dt)
+                        t_info = get_tide_details(lat_in, lon_in, target_dt, final_place_name)
+                        temp, wind_s, wind_d, prec = get_weather_data(lat_in, lon_in, target_dt)
 
-                st.info(f"📍 潮位フェーズ: {t_info.get('潮位フェーズ')} / 月齢: {get_moon_age(target_dt)}")
-                # --------------------------------------
+                        save_data = {
+                            "filename": drive_url, # ここをGoogleドライブのURLに！
+                            "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
+                            "date": date_in.strftime('%Y-%m-%d'),
+                            "time": time_in.strftime('%H:%M'),
+                            "lat": lat_in, "lon": lon_in,
+                            "気温": temp, "風速": wind_s, "風向": get_wind_direction_label(wind_d), "降水量": prec,
+                            "潮位_cm": t_info.get("潮位_cm"),
+                            "月齢": get_moon_age(target_dt),
+                            "潮名": t_name,
+                            "次の満潮まで_分": t_info.get("次の満潮まで_分", ""),
+                            "次の干潮まで_分": t_info.get("次の干潮まで_分", ""),
+                            "直前の満潮_時刻": t_info.get("直前の満潮_時刻"),
+                            "直前の干潮_時刻": t_info.get("直前の干潮_時刻"),
+                            "潮位フェーズ": t_info.get("潮位フェーズ"),
+                            "場所": final_place_name,
+                            "魚種": final_fish_name, # 修正済み
+                            "全長_cm": length_in, 
+                            "ルアー": lure_in, 
+                            "備考": memo_in,
+                            "group_id": final_group_id, 
+                            "観測所": t_info.get("観測所", "不明")
+                        }
 
-                st.cache_data.clear()
-                st.cache_data.clear()
-            except Exception as e:
-                st.error(f"❌ 書き込みエラー: {e}")
+                        # データフレームの更新
+                        cols = ["filename", "datetime", "date", "time", "lat", "lon", "気温", "風速", "風向", "降水量", "潮位_cm", "月齢", "潮名", "次の満潮まで_分", "次の干潮まで_分", "直前の満潮_時刻", "直前の干潮_時刻", "潮位フェーズ", "場所", "魚種", "全長_cm", "ルアー", "備考", "group_id", "観測所"]
+                        new_row = pd.DataFrame([save_data])[cols]
+                        updated_df = pd.concat([df, new_row], ignore_index=True)
+                        conn.update(spreadsheet=url, data=updated_df)
 
-    st.subheader("新しい釣果を記録する")
-    # ... 既存のコード ...
+                        if is_new_place:
+                            new_m = pd.DataFrame([{"group_id": final_group_id, "place_name": final_place_name, "latitude": lat_in, "longitude": lon_in}])
+                            updated_m = pd.concat([m_df, new_m], ignore_index=True)
+                            conn.update(spreadsheet=url, worksheet="place_master", data=updated_m)
+
+                        st.success(f"✅ {final_place_name} での釣果を保存しました！")
+                        st.balloons()
+
+                        # サマリー表示
+                        st.markdown("### 📊 保存されたフィールドデータ")
+                        m1, m2, m3 = st.columns(3)
+                        with m1:
+                            st.metric("潮位", f"{t_info.get('潮位_cm')} cm")
+                            st.caption(f"潮名: {t_name}")
+                        with m2:
+                            st.metric("気温", f"{temp} ℃")
+                            st.caption(f"降水: {prec} mm")
+                        with m3:
+                            st.metric("風速", f"{wind_s} m/s")
+                            st.caption(f"風向: {get_wind_direction_label(wind_d)}")
+
+                        # キャッシュクリアとリスタート
+                        st.cache_data.clear()
+                        if "df" in st.session_state: del st.session_state.df
+                        st.rerun()
+
+                    except Exception as e:
+                        st.error(f"❌ 書き込みエラー: {e}")
 
 # ==========================================
 # タブ2: 釣果の修正・削除
@@ -561,6 +530,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
