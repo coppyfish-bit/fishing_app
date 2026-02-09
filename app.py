@@ -167,11 +167,18 @@ try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
     # 最初の読み込み
-    df = conn.read(spreadsheet=url, ttl="5m")
-    m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
-except Exception as e:
-    st.error(f"接続エラー: {e}")
-    st.stop()
+if "df" not in st.session_state:
+    # 最初に1回だけ読み込んで Session State に保存する
+    st.session_state.df = conn.read(spreadsheet=url, ttl="1m")
+# タブ2の中では、APIを叩かずに Session State のデータを見る
+with tab2:
+    latest_df = st.session_state.df.tail(5).copy().iloc[::-1]
+    # ... 編集処理 ...
+    if update_button:
+        # 更新した時だけ API を叩く
+        conn.update(spreadsheet=url, data=new_df)
+        st.session_state.df = new_df # 手元のデータも更新
+        st.rerun()
     
 # --- 2. メイン UI 制御 ---
 st.set_page_config(page_title="Fishing AI Log", layout="centered")
@@ -498,6 +505,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
