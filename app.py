@@ -38,6 +38,14 @@ def upload_to_drive(uploaded_file):
     file = service.files().create(body=file_metadata, 
                                   media_body=media, 
                                   fields='id').execute()
+
+    # --- Googleドライブのリンクを直接表示用に変換する関数 ---
+def convert_google_drive_url(url):
+    # 通常の表示用URLを直接参照用URLに書き換える
+    if "drive.google.com" in url:
+        file_id = url.split('/')[-2] if "/view" in url else url.split('id=')[-1]
+        return f"https://lh3.googleusercontent.com/u/0/d/{file_id}"
+    return url
     
     # 7. 画像の直リンクURLを返す
     return f"https://drive.google.com/uc?id={file.get('id')}"
@@ -469,14 +477,6 @@ if submit:
 # ==========================================
 # タブ2: 釣果の修正・削除
 # ==========================================
-# --- Googleドライブのリンクを直接表示用に変換する関数 ---
-def convert_google_drive_url(url):
-    # 通常の表示用URLを直接参照用URLに書き換える
-    if "drive.google.com" in url:
-        file_id = url.split('/')[-2] if "/view" in url else url.split('id=')[-1]
-        return f"https://lh3.googleusercontent.com/u/0/d/{file_id}"
-    return url
-    
 with tab2:
     st.subheader("📸 直近5件の履歴（詳細修正・削除）")
 
@@ -558,6 +558,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
