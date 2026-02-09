@@ -19,17 +19,20 @@ def upload_to_drive(uploaded_file):
     # 1. 画像を開く
     img = Image.open(uploaded_file)
     
-    # 2. 軽量化：長辺を800pxにリサイズ（これでスプレッドシートの負担が激減します）
-    img.thumbnail((800, 800)) 
+    # 2. RGB形式に変換（PNGなどの透明度情報を消して軽くする）
+    img = img.convert("RGB")
     
-    # 3. 圧縮：JPEG形式、画質70%でバイトデータに変換
+    # 3. 【さらに軽量化】長辺を500pxに制限
+    # スマホの画面で見る分には500pxあれば十分綺麗です
+    img.thumbnail((500, 500)) 
+    
+    # 4. 【さらに軽量化】画質（quality）を50に落とし、最適化（optimize）を有効に
     buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=70) 
+    img.save(buffer, format="JPEG", quality=50, optimize=True) 
     
-    # 4. 文字列に変換
+    # 5. 文字列に変換
     base64_img = base64.b64encode(buffer.getvalue()).decode('utf-8')
     
-    # スプレッドシートにはこの文字列を保存
     return f"data:image/jpeg;base64,{base64_img}"
     
 def get_moon_age(dt):
@@ -523,6 +526,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
