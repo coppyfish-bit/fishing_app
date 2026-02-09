@@ -41,7 +41,7 @@ def upload_to_drive(uploaded_file):
     permission = {
         'type': 'user',
         'role': 'owner',
-        'emailAddress': 'YOUR_GMAIL_ADDRESS@gmail.com'  # ← あなたのGmailアドレスに書き換えてください！
+        'emailAddress': 'coppy.fish@gmail.com'  # ← あなたのGmailアドレスに書き換えてください！
     }
     service.permissions().create(fileId=file_id, body=permission, transferOwnership=True).execute()
     # ------------------------------------------
@@ -547,6 +547,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
