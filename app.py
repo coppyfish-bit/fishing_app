@@ -669,8 +669,10 @@ with tab3:
                 # 「http」から始まる正規のURLがある場合のみ表示
                         if img_url.startswith('http'):
                         st.image(img_url, use_container_width=True)
+                        
                 else:
                     st.info("📷 画像なし")
+                    
                     with col_p_info:
                         st.write(f"👤 **釣り人:** {selected_row.get(ANGLER_COL, '---')}")
                         st.write(f"🌊 **潮汐:** {selected_row.get(TIDE_NAME_COL, '---')} / {selected_row.get(PHASE_COL, '---')}")
@@ -680,6 +682,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
