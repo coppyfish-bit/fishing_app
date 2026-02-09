@@ -214,11 +214,15 @@ with tab2:
     st.subheader("📸 直近5件の履歴（詳細修正・削除）")
     
     try:
-        # 最新データを強制リロード
-        edit_df = conn.read(spreadsheet=url, ttl=0)
+        edit_df = st.session_state.df
         
-        if edit_df is None or edit_df.empty:
-            st.info("履歴がまだありません。")
+        if submit: # 登録ボタンや修正ボタンが押された時
+    conn.update(spreadsheet=url, data=updated_df)
+    # キャッシュをクリアして、次の読み込み時に最新を取得させる
+    st.cache_data.clear() 
+    if 'df' in st.session_state:
+        del st.session_state.df
+    st.rerun()
         else:
             # 最新5件を抽出して逆順に
             target_df = edit_df.tail(5).copy().iloc[::-1]
@@ -509,6 +513,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
