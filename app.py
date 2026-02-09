@@ -11,16 +11,15 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2 import service_account
 
-# --- 1. 各種関数定義 ---
 def upload_to_drive(uploaded_file):
-    # 1. StreamlitのSecretsから認証情報を取得
+    # 1. 認証情報の取得
     creds_dict = st.secrets["connections"]["gsheets"]
     creds = service_account.Credentials.from_service_account_info(creds_dict)
     
-    # 2. ドライブサービスを構築
+    # 2. サービス構築
     service = build('drive', 'v3', credentials=creds)
     
-    # 3. 保存先フォルダID (ここを書き換えてください！)
+    # 3. 保存先フォルダID
     folder_id = "1bmgT1IBAZd7U37dKkUBBoFx2TpR6BMXI" 
     
     # 4. ファイルの設定
@@ -38,24 +37,25 @@ def upload_to_drive(uploaded_file):
     file = service.files().create(body=file_metadata, 
                                   media_body=media, 
                                   fields='id').execute()
-    permission = {
-        'type': 'user',
-        'role': 'owner',
-        'emailAddress': 'coppy.fish@gmail.com'  # ← あなたのGmailアドレスに書き換えてください！
-    }
-    service.permissions().create(fileId=file_id, body=permission, transferOwnership=True).execute()
-    # ------------------------------------------
-
-    # --- Googleドライブのリンクを直接表示用に変換する関数 ---
-def convert_google_drive_url(url):
-    # 通常の表示用URLを直接参照用URLに書き換える
-    if "drive.google.com" in url:
-        file_id = url.split('/')[-2] if "/view" in url else url.split('id=')[-1]
-        return f"https://lh3.googleusercontent.com/u/0/d/{file_id}"
-    return url
     
-    # 7. 画像の直リンクURLを返す
-    return f"https://drive.google.com/uc?id={file.get('id')}"
+    # 重要：ここで file_id を取得します
+    file_id = file.get('id')
+
+    # 7. 所有権を自分に移す（容量制限回避のため）
+    try:
+        permission = {
+            'type': 'user',
+            'role': 'owner',
+            'emailAddress': 'coppy.fish@gmail.com'
+        }
+        # transferOwnership=True で所有権を完全に移譲
+        service.permissions().create(fileId=file_id, body=permission, transferOwnership=True).execute()
+    except Exception as e:
+        # 所有権移譲に失敗しても、リンク作成は試みるため警告のみ表示
+        st.warning(f"所有権の移譲に失敗しました（容量制限に注意）: {e}")
+    
+    # 8. 画像の直リンクURLを返す
+    return f"https://drive.google.com/uc?id={file_id}"
     
 def get_moon_age(dt):
     base_new_moon = datetime(2023, 1, 22, 5, 53)
@@ -547,6 +547,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
