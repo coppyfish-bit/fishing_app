@@ -12,33 +12,45 @@ from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2 import service_account
 
 def upload_to_drive(uploaded_file):
+    # 1. 認証情報の取得
     creds_dict = st.secrets["connections"]["gsheets"]
     creds = service_account.Credentials.from_service_account_info(creds_dict)
+    
+    # 2. ドライブサービスの構築
     service = build('drive', 'v3', credentials=creds)
     
-    # 【重要】フォルダIDは今のままでOK
+    # 3. 保存先フォルダID (ご自身のものか確認してください)
     folder_id = "1bmgT1IBAZd7U37dKkUBBoFx2TpR6BMXI" 
     
+    # 4. ファイルの設定
     file_metadata = {
         'name': f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uploaded_file.name}",
         'parents': [folder_id]
     }
     
+    # 5. 画像をアップロード用に準備
     media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), 
                               mimetype='image/jpeg', 
                               resumable=True)
     
-    # アップロード
+    # 6. アップロード実行
     file = service.files().create(body=file_metadata, 
                                   media_body=media, 
                                   fields='id').execute()
     file_id = file.get('id')
 
-    # 【重要】ファイルを「リンクを知っている人全員」に公開する設定
-    # これをしないと、タブ2で画像が表示されません
-    world_permission = {'type': 'anyone', 'role': 'viewer'}
-    service.permissions().create(fileId=file_id, body=world_permission).execute()
+    # 7. 【重要】閲覧権限の付与（これがないとタブ2で表示されません）
+    # 「リンクを知っている全員」に閲覧を許可する設定
+    try:
+        permission = {
+            'type': 'anyone',
+            'role': 'viewer'
+        }
+        service.permissions().create(fileId=file_id, body=permission).execute()
+    except Exception as e:
+        st.warning(f"閲覧権限の設定中にエラーが発生しました: {e}")
     
+    # 8. 直接表示用のURLを生成して返す
     return f"https://drive.google.com/uc?id={file_id}"
     
 def get_moon_age(dt):
@@ -531,6 +543,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
