@@ -364,6 +364,8 @@ with tab1:
     lure_extra = st.text_input("詳細・カラー (任意)")
     lure_in = lure_sel + (f" ({lure_extra})" if lure_extra else "")
 
+    angler = st.selectbox("👤 釣り人", ["長元", "川口","山川" ])
+
     st.markdown("**メモ**")
     memo_in = st.text_area("", placeholder="ヒットパターンなど", label_visibility="collapsed", key="memo_main")
 
@@ -631,6 +633,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
