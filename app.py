@@ -164,6 +164,62 @@ def find_nearest_place(current_lat, current_lon, master_df, threshold_m=500):
 st.set_page_config(page_title="Fishing AI Log", layout="centered")
 st.title("🎣 釣果統合ログシステム")
 
+# --- タブの作成 ---
+tab1, tab2 = st.tabs(["📝 釣果登録", "🔧 履歴の修正・削除"])
+
+# ==========================================
+# タブ1: 釣果登録 (既存のコードをここに移動)
+# ==========================================
+with tab1:
+    # (ここに今までの写真アップロード〜保存処理のコードをすべて入れます)
+    st.subheader("新しい釣果を記録する")
+    # ... 既存のコード ...
+
+# ==========================================
+# タブ2: 釣果の修正・削除
+# ==========================================
+with tab2:
+    st.subheader("直近5件の釣果履歴")
+    
+    # 最新のデータを読み込み
+    try:
+        # 最新の5件を取得 (データフレームの最後から5行)
+        latest_df = df.tail(5).copy()
+        # 表示用に逆順（新しい順）にする
+        latest_df = latest_df.iloc[::-1]
+        
+        for index, row in latest_df.iterrows():
+            # 1件ごとの表示枠
+            with st.expander(f"📅 {row['date']} | 🐟 {row['魚種']} | 📏 {row['全長_cm']}cm"):
+                # 編集用の入力欄（現在の値を初期値として表示）
+                new_fish = st.text_input("魚種を修正", value=row['魚種'], key=f"fish_{index}")
+                new_size = st.number_input("サイズを修正", value=float(row['全長_cm']), key=f"size_{index}")
+                new_memo = st.text_area("備考を修正", value=row['備考'], key=f"memo_{index}")
+                
+                col_edit, col_del = st.columns(2)
+                
+                # --- 更新ボタン ---
+                if col_edit.button("🆙 この内容で更新", key=f"update_{index}"):
+                    df.at[index, '魚種'] = new_fish
+                    df.at[index, '全長_cm'] = new_size
+                    df.at[index, '備考'] = new_memo
+                    conn.update(spreadsheet=url, data=df)
+                    st.success("更新しました！")
+                    st.cache_data.clear()
+                    st.rerun()
+
+                # --- 削除ボタン ---
+                if col_del.button("🗑️ この釣果を削除", key=f"del_{index}"):
+                    # 削除の確認
+                    df = df.drop(index)
+                    conn.update(spreadsheet=url, data=df)
+                    st.warning("削除しました。")
+                    st.cache_data.clear()
+                    st.rerun()
+
+    except Exception as e:
+        st.info("まだ履歴がありません、または読み込みに失敗しました。")
+
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
@@ -387,6 +443,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
