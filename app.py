@@ -38,6 +38,13 @@ def upload_to_drive(uploaded_file):
     file = service.files().create(body=file_metadata, 
                                   media_body=media, 
                                   fields='id').execute()
+    permission = {
+        'type': 'user',
+        'role': 'owner',
+        'emailAddress': 'YOUR_GMAIL_ADDRESS@gmail.com'  # ← あなたのGmailアドレスに書き換えてください！
+    }
+    service.permissions().create(fileId=file_id, body=permission, transferOwnership=True).execute()
+    # ------------------------------------------
 
     # --- Googleドライブのリンクを直接表示用に変換する関数 ---
 def convert_google_drive_url(url):
@@ -540,6 +547,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
