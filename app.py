@@ -494,16 +494,22 @@ with tab2:
                         # 基本情報の修正
                         new_fish = st.text_input("魚種を修正", value=str(row.get('魚種', '')), key=f"edit_fish_{index}")
                         new_place = st.text_input("場所を修正", value=str(row.get('場所', '')), key=f"edit_place_{index}")
+                        # --- 釣り人の修正欄を追加 ---
+                        # リストにご友人の名前も入れてください
+                        angler_list = ["あなたの名前", "ご友人の名前"]
+                        current_angler = row.get('釣り人', 'あなたの名前')
+                        new_angler = st.selectbox(
+                            "👤 釣り人を修正", 
+                            angler_list, 
+                            index=angler_list.index(current_angler) if current_angler in angler_list else 0,
+                            key=f"edit_angler_{index}"
                         
                         col_edit1, col_edit2 = st.columns(2)
                         with col_edit1:
                             # 重複していたサイズ入力を1つに統合し、0.5刻みに設定
                             new_size = st.number_input("サイズ(cm)", value=float(row.get('サイズ(cm)', 0)), step=0.5, key=f"edit_size_{index}")
                             new_lure = st.text_input("ルアー", value=str(row.get('ルアー', '')), key=f"edit_lure_{index}")
-                            new_weather = st.selectbox("天気", ["晴れ", "曇り", "雨", "雪"], 
-                                                     index=["晴れ", "曇り", "雨", "雪"].index(row.get('天気', '晴れ')) if row.get('天気') in ["晴れ", "曇り", "雨", "雪"] else 0, 
-                                                     key=f"edit_weather_{index}")
-                        
+                            
                         with col_edit2:
                             new_wind_speed = st.number_input("風速(m/s)", value=float(row.get('風速(m/s)', 0)), step=0.1, key=f"edit_wind_s_{index}")
                             new_wind_dir = st.text_input("風向", value=str(row.get('風向', '')), key=f"edit_wind_d_{index}")
@@ -633,6 +639,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
