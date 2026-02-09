@@ -482,9 +482,9 @@ with tab2:
                         if st.button("この記録を削除", key=f"del_{index}"):
                             st.warning("削除機能はスプレッドシートから直接行ってください")
                             
-                except Exception as e:
-                    st.error(f"個別の履歴表示中にエラーが発生しました: {e}")
-                        
+                        except Exception as e:
+        st.error(f"アプリの実行中に予期せぬエラーが発生しました: {e}")
+
 
 
 
