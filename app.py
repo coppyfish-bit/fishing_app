@@ -466,17 +466,23 @@ with tab2:
                     expander_label = f"📌 {row['date']} | {row['魚種']} | {row['場所']}"
                     
                     with st.expander(expander_label, expanded=is_expanded):
-                        # 画像の表示
-                        img_url = str(row.get('filename', ''))
-                        if img_url and img_url.strip():
-                            st.image(img_url, caption=f"登録写真: {row['魚種']}", use_container_width=True)
-                        else:
-                            st.caption("📷 画像データがありません")
-
-                        # 詳細情報の表示
-                        st.write(f"**サイズ:** {row.get('サイズ(cm)', '---')} cm")
-                        st.write(f"**仕掛け:** {row.get('仕掛け', '---')}")
-                        st.write(f"**メモ:** {row.get('備考', '---')}")
+                    # 画像の表示
+                    img_url = str(row.get('filename', ''))
+                    if img_url and img_url.strip():
+                        st.image(img_url, use_container_width=True)
+                    
+                    # 詳細情報の表示
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.write(f"📏 **サイズ:** {row.get('サイズ(cm)', '---')} cm")
+                        st.write(f"🎣 **ルアー:** {row.get('ルアー', '---')}")
+                        st.write(f"📍 **場所:** {row.get('場所', '---')}")
+                    with c2:
+                        st.write(f"☀️ **天気:** {row.get('天気', '---')} ({row.get('風向', '---')} {row.get('風速(m/s)', '0')}m)")
+                        st.write(f"🌊 **潮位:** {row.get('潮位', '---')}")
+                        st.write(f"☔ **降水:** {row.get('降水量(mm)', '0')} mm")
+                    
+                    st.write(f"💬 **備考:** {row.get('備考', '---')}")
                         
                         # 削除ボタン
                         if st.button("この記録を削除", key=f"del_{index}"):
@@ -487,6 +493,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"アプリの実行中にエラーが発生しました: {e}")
+
 
 
 
