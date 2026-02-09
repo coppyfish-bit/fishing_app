@@ -17,10 +17,9 @@ def upload_to_drive(uploaded_file):
     # Secretsから設定を読み込み（関数を呼ぶたびに確実に設定）
     import cloudinary.uploader # 追加
     cloudinary.config(
-        cloud_name = st.secrets["cloudinary"]["dmkvcofvn"],
-        api_key = st.secrets["cloudinary"]["825168477246119
-"],
-        api_secret = st.secrets["cloudinary"]["w33OhZQVdivf4g2nq_LgxhkjnJk"],
+        cloud_name = st.secrets["cloudinary"]["cloud_name"],
+        api_key = st.secrets["cloudinary"]["api_key"],
+        api_secret = st.secrets["cloudinary"]["api_secret"],
         secure = True
     )
     
@@ -375,6 +374,7 @@ with tab1:
     submit = st.button("🚀 釣果を保存する", use_container_width=True, type="primary")
 
     # --- 7. 保存処理 ---
+    # --- 7. 保存処理 (タブ1内) ---
     if submit:
         if not final_place_name:
             st.error("⚠️ 場所名を入力してください。")
@@ -383,10 +383,13 @@ with tab1:
                 drive_url = ""
                 if uploaded_file:
                     try:
+                        # ここで画像アップロード関数を呼び出し
                         drive_url = upload_to_drive(uploaded_file)
+                        st.success("✅ Cloudinaryへのアップロード完了！")
                     except Exception as e:
-                        st.error(f"画像アップロード失敗: {e}")
-                
+                        st.error(f"❌ 画像アップロード失敗: {e}")
+                        st.stop() # 失敗時はここで止める
+
                 with st.spinner('📊 解析・保存中...'):
                     try:
                         target_dt = datetime.combine(date_in, time_in)
@@ -394,8 +397,9 @@ with tab1:
                         t_info = get_tide_details(lat_in, lon_in, target_dt, final_place_name)
                         temp, wind_s, wind_d, prec = get_weather_data(lat_in, lon_in, target_dt)
 
+                        # 保存用データの作成（26項目）
                         save_data = {
-                            "filename": drive_url, # ここをGoogleドライブのURLに！
+                            "filename": drive_url,
                             "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
                             "date": date_in.strftime('%Y-%m-%d'),
                             "time": time_in.strftime('%H:%M'),
@@ -410,7 +414,7 @@ with tab1:
                             "直前の干潮_時刻": t_info.get("直前の干潮_時刻"),
                             "潮位フェーズ": t_info.get("潮位フェーズ"),
                             "場所": final_place_name,
-                            "魚種": final_fish_name, # 修正済み
+                            "魚種": final_fish_name,
                             "全長_cm": length_in, 
                             "ルアー": lure_in, 
                             "備考": memo_in,
@@ -419,40 +423,23 @@ with tab1:
                             "釣り人": angler
                         }
 
-                        # データフレームの更新
+                        # 26個のカラム名を定義
                         cols = ["filename", "datetime", "date", "time", "lat", "lon", "気温", "風速", "風向", "降水量", "潮位_cm", "月齢", "潮名", "次の満潮まで_分", "次の干潮まで_分", "直前の満潮_時刻", "直前の干潮_時刻", "潮位フェーズ", "場所", "魚種", "全長_cm", "ルアー", "備考", "group_id", "観測所", "釣り人"]
-                        new_row = pd.DataFrame([save_data])[cols]
-                        updated_df = pd.concat([df, new_row], ignore_index=True)
+                        
+                        new_row_df = pd.DataFrame([save_data])[cols]
+                        
+                        # スプレッドシートへ更新
+                        updated_df = pd.concat([st.session_state.df, new_row_df], ignore_index=True)
                         conn.update(spreadsheet=url, data=updated_df)
-
+                        
+                        # 場所マスターも新規なら更新
                         if is_new_place:
                             new_m = pd.DataFrame([{"group_id": final_group_id, "place_name": final_place_name, "latitude": lat_in, "longitude": lon_in}])
-                            updated_m = pd.concat([m_df, new_m], ignore_index=True)
+                            updated_m = pd.concat([st.session_state.m_df, new_m], ignore_index=True)
                             conn.update(spreadsheet=url, worksheet="place_master", data=updated_m)
 
-                        st.success(f"✅ {final_place_name} での釣果を保存しました！")
+                        st.success(f"🎉 保存しました！")
                         st.balloons()
-
-                        # サマリー表示
-                        st.markdown("### 📊 保存されたフィールドデータ")
-                        m1, m2, m3 = st.columns(3)
-                        with m1:
-                            st.metric("潮位", f"{t_info.get('潮位_cm')} cm")
-                            st.caption(f"潮名: {t_name}")
-                        with m2:
-                            st.metric("気温", f"{temp} ℃")
-                            st.caption(f"降水: {prec} mm")
-                        with m3:
-                            st.metric("風速", f"{wind_s} m/s")
-                            st.caption(f"風向: {get_wind_direction_label(wind_d)}")
-
-                        # キャッシュクリアとリスタート
-                        st.cache_data.clear()
-                        if "df" in st.session_state: del st.session_state.df
-                        st.rerun()
-
-                    except Exception as e:
-                        st.error(f"❌ 書き込みエラー: {e}")
 
 # ==========================================
 # タブ2: 釣果の修正・削除
@@ -686,6 +673,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
