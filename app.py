@@ -552,7 +552,7 @@ with tab2:
         st.error(f"履歴表示処理全体でエラーが発生しました: {e}")
 
 # ==========================================
-# タブ3: ギャラリー（潮位フェーズ対応 ＆ 過去ログリスト版）
+# タブ3: ギャラリー（場所・上げ下げ 絞り込み対応）
 # ==========================================
 with tab3:
     st.subheader("🖼️ 釣果フォトギャラリー")
@@ -560,31 +560,81 @@ with tab3:
     if 'df' in st.session_state and not st.session_state.df.empty:
         df_gallery = st.session_state.df.copy()
 
-        # カラム名の定義
+        # 型変換
+        df_gallery['date'] = pd.to_datetime(df_gallery['date']).dt.date
+        
+        # カラム名定義
+        PLACE_COL = "場所"
         PHASE_COL = "潮位フェーズ"
-        SIZE_COL = "全長_cm"
         FISH_COL = "魚種"
-        TIDE_NAME_COL = "潮名"
-        TIDE_CM_COL = "潮位_cm"
+        SIZE_COL = "全長_cm"
 
-        # --- 絞り込みセクション ---
         st.write("🔍 絞り込み条件")
+        
+        # 1段目：日付と場所
         col_f1, col_f2 = st.columns(2)
         with col_f1:
+            min_d, max_d = df_gallery['date'].min(), df_gallery['date'].max()
+            date_range = st.date_input("日付範囲", value=(min_d, max_d), key="gal_date")
+        with col_f2:
+            unique_places = ["すべて"] + sorted(df_gallery[PLACE_COL].dropna().unique().tolist())
+            select_place = st.selectbox("場所を選択", unique_places, key="gal_place_select")
+
+        # 2段目：魚種・サイズ・上げ下げ
+        col_f3, col_f4, col_f5 = st.columns(3)
+        with col_f3:
             unique_fish = ["すべて"] + sorted(df_gallery[FISH_COL].dropna().unique().tolist())
             select_fish = st.selectbox("魚種を選択", unique_fish, key="gal_fish_select")
-        with col_f2:
-            min_size = st.number_input("◯◯cm以上を表示", min_value=0.0, step=1.0, value=0.0, key="gal_size_input")
+        with col_f4:
+            min_size = st.number_input("◯◯cm以上", min_value=0.0, step=1.0, value=0.0, key="gal_size_input")
+        with col_f5:
+            # 上げ下げの選択
+            tide_filter = st.radio("潮位方向", ["すべて", "上げ", "下げ"], horizontal=True, key="gal_tide_dir")
 
-        # フィルタリング
+        # --- フィルタリング実行 ---
+        
+        # 1. 日付
+        if isinstance(date_range, tuple) and len(date_range) == 2:
+            df_gallery = df_gallery[(df_gallery['date'] >= date_range[0]) & (df_gallery['date'] <= date_range[1])]
+        
+        # 2. 場所
+        if select_place != "すべて":
+            df_gallery = df_gallery[df_gallery[PLACE_COL] == select_place]
+
+        # 3. 魚種
         if select_fish != "すべて":
             df_gallery = df_gallery[df_gallery[FISH_COL] == select_fish]
+        
+        # 4. サイズ
         if SIZE_COL in df_gallery.columns:
             df_gallery[SIZE_COL] = pd.to_numeric(df_gallery[SIZE_COL], errors='coerce').fillna(0)
             df_gallery = df_gallery[df_gallery[SIZE_COL] >= min_size]
 
-        # 全体の並び替え（最新順）
+        # 5. 上げ・下げ（潮位フェーズ内の文字検索）
+        if tide_filter != "すべて":
+            # 潮位フェーズ列に「上げ」または「下げ」という文字が含まれる行を抽出
+            df_gallery = df_gallery[df_gallery[PHASE_COL].str.contains(tide_filter, na=False)]
+
+        # --- フィルタリング実行 ---
+        # 1. 日付範囲で絞り込み
+        if isinstance(date_range, tuple) and len(date_range) == 2:
+            start_date, end_date = date_range
+            df_gallery = df_gallery[(df_gallery['date'] >= start_date) & (df_gallery['date'] <= end_date)]
+
+        # 2. 魚種で絞り込み
+        if select_fish != "すべて":
+            df_gallery = df_gallery[df_gallery[FISH_COL] == select_fish]
+        
+        # 3. サイズで絞り込み
+        if SIZE_COL in df_gallery.columns:
+            df_gallery[SIZE_COL] = pd.to_numeric(df_gallery[SIZE_COL], errors='coerce').fillna(0)
+            df_gallery = df_gallery[df_gallery[SIZE_COL] >= min_size]
+
+        # 最新順に並び替え
         df_gallery = df_gallery.iloc[::-1]
+
+        # --- 表示部分は以前のコードと同様 ---
+        # (略) ... latest_10 の表示や 11件目以降のリスト表示
 
         # --- 1. 直近10件の画像表示 ---
         st.write("### 🆕 最新の釣果（10件）")
@@ -639,6 +689,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
