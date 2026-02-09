@@ -6,8 +6,42 @@ from PIL.ExifTags import TAGS, GPSTAGS
 from datetime import datetime, timedelta
 import requests
 import math
+import io
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+from google.oauth2 import service_account
 
 # --- 1. 各種関数定義 ---
+def upload_to_drive(uploaded_file):
+    # 1. StreamlitのSecretsから認証情報を取得
+    creds_dict = st.secrets["connections"]["gsheets"]
+    creds = service_account.Credentials.from_service_account_info(creds_dict)
+    
+    # 2. ドライブサービスを構築
+    service = build('drive', 'v3', credentials=creds)
+    
+    # 3. 保存先フォルダID (ここを書き換えてください！)
+    folder_id = "1bmgT1IBAZd7U37dKkUBBoFx2TpR6BMXI" 
+    
+    # 4. ファイルの設定
+    file_metadata = {
+        'name': f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uploaded_file.name}",
+        'parents': [folder_id]
+    }
+    
+    # 5. ファイルをバイナリとして読み込み
+    media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), 
+                              mimetype='image/jpeg', 
+                              resumable=True)
+    
+    # 6. アップロード実行
+    file = service.files().create(body=file_metadata, 
+                                  media_body=media, 
+                                  fields='id').execute()
+    
+    # 7. 画像の直リンクURLを返す
+    return f"https://drive.google.com/uc?id={file.get('id')}"
+    
 def get_moon_age(dt):
     base_new_moon = datetime(2023, 1, 22, 5, 53)
     lunar_cycle = 29.530588
@@ -451,6 +485,15 @@ if submit:
     if not final_place_name:
         st.error("⚠️ 場所名を入力してください。")
     else:
+        with st.spinner('📸 画像をアップロード中...'):
+            # --- ここを追加 ---
+            drive_url = ""
+            if uploaded_file:
+                try:
+                    drive_url = upload_to_drive(uploaded_file)
+                except Exception as e:
+                    st.error(f"画像アップロード失敗: {e}")
+            # -----------------
         with st.spinner('📊 解析・保存中...'):
             try:
                 target_dt = datetime.combine(date_in, time_in)
@@ -514,6 +557,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
