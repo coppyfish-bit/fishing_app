@@ -493,19 +493,34 @@ with tab2:
                         new_place = st.text_input("場所を修正", value=row['場所'], key=f"edit_place_{index}")
                         new_size = st.number_input("サイズ(cm)", value=float(row.get('サイズ(cm)', 0)), key=f"edit_size_{index}")
                         
-                        # ... 他の項目（天気、ルアーなど）も同様に追加可能 ...
+                        col_edit1, col_edit2 = st.columns(2)
+                        with col_edit1:
+                            new_size = st.number_input("サイズ(cm)", value=float(row.get('サイズ(cm)', 0)), key=f"edit_size_{index}")
+                            new_lure = st.text_input("ルアー", value=row.get('ルアー', ''), key=f"edit_lure_{index}")
+                            new_memo = st.text_area("備考を修正", value=row.get('備考', ''), key=f"edit_memo_{index}")
+                        with col_edit2:
+                            new_wind_speed = st.number_input("風速(m/s)", value=float(row.get('風速(m/s)', 0)), key=f"edit_wind_s_{index}")
+                            new_wind_dir = st.text_input("風向", value=row.get('風向', ''), key=f"edit_wind_d_{index}")
+                            new_tide = st.selectbox("潮位", ["大潮", "中潮", "小潮", "長潮", "若潮"], index=["大潮", "中潮", "小潮", "長潮", "若潮"].index(row.get('潮位', '中潮')) if row.get('潮位') in ["大潮", "中潮", "小潮", "長潮", "若潮"] else 1, key=f"edit_tide_{index}")
 
                         col_btn1, col_btn2 = st.columns(2)
                         
+                        col_btn1, col_btn2 = st.columns(2)
                         with col_btn1:
                             if st.button("🆙 修正を保存", key=f"update_{index}"):
-                                # DataFrameの該当行を書き換え
+                                # DataFrameの該当行をすべて書き換え
                                 df.at[index, '魚種'] = new_fish
                                 df.at[index, '場所'] = new_place
                                 df.at[index, 'サイズ(cm)'] = new_size
-                                # スプレッドシートへ上書き
+                                df.at[index, 'ルアー'] = new_lure
+                                df.at[index, '風速(m/s)'] = new_wind_speed
+                                df.at[index, '風向'] = new_wind_dir
+                                df.at[index, '潮位'] = new_tide
+                                df.at[index, '備考'] = new_memo
+                                
+                                # スプレッドシートへ上書き関数を呼び出す
                                 update_spreadsheet(df)
-                                st.rerun() # 画面を更新して反映
+                                st.rerun()
                         
                         with col_btn2:
                             if st.button("🗑️ この記録を削除", key=f"del_{index}"):
@@ -519,6 +534,7 @@ with tab2:
                     st.error(f"操作中にエラーが発生しました: {e}")
     except Exception as e:
         st.error(f"アプリの実行中にエラーが発生しました: {e}")
+
 
 
 
