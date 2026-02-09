@@ -544,75 +544,90 @@ with tab2:
         st.error(f"履歴表示処理全体でエラーが発生しました: {e}")
 
 # ==========================================
-# タブ3: ギャラリー（絞り込み機能付き）
+# タブ3: ギャラリー（潮位フェーズ対応 ＆ 過去ログリスト版）
 # ==========================================
 with tab3:
     st.subheader("🖼️ 釣果フォトギャラリー")
 
     if 'df' in st.session_state and not st.session_state.df.empty:
-        # 元のデータを壊さないようにコピー
         df_gallery = st.session_state.df.copy()
 
-        # 列名の定義（スプレッドシートに合わせて固定）
+        # カラム名の定義
+        PHASE_COL = "潮位フェーズ"
         SIZE_COL = "全長_cm"
         FISH_COL = "魚種"
+        TIDE_NAME_COL = "潮名"
+        TIDE_CM_COL = "潮位_cm"
 
+        # --- 絞り込みセクション ---
         st.write("🔍 絞り込み条件")
         col_f1, col_f2 = st.columns(2)
-        
         with col_f1:
-            # 魚種で絞り込み
-            if FISH_COL in df_gallery.columns:
-                unique_fish = ["すべて"] + sorted(df_gallery[FISH_COL].dropna().unique().tolist())
-                select_fish = st.selectbox("魚種を選択", unique_fish, key="gallery_fish_select")
-            else:
-                st.warning(f"列 '{FISH_COL}' が見つかりません")
-                select_fish = "すべて"
-        
+            unique_fish = ["すべて"] + sorted(df_gallery[FISH_COL].dropna().unique().tolist())
+            select_fish = st.selectbox("魚種を選択", unique_fish, key="gal_fish_select")
         with col_f2:
-            # サイズで絞り込み
-            min_size = st.number_input("◯◯cm以上を表示", min_value=0.0, step=1.0, value=0.0, key="gallery_size_input")
+            min_size = st.number_input("◯◯cm以上を表示", min_value=0.0, step=1.0, value=0.0, key="gal_size_input")
 
-        # --- フィルタリング実行 ---
-        # 1. 魚種の絞り込み
+        # フィルタリング
         if select_fish != "すべて":
             df_gallery = df_gallery[df_gallery[FISH_COL] == select_fish]
-        
-        # 2. サイズの絞り込み（全長_cm 列がある場合のみ）
         if SIZE_COL in df_gallery.columns:
-            # 数字以外の文字が含まれていても強制的に数字に変換（エラーはNaNにする）
             df_gallery[SIZE_COL] = pd.to_numeric(df_gallery[SIZE_COL], errors='coerce').fillna(0)
             df_gallery = df_gallery[df_gallery[SIZE_COL] >= min_size]
-        else:
-            st.warning(f"列 '{SIZE_COL}' が見つかりません。スプレッドシートの1行目を確認してください。")
 
-        # 新しい順に並び替え、直近10件を取得
-        df_gallery = df_gallery.iloc[::-1].head(10)
+        # 全体の並び替え（最新順）
+        df_gallery = df_gallery.iloc[::-1]
 
-        if df_gallery.empty:
-            st.warning("条件に一致する釣果がありません。")
-        else:
-            # ギャラリー表示
-            for idx, row in df_gallery.iterrows():
-                st.write("---")
-                col_img, col_info = st.columns([1, 1])
+        # --- 1. 直近10件の画像表示 ---
+        st.write("### 🆕 最新の釣果（10件）")
+        latest_10 = df_gallery.head(10)
+        
+        for idx, row in latest_10.iterrows():
+            st.write("---")
+            col_img, col_info = st.columns([1, 1])
+            with col_img:
+                img_url = str(row.get('filename', ''))
+                if img_url and img_url.strip() and img_url != 'None':
+                    st.image(img_url, use_container_width=True)
+                else:
+                    st.caption("📷 画像なし")
+            with col_info:
+                st.markdown(f"### {row.get(FISH_COL, '不明')} ({row.get(SIZE_COL, '---')}cm)")
+                st.write(f"📅 **日時:** {row.get('date', '---')} {row.get('time', '')}")
+                st.write(f"📍 **場所:** {row.get('場所', '---')}")
+                # 潮名・フェーズ・潮位を1行に
+                tide_display = f"{row.get(TIDE_NAME_COL, '---')} / {row.get(PHASE_COL, '---')} ({row.get(TIDE_CM_COL, '---')}cm)"
+                st.write(f"🌊 **潮汐:** {tide_display}")
+                st.write(f"🚩 **気象:** {row.get('風向', '---')} {row.get('風速', '0')}m / ☔ {row.get('降水量', '0')}mm")
+
+        # --- 2. 11件目以降のリスト表示 ---
+        if len(df_gallery) > 10:
+            st.write("---")
+            st.write("### 📜 過去の履歴リスト（11件目以降）")
+            
+            # リスト用のラベル作成（例：2024-05-10 | シーバス | 70cm）
+            past_logs = df_gallery.iloc[10:]
+            past_logs['list_label'] = past_logs['date'].astype(str) + " | " + past_logs[FISH_COL].astype(str) + " | " + past_logs[SIZE_COL].astype(str) + "cm"
+            
+            selected_log_label = st.selectbox("過去の記録を選択して詳細を表示", ["選択してください"] + past_logs['list_label'].tolist())
+            
+            if selected_log_label != "選択してください":
+                # 選択された行を特定
+                selected_row = past_logs[past_logs['list_label'] == selected_log_label].iloc[0]
                 
-                with col_img:
-                    img_url = str(row.get('filename', ''))
-                    if img_url and img_url.strip() and img_url != 'None':
-                        st.image(img_url, use_container_width=True)
-                    else:
-                        st.caption("📷 画像なし")
-                
-                with col_info:
-                    current_size = row.get(SIZE_COL, '---')
-                    st.markdown(f"### {row.get(FISH_COL, '不明')} ({current_size}cm)")
-                    st.write(f"📅 **日付:** {row.get('date', '---')}")
-                    st.write(f"📍 **場所:** {row.get('場所', '---')}")
-                    st.write(f"🌊 **潮位:** {row.get('潮位', '---')}")
-                    st.write(f"☀️ **天気:** {row.get('天気', '---')}")
-                    if row.get('ルアー'):
-                        st.write(f"🎣 **ルアー:** {row['ルアー']}")
+                # ポップアップ風に詳細を表示
+                with st.container(border=True):
+                    st.info(f"📋 過去ログ詳細: {selected_log_label}")
+                    col_p_img, col_p_info = st.columns([1, 1])
+                    with col_p_img:
+                        p_img_url = str(selected_row.get('filename', ''))
+                        if p_img_url and p_img_url.strip() and p_img_url != 'None':
+                            st.image(p_img_url, use_container_width=True)
+                    with col_p_info:
+                        st.write(f"🌊 **潮汐:** {selected_row.get(TIDE_NAME_COL, '---')} / {selected_row.get(PHASE_COL, '---')}")
+                        st.write(f"🚩 **気象:** {selected_row.get('風向', '---')} {selected_row.get('風速', '0')}m")
+                        st.write(f"🎣 **ルアー:** {selected_row.get('ルアー', '---')}")
+                        st.write(f"💬 **備考:** {selected_row.get('備考', '---')}")
 
     else:
         st.info("履歴がまだありません。")
