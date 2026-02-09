@@ -486,7 +486,7 @@ with tab1:
 # タブ2: 釣果の修正・削除
 # ==========================================
 with tab2:
-    st.subheader("📸 釣果修正、削除")
+    st.subheader("📸 釣果修正・削除")
 
     # API制限対策：手動リロードボタン
     if st.button("🔄 最新の履歴に更新", key="reload_history"):
@@ -713,6 +713,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
