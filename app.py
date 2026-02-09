@@ -234,75 +234,78 @@ st.title("🎣 釣果統合ログシステム")
 tab1, tab2 = st.tabs(["📝 釣果登録", "🔧 履歴の修正・削除"])
 
 # ==========================================
-# タブ1: 釣果登録 (既存のコードをここに移動)
+# タブ1: 釣果登録
 # ==========================================
 with tab1:
-    # (ここに今までの写真アップロード〜保存処理のコードをすべて入れます)
+    # --- 1. データの読み込み ---
     try:
-            conn = st.connection("gsheets", type=GSheetsConnection)
-            url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-            df = conn.read(spreadsheet=url, ttl="5m")
-            m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
-    except:
-            st.error("スプレッドシート接続エラー"); st.stop()
+        # 接続と設定の再読み込み（セッション状態を活用）
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+        # メインデータ
+        if "df" not in st.session_state:
+            st.session_state.df = conn.read(spreadsheet=url, ttl="5m")
+        # 場所マスター
+        if "m_df" not in st.session_state:
+            st.session_state.m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="10m")
+        
+        df = st.session_state.df
+        m_df = st.session_state.m_df
+    except Exception as e:
+        st.error(f"スプレッドシート接続エラー: {e}")
+        st.stop()
 
-uploaded_file = st.file_uploader("📸 写真を選択", type=['jpg', 'jpeg'], key="main_uploader")
-auto_lat, auto_lon, default_dt = 32.5, 130.0, datetime.now()
+    # --- 2. ファイルアップロードとEXIF解析 ---
+    uploaded_file = st.file_uploader("📸 写真を選択", type=['jpg', 'jpeg'], key="main_uploader")
+    auto_lat, auto_lon, default_dt = 32.5, 130.0, datetime.now()
 
-if uploaded_file:
-    img = Image.open(uploaded_file)
-    exif = img._getexif()
-    if exif:
-        geotags = get_geotagging(exif)
-        if geotags:
-            lat = get_decimal_from_dms(geotags.get('GPSLatitude'), geotags.get('GPSLatitudeRef'))
-            lon = get_decimal_from_dms(geotags.get('GPSLongitude'), geotags.get('GPSLongitudeRef'))
-            if lat: auto_lat, auto_lon = lat, lon
-        dt_str = exif.get(36867)
-        if dt_str: 
-            try: default_dt = datetime.strptime(dt_str, '%Y:%m:%d %H:%M:%S')
-            except: pass
+    if uploaded_file:
+        img = Image.open(uploaded_file)
+        exif = img._getexif()
+        if exif:
+            geotags = get_geotagging(exif)
+            if geotags:
+                lat = get_decimal_from_dms(geotags.get('GPSLatitude'), geotags.get('GPSLatitudeRef'))
+                lon = get_decimal_from_dms(geotags.get('GPSLongitude'), geotags.get('GPSLongitudeRef'))
+                if lat: auto_lat, auto_lon = lat, lon
+            dt_str = exif.get(36867)
+            if dt_str: 
+                try: default_dt = datetime.strptime(dt_str, '%Y:%m:%d %H:%M:%S')
+                except: pass
 
-# 場所の判定
-detected_name, detected_id = find_nearest_place(auto_lat, auto_lon, m_df)
-is_new_place = False
+    # --- 3. 場所の判定と入力 ---
+    detected_name, detected_id = find_nearest_place(auto_lat, auto_lon, m_df)
+    is_new_place = False
 
-st.markdown("### 📍 釣り場")
-if detected_name:
-    st.success(f"✅ **{detected_name}** (付近の写真です)")
-    final_place_name = detected_name
-    final_group_id = detected_id
-else:
-    st.warning("🆕 500m以内に登録地点がありません")
-    final_place_name = st.text_input("新規釣り場名を入力", placeholder="例: 〇〇港 堤防")
-    final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 1
-    is_new_place = True
+    st.markdown("### 📍 釣り場")
+    if detected_name:
+        st.success(f"✅ **{detected_name}** (付近の写真です)")
+        final_place_name = detected_name
+        final_group_id = detected_id
+    else:
+        st.warning("🆕 500m以内に登録地点がありません")
+        final_place_name = st.text_input("新規釣り場名を入力", placeholder="例: 〇〇港 堤防")
+        final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 1
+        is_new_place = True
 
-with st.expander("場所を手動で修正・選択"):
-    place_to_id = dict(zip(m_df['place_name'], m_df['group_id'])) if not m_df.empty else {}
-    manual_sel = st.selectbox("登録済み地点から選ぶ", ["-- 選択なし --"] + list(place_to_id.keys()))
-    if manual_sel != "-- 選択なし --":
-        final_place_name = manual_sel
-        final_group_id = place_to_id[manual_sel]
-        is_new_place = False
+    with st.expander("場所を手動で修正・選択"):
+        place_to_id = dict(zip(m_df['place_name'], m_df['group_id'])) if not m_df.empty else {}
+        manual_sel = st.selectbox("登録済み地点から選ぶ", ["-- 選択なし --"] + list(place_to_id.keys()))
+        if manual_sel != "-- 選択なし --":
+            final_place_name = manual_sel
+            final_group_id = place_to_id[manual_sel]
+            is_new_place = False
 
-# --- 魚種登録セクション ---
-st.subheader("🐟 魚種")
+    # --- 4. 魚種登録 ---
+    st.subheader("🐟 魚種")
+    fish_options = ["スズキ", "ヒラスズキ", "ターポン", "タチウオ", "コチ", "ヒラメ","カサゴ", "クロダイ", "キビレ","キジハタ","マダイ","その他（手入力）"]
+    selected_fish = st.selectbox("魚種を選択", fish_options)
+    manual_fish_name = st.text_input("魚種名（手入力）", placeholder="例：アカハタ、または魚種の補足など")
 
-# 選択肢のリスト（よく釣れるものを入れておくと楽です）
-fish_options = ["スズキ", "ヒラスズキ", "ターポン", "タチウオ", "コチ", "ヒラメ","カサゴ", "クロダイ", "キビレ","キジハタ","マダイ","その他（手入力）"]
-selected_fish = st.selectbox("魚種を選択", fish_options)
-# 2. 手入力欄（常に表示）
-# placeholder を入れることで、何を書けばいいか分かりやすくします
-manual_fish_name = st.text_input("魚種名（手入力）", placeholder="例：アカハタ、または魚種の補足など")
-
-# 保存用の最終的な魚種名を決定するロジック
-if manual_fish_name:
-    # 手入力があればそれを優先、または「選択肢 + 手入力」とする
-    final_fish_name = manual_fish_name
-else:
-    final_fish_name = selected_fish
-# 釣果入力
+    if manual_fish_name:
+        final_fish_name = manual_fish_name
+    else:
+        final_fish_name = selected_fish
 # --- カスタムCSS（フィッシュメジャー風） ---
 st.markdown("""
     <style>
@@ -558,6 +561,7 @@ with tab2:
 
     except Exception as e:
         st.error(f"履歴の表示中にエラーが発生しました: {e}")
+
 
 
 
