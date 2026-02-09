@@ -543,6 +543,64 @@ with tab2:
     except Exception as e:
         st.error(f"履歴表示処理全体でエラーが発生しました: {e}")
 
+# ==========================================
+# タブ3: ギャラリー（絞り込み機能付き）
+# ==========================================
+with tab3:
+    st.subheader("🖼️ 釣果フォトギャラリー")
+
+    if 'df' in st.session_state and not st.session_state.df.empty:
+        df_gallery = st.session_state.df.copy()
+
+        # --- サイドバーまたは上部にフィルターを設置 ---
+        st.write("🔍 絞り込み条件")
+        col_f1, col_f2 = st.columns(2)
+        
+        with col_f1:
+            # 魚種で絞り込み
+            unique_fish = ["すべて"] + sorted(df_gallery["魚種"].unique().tolist())
+            select_fish = st.selectbox("魚種を選択", unique_fish)
+        
+        with col_f2:
+            # サイズで絞り込み
+            min_size = st.number_input("◯◯cm以上を表示", min_value=0.0, step=1.0, value=0.0)
+
+        # フィルタリング実行
+        if select_fish != "すべて":
+            df_gallery = df_gallery[df_gallery["魚種"] == select_fish]
+        
+        df_gallery = df_gallery[df_gallery["サイズ(cm)"].astype(float) >= min_size]
+
+        # 新しい順に並び替え、直近10件を取得
+        df_gallery = df_gallery.iloc[::-1].head(10)
+
+        if df_gallery.empty:
+            st.warning("条件に一致する釣果がありません。")
+        else:
+            # ギャラリー表示
+            for idx, row in df_gallery.iterrows():
+                st.write("---")
+                col_img, col_info = st.columns([1, 1]) # 画面を左右に分割
+                
+                with col_img:
+                    img_url = str(row.get('filename', ''))
+                    if img_url and img_url.strip():
+                        st.image(img_url, use_container_width=True)
+                    else:
+                        st.caption("📷 画像なし")
+                
+                with col_info:
+                    st.markdown(f"### {row['魚種']} ({row['サイズ(cm)']}cm)")
+                    st.write(f"📅 **日付:** {row['date']}")
+                    st.write(f"📍 **場所:** {row.get('場所', '---')}")
+                    st.write(f"🌊 **潮位:** {row.get('潮位', '---')}")
+                    st.write(f"☀️ **天気:** {row.get('天気', '---')} ({row.get('風速(m/s)', '0')}m)")
+                    if row.get('ルアー'):
+                        st.write(f"🎣 **ルアー:** {row['ルアー']}")
+
+    else:
+        st.info("履歴がまだありません。まずは釣果を登録しましょう！")
+
 
 
 
