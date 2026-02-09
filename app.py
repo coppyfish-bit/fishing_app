@@ -664,14 +664,12 @@ with tab3:
                 with st.container(border=True):
                     st.info(f"📋 過去ログ詳細: {selected_log_label}")
                     col_p_img, col_p_info = st.columns([1, 1])
-                    with col_p_img:
-                        img_url = str(row.get('filename', '')).strip()
-                # 「http」から始まる正規のURLがある場合のみ表示
-                        if img_url.startswith('http'):
-                        st.image(img_url, use_container_width=True)
-                        
+                    with col_img:
+                img_url = str(row.get('filename', '')).strip()
+                if img_url.startswith('http'):
+                    st.image(img_url, use_container_width=True) # ← ここに半角スペース4つ分を入れる
                 else:
-                    st.info("📷 画像なし")
+                    st.info("📷 画像なし") # ← ここも同様に字下げ
                     
                     with col_p_info:
                         st.write(f"👤 **釣り人:** {selected_row.get(ANGLER_COL, '---')}")
@@ -682,6 +680,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
