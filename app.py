@@ -413,7 +413,7 @@ with tab1:
                             "ルアー": lure_in, 
                             "備考": memo_in,
                             "group_id": final_group_id, 
-                            "観測所": t_info.get("観測所", "不明")
+                            "観測所": t_info.get("観測所", "不明"),
                             "釣り人": angler
                         }
 
@@ -680,6 +680,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
