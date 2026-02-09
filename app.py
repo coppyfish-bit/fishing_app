@@ -192,55 +192,70 @@ with tab1:
 # タブ2: 釣果の修正・削除
 # ==========================================
 with tab2:
-    st.subheader("直近5件の釣果履歴")
+    st.subheader("📸 直近5件の履歴（詳細修正・削除）")
     
-    # 【重要】キャッシュを無視して最新データを強制的に再読み込み
     try:
-        # ttl=0 にすることで、常に最新のスプレッドシートを取得します
-        updated_df = conn.read(spreadsheet=url, ttl=0) 
+        # 最新データを強制リロード
+        edit_df = conn.read(spreadsheet=url, ttl=0)
         
-        if updated_df is None or updated_df.empty:
-            st.info("まだ履歴がありません。")
+        if edit_df is None or edit_df.empty:
+            st.info("履歴がまだありません。")
         else:
-            # 最新の5件を抽出（データがある場合のみ）
-            latest_count = min(len(updated_df), 5)
-            latest_df = updated_df.tail(latest_count).copy()
-            # 新しい順に並び替え
-            latest_df = latest_df.iloc[::-1]
+            # 最新5件を抽出して逆順に
+            target_df = edit_df.tail(5).copy().iloc[::-1]
             
-            for index, row in latest_df.iterrows():
-                # 表示用のタイトル（魚種やサイズが空の場合の対策）
-                fish_label = row['魚種'] if pd.notnull(row['魚種']) else "不明"
-                size_label = row['全長_cm'] if pd.notnull(row['全長_cm']) else "0"
-                date_label = row['date'] if pd.notnull(row['date']) else "不明"
-                
-                with st.expander(f"📅 {date_label} | 🐟 {fish_label} | 📏 {size_label}cm"):
-                    # 編集フォーム
-                    new_fish = st.text_input("魚種を修正", value=fish_label, key=f"edit_fish_{index}")
-                    new_size = st.number_input("サイズを修正", value=float(size_label), key=f"edit_size_{index}")
-                    new_memo = st.text_area("備考を修正", value=row['備考'] if pd.notnull(row['備考']) else "", key=f"edit_memo_{index}")
+            for index, row in target_df.iterrows():
+                # タイトルに基本情報を表示
+                with st.expander(f"📌 {row['date']} | {row['魚種']} | {row['場所']}"):
                     
-                    c1, c2 = st.columns(2)
+                    # --- 1. 画像のプレビュー ---
+                    # 注意: filenameから画像を表示するには、ストレージ(S3/GDRIVE等)との連携が必要ですが、
+                    # ここでは一旦「登録時のファイル名」を表示し、必要ならプレビュー枠を設けます。
+                    st.write(f"🖼️ ファイル名: {row['filename']}")
+                    # もし画像URLがスプレッドシートにある場合は st.image(row['url']) が使えます
                     
-                    if c1.button("🆙 更新する", key=f"btn_upd_{index}", use_container_width=True):
-                        # 元の大きなデータフレーム（updated_df）を直接書き換え
-                        updated_df.at[index, '魚種'] = new_fish
-                        updated_df.at[index, '全長_cm'] = new_size
-                        updated_df.at[index, '備考'] = new_memo
-                        # 全体を更新
-                        conn.update(spreadsheet=url, data=updated_df)
-                        st.success("更新完了！")
+                    # --- 2. 修正項目のレイアウト ---
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        u_fish = st.text_input("🐟 魚種", value=row['魚種'], key=f"f_{index}")
+                        u_place = st.text_input("📍 場所", value=row['場所'], key=f"p_{index}")
+                        # 0.5cm刻みのサイズ修正
+                        u_size = st.number_input("📏 サイズ(cm)", value=float(row['全長_cm']), step=0.5, key=f"s_{index}")
+                        u_lure = st.text_input("🏹 ルアー・仕掛け", value=row['ルアー'], key=f"l_{index}")
+
+                    with col2:
+                        u_tide = st.number_input("🌊 潮位(cm)", value=int(row['潮位_cm']) if pd.notnull(row['潮位_cm']) else 0, key=f"t_{index}")
+                        u_temp = st.number_input("🌡️ 気温(℃)", value=float(row['気温']) if pd.notnull(row['気温']) else 0.0, step=0.1, key=f"te_{index}")
+                        u_wind = st.text_input("💨 風情報", value=f"{row['風向']} {row['風速']}m/s", key=f"w_{index}")
+                        # 風向・風速は個別に分けることも可能ですが、ここでは簡易的に表示
+
+                    u_memo = st.text_area("📝 メモ", value=row['備考'], key=f"m_{index}")
+
+                    # --- 3. 更新・削除ボタン ---
+                    b_col1, b_col2 = st.columns(2)
+                    
+                    if b_col1.button("🆙 修正を保存", key=f"up_btn_{index}", use_container_width=True, type="primary"):
+                        edit_df.at[index, '魚種'] = u_fish
+                        edit_df.at[index, '場所'] = u_place
+                        edit_df.at[index, '全長_cm'] = u_size
+                        edit_df.at[index, 'ルアー'] = u_lure
+                        edit_df.at[index, '潮位_cm'] = u_tide
+                        edit_df.at[index, '気温'] = u_temp
+                        edit_df.at[index, '備考'] = u_memo
+                        
+                        conn.update(spreadsheet=url, data=edit_df)
+                        st.success("修正内容をスプレッドシートに反映しました！")
                         st.rerun()
 
-                    if c2.button("🗑️ 削除する", key=f"btn_del_{index}", use_container_width=True):
-                        # 指定した行を削除
-                        updated_df = updated_df.drop(index)
-                        conn.update(spreadsheet=url, data=updated_df)
-                        st.warning("削除完了しました。")
+                    if b_col2.button("🗑️ データを削除", key=f"del_btn_{index}", use_container_width=True):
+                        edit_df = edit_df.drop(index)
+                        conn.update(spreadsheet=url, data=edit_df)
+                        st.warning("データを削除しました。")
                         st.rerun()
 
     except Exception as e:
-        st.error(f"データの読み込み中にエラーが発生しました: {e}")
+        st.error(f"エラーが発生しました: {e}")
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
@@ -464,6 +479,7 @@ if submit:
                 st.cache_data.clear()
             except Exception as e:
                 st.error(f"❌ 書き込みエラー: {e}")
+
 
 
 
