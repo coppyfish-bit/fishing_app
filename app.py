@@ -823,11 +823,11 @@ with tab3:
                         w_dir = row.get(WIND_DIR_COL, '---')
                         st.write(f"🍃 風速: {w_spd}m/s")
                         st.write(f"🧭 風向: {w_dir}")
-                        # --- 🎣 ルアー表示（スタイルを統一） ---
-                        lure_val = row.get(LURE_COL)
-                        if pd.notna(lure_val) and str(lure_val).strip().lower() != 'nan' and str(lure_val).strip() != '':
+                       # --- 🎣 ルアー表示（インデント修正版） ---
+                    lure_val = row.get(LURE_COL)
+                    if pd.notna(lure_val) and str(lure_val).strip().lower() != 'nan' and str(lure_val).strip() != '':
                         st.write(f"🎣 ルアー: {lure_val}")
-                       else:
+                    else:
                         st.write(f"🎣 ルアー: ---")
                     if row.get(RAIN_COL):
                         st.caption(f"☔ 降水量: {row[RAIN_COL]}mm")
@@ -882,6 +882,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
