@@ -721,7 +721,7 @@ with tab2:
     except Exception as e:
         st.error(f"タブ2でエラーが発生しました: {e}")
         
-   with tab3:
+with tab3:
         st.subheader("📸 釣果フォトギャラリー")
         if not df.empty:
             latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
@@ -739,6 +739,7 @@ with tab2:
                     st.write(f"📅 {row.get('date')} | 📍 {row.get(PLACE_COL)}")
         else:
             st.write("データがありません")
+
 
 
 
