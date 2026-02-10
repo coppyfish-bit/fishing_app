@@ -725,25 +725,37 @@ with tab3:
             latest_data = df.sort_values(by=['date', 'time'], ascending=False).head(display_count)
             
             for idx, row in latest_data.iterrows():
-                # 1. データの準備（あらかじめ文字にしておく）
+                # --- 1. データの準備（あらかじめ文字にしておく） ---
                 img = str(row.get('filename', '')).strip()
                 if not img.startswith('http'): continue
                 
+                # 基本情報
                 fish_text = f"{row.get('魚種', '不明')} {row.get('サイズ', '---')}cm"
                 info_text = f"📅 {row.get('date')} {str(row.get('time'))[:5]} / 📍 {row.get('場所', '---')}"
-                detail_text = f"🌊 {row.get('潮汐','--')} | 🍃 {row.get('風速','--')}m/s | 🎣 {row.get('ルアー','--')}"
+                
+                # 追加の詳細情報
+                tide_name = f"🌊 {row.get('潮汐','--')}({row.get('潮回り','--')})"
+                wind_info = f"🍃 {row.get('風向','--')} {row.get('風速','--')}m/s"
+                lure_info = f"🎣 {row.get('ルアー','--')}"
+                rain_info = f"☔ {row.get('降水量','--')}mm"
 
-                # 2. 【衝突回避型HTML】
-                # CSSの { } を使わず、すべて style="..." の中に詰め込んで衝突を防ぎます
+                # --- 2. 連結方式でHTMLを組み立て（衝突回避） ---
                 html_block = (
                     f'<div style="position:relative; width:100%; border-radius:15px; overflow:hidden; margin-bottom:10px; box-shadow:0 4px 10px rgba(0,0,0,0.3);">'
                     f'<img src="{img}" style="width:100%; display:block;">'
-                    f'<div style="position:absolute; top:12px; left:12px; z-index:10; background:rgba(220,20,60,0.9); color:white; padding:4px 12px; border-radius:20px; font-weight:bold; font-size:14px;">'
+                    # 左上タグ
+                    f'<div style="position:absolute; top:12px; left:12px; z-index:10; background:rgba(220,20,60,0.95); color:white; padding:4px 12px; border-radius:20px; font-weight:bold; font-size:14px;">'
                     f'{fish_text}</div>'
-                    f'<div style="position:absolute; bottom:0; left:0; right:0; z-index:5; background:linear-gradient(transparent, rgba(0,0,0,0.9)); color:white; padding:20px 12px 10px 12px;">'
-                    f'<div style="font-size:13px; font-weight:bold; margin-bottom:4px;">{info_text}</div>'
-                    f'<div style="font-size:11px; opacity:0.9;">{detail_text}</div>'
-                    f'</div></div>'
+                    # 下部グラデーションパネル
+                    f'<div style="position:absolute; bottom:0; left:0; right:0; z-index:5; background:linear-gradient(transparent, rgba(0,0,0,0.9) 60%); color:white; padding:25px 12px 12px 12px;">'
+                    f'<div style="font-size:13px; font-weight:bold; margin-bottom:6px;">{info_text}</div>'
+                    # 詳細情報の2段表示
+                    f'<div style="display:flex; flex-wrap:wrap; gap:8px; font-size:11px; opacity:0.95;">'
+                    f'<div style="background:rgba(255,255,255,0.15); padding:2px 8px; border-radius:4px;">{tide_name}</div>'
+                    f'<div style="background:rgba(255,255,255,0.15); padding:2px 8px; border-radius:4px;">{wind_info}</div>'
+                    f'<div style="background:rgba(255,255,255,0.15); padding:2px 8px; border-radius:4px;">{lure_info}</div>'
+                    f'<div style="background:rgba(255,255,255,0.15); padding:2px 8px; border-radius:4px;">{rain_info}</div>'
+                    f'</div></div></div>'
                 )
 
                 # 3. 実行
@@ -765,7 +777,7 @@ with tab3:
                 
                 st.write("---")
         else:
-            st.info("データが見つかりません。")
+            st.info("表示できるデータがありません。")
 
 
 
