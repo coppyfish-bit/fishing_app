@@ -723,22 +723,62 @@ with tab2:
         
 with tab3:
         st.subheader("📸 釣果フォトギャラリー")
+        
+        # データの存在チェック
         if not df.empty:
+            # 最新の10件を取得
             latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
+            
             for idx, row in latest_10.iterrows():
-                # 標準機能で確実に表示
-                with st.container(border=True):
-                    fish_n = row.get(FISH_COL, "不明")
-                    fish_s = row.get(SIZE_COL, "---")
-                    st.write(f"### {fish_n} ({fish_s}cm)")
-                    
-                    img_url = str(row.get('filename', '')).strip()
-                    if img_url.startswith('http'):
-                        st.image(img_url, use_container_width=True)
-                    
-                    st.write(f"📅 {row.get('date')} | 📍 {row.get(PLACE_COL)}")
+                # --- データの準備 ---
+                fish_name = row.get(FISH_COL, '不明')
+                fish_size = row.get(SIZE_COL, '---')
+                place = row.get(PLACE_COL, '---')
+                date_str = str(row.get('date', '---'))
+                time_str = str(row.get('time', ''))[:5]
+                img_url = str(row.get('filename', '')).strip()
+
+                # --- 詳細データの整理（nan対策） ---
+                def clean(v, unit=""):
+                    val = str(v).strip().lower()
+                    return "---" if val == 'nan' or val == '' else f"{v}{unit}"
+
+                tide_info = f"{row.get(TIDE_NAME_COL, '---')} ({row.get(PHASE_COL, '---')})"
+                wind_info = f"{clean(row.get(WIND_SPD_COL), 'm/s')} ({row.get(WIND_DIR_COL, '---')})"
+                lure_info = clean(row.get(LURE_COL))
+                rain_info = clean(row.get(RAIN_COL), "mm")
+
+                if img_url.startswith('http'):
+                    # --- 🎨 HTML/CSSによるオーバーレイ表示 ---
+                    st.markdown(f"""
+                        <div style="position: relative; border-radius: 15px; overflow: hidden; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                            <img src="{img_url}" style="width: 100%; display: block;">
+                            
+                            <div style="position: absolute; top: 12px; left: 12px;">
+                                <div style="background: rgba(220, 20, 60, 0.85); color: white; padding: 5px 12px; border-radius: 20px; font-weight: bold; font-size: 1rem;">
+                                    {fish_name} {fish_size}cm
+                                </div>
+                            </div>
+
+                            <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.95) 40%); color: white; padding: 15px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 8px; opacity: 0.9;">
+                                    <span>📅 {date_str} {time_str}</span>
+                                    <span>📍 {place}</span>
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 0.75rem; background: rgba(255,255,255,0.1); padding: 8px; border-radius: 8px;">
+                                    <div>🌊 {tide_info}</div>
+                                    <div>🍃 {wind_info}</div>
+                                    <div>☔ {rain_info}</div>
+                                    <div>🎣 {lure_info}</div>
+                                </div>
+                            </div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.info(f"💡 写真なし: {fish_name} ({fish_size}cm)")
         else:
-            st.write("データがありません")
+            st.write("データがありません。")
+
 
 
 
