@@ -539,36 +539,7 @@ with tab1:
                         updated_m = pd.concat([st.session_state.m_df, new_m], ignore_index=True)
                         conn.update(spreadsheet=url, worksheet="place_master", data=updated_m)
 
-                  # 2. データの解析と保存
-            with st.spinner('📊 データを解析して保存中...'):
-                try:
-                    # 入力フォームから取得した変数名（date_in, time_in）を使用
-                    # もし入力パーツで違う変数名（st.date_input等）を使っている場合は、それに合わせてください
-                    target_dt = datetime.combine(date_in, time_in)
-                    
-                    # 潮汐・気象データの取得
-                    t_name = get_tide_name(target_dt)
-                    t_info = get_tide_details(lat_in, lon_in, target_dt, final_place_name)
-                    temp, wind_s, wind_d, prec = get_weather_data(lat_in, lon_in, target_dt)
-
-                    # 保存用データ（26項目：カラム名をスプレッドシートと完全一致させています）
-                    save_data = {
-                        "filename": drive_url,
-                        "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
-                        "date": date_in.strftime('%Y-%m-%d'),
-                        "time": time_in.strftime('%H:%M'),
-                        "lat": lat_in, 
-                        "lon": lon_in,
-                        "気温": temp, 
-                        "風速": wind_s, 
-                        "風向": get_wind_direction_label(wind_d), 
-                        "降水量": prec,
-                        "潮位_cm": t_info.get("潮位_cm"),
-                        "月齢": get_moon_age(target_dt),
-                        "潮名": t_name,
-                        "次の満潮まで_分": t_info.get("次の満潮まで_分", ""),
-                        "次の干潮まで_分": t_info.get("次の干潮まで_分", ""),
-                        "直前の満潮_時刻": t_info.get("直前の満潮_時刻"),
+  
 if st.button("🚀 この内容で保存する"):
             # --- 1. 画像のアップロード ---
             drive_url = ""
@@ -1003,6 +974,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
