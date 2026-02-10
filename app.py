@@ -468,19 +468,21 @@ with tab1:
     submit = st.button("釣果を記録する", type="primary", use_container_width=True, key="blue_submit_btn")
   
 if st.button("🚀 この内容で保存する"):
-            drive_url = ""
-            try:
-                if uploaded_file is not None:
-                    with st.spinner('📸 アップ中...'):
+            drive_url = "https://via.placeholder.com/400x300.png?text=No+Image"
+            # 1. 画像がある時だけアップロードを試みる
+            if uploaded_file is not None:
+                try:
+                    with st.spinner('📸 画像をアップロード中...'):
+                        # Cloudinaryへのアップロード
                         res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
                         drive_url = res.get("secure_url")
-                else:
-                    drive_url = "https://via.placeholder.com/400x300.png?text=No+Image"
-            except Exception as e:
-                st.error(f"❌ 画像エラー: {e}")
-                st.stop()
-
-            with st.spinner('📊 保存中...'):
+                except Exception as e:
+                    st.error(f"❌ 画像アップロード失敗: {e}")
+                    st.info("別の写真を選ぶか、時間を置いて試してください。")
+                    st.stop()
+            
+            # 2. データの保存（画像がなくても進めるように外に出しました）
+            with st.spinner('📊 データを保存中...'):
                 try:
                     target_dt = datetime.combine(date_in, time_in)
                     t_name = get_tide_name(target_dt)
@@ -515,7 +517,7 @@ if st.button("🚀 この内容で保存する"):
                         updated_m = pd.concat([st.session_state.m_df, new_m], ignore_index=True)
                         conn.update(spreadsheet=url, worksheet="place_master", data=updated_m)
 
-                    st.success("🎉 保存しました！")
+                    st.success("🎉 釣果を保存しました！")
                     st.balloons()
                     st.cache_data.clear()
                     if "df" in st.session_state: del st.session_state.df
@@ -524,7 +526,6 @@ if st.button("🚀 この内容で保存する"):
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ 保存エラー: {e}")
-  
         # --- ここまで貼り付け ---
 # タブ2: 釣果の修正・削除)
 # ==========================================
@@ -699,6 +700,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
