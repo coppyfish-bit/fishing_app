@@ -572,26 +572,29 @@ with tab2:
                             st.rerun()
                     
                     with col_btn2:
-                        # 【重要】削除ボタンの処理を強化
+                        # original_index を使用するように修正
                         if st.button("🗑️ 削除する", key=f"del_btn_{original_index}", type="primary"):
                             with st.spinner('🗑️ 削除中...'):
-                                # 1. セッション内の最新のDFを再取得（他での更新を反映させるため）
-                                current_df = st.session_state.df.copy()
-                                # 2. 正確なインデックスで削除
-                                updated_df = current_df.drop(original_index)
-                                # 3. スプレッドシートに反映
-                                conn.update(spreadsheet=url, data=updated_df)
-                                # 4. キャッシュとセッションを完全にクリア
-                                st.cache_data.clear()
-                                if 'df' in st.session_state:
-                                    del st.session_state.df
-                                
-                                st.success("削除完了しました")
-                                # 5. 画面を強制リロード
-                                st.rerun()
-
-            except Exception as e:
-                st.error(f"データの表示中にエラーが発生しました: {e}")
+                                try:
+                                    # 1. 最新のDFを取得
+                                    current_df = st.session_state.df.copy()
+                                    
+                                    # 2. 正確なインデックスで削除（ここを original_index に修正）
+                                    updated_df = current_df.drop(original_index)
+                                    
+                                    # 3. スプレッドシートに反映
+                                    conn.update(spreadsheet=url, data=updated_df)
+                                    
+                                    # 4. キャッシュを完全にクリア
+                                    st.cache_data.clear()
+                                    if 'df' in st.session_state:
+                                        del st.session_state.df
+                                    
+                                    st.success("削除完了しました")
+                                    # 5. 画面を強制リロード
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ 削除に失敗しました: {e}")
 # ==========================================
 # タブ3: ギャラリー（全絞り込み ＆ 変数定義修正版）
 # ==========================================
@@ -724,6 +727,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
