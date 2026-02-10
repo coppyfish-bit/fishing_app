@@ -720,8 +720,8 @@ with tab2:
 
     except Exception as e:
         st.error(f"タブ2でエラーが発生しました: {e}")
-
-with tab3:
+        
+   with tab3:
     st.subheader("🎣 釣果フォトギャラリー")
     
     # いったんHTMLは使わず、Streamlitの標準機能だけで表示
