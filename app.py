@@ -473,72 +473,6 @@ with tab1:
         if 'final_place_name' not in locals() or not final_place_name:
             st.error("⚠️ 釣り場名を入力してください。")
         else:
-            # --- 1. 画像のアップロード ---
-            drive_url = ""
-            try:
-                if uploaded_file is not None:
-                    with st.spinner('📸 画像をアップロード中...'):
-                        upload_result = cloudinary.uploader.upload(
-                            uploaded_file,
-                            folder="fishing_app"
-                        )
-                        drive_url = upload_result.get("secure_url")
-                else:
-                    # 画像がない場合のデフォルト画像
-                    drive_url = "https://via.placeholder.com/400x300.png?text=No+Image"
-            except Exception as e:
-                st.error(f"❌ 画像アップロード失敗: {e}")
-                st.stop()  # アップロード失敗時はここで停止
-
-            # 2. データの解析と保存
-            with st.spinner('📊 データを解析して保存中...'):
-                try:
-                    target_dt = datetime.combine(date_in, time_in)
-                    t_name = get_tide_name(target_dt)
-                    t_info = get_tide_details(lat_in, lon_in, target_dt, final_place_name)
-                    temp, wind_s, wind_d, prec = get_weather_data(lat_in, lon_in, target_dt)
-
-                    # 保存用データ（26項目：釣り人を含む）
-                    save_data = {
-                        "filename": drive_url,
-                        "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
-                        "date": date_in.strftime('%Y-%m-%d'),
-                        "time": time_in.strftime('%H:%M'),
-                        "lat": lat_in, "lon": lon_in,
-                        "気温": temp, "風速": wind_s, "風向": get_wind_direction_label(wind_d), "降水量": prec,
-                        "潮位_cm": t_info.get("潮位_cm"),
-                        "月齢": get_moon_age(target_dt),
-                        "潮名": t_name,
-                        "次の満潮まで_分": t_info.get("次の満潮まで_分", ""),
-                        "次の干潮まで_分": t_info.get("次の干潮まで_分", ""),
-                        "直前の満潮_時刻": t_info.get("直前の満潮_時刻"),
-                        "直前の干潮_時刻": t_info.get("直前の干潮_時刻"),
-                        "潮位フェーズ": t_info.get("潮位フェーズ"),
-                        "場所": final_place_name,
-                        "魚種": final_fish_name,
-                        "全長_cm": length_in, 
-                        "ルアー": lure_in, 
-                        "備考": memo_in,
-                        "group_id": final_group_id, 
-                        "観測所": t_info.get("観測所", "不明"),
-                        "釣り人": angler
-                    }
-
-                    # カラムリスト
-                    cols = ["filename", "datetime", "date", "time", "lat", "lon", "気温", "風速", "風向", "降水量", "潮位_cm", "月齢", "潮名", "次の満潮まで_分", "次の干潮まで_分", "直前の満潮_時刻", "直前の干潮_時刻", "潮位フェーズ", "場所", "魚種", "全長_cm", "ルアー", "備考", "group_id", "観測所", "釣り人"]
-                    
-                    new_row_df = pd.DataFrame([save_data])[cols]
-                    
-                    # スプレッドシート更新
-                    updated_df = pd.concat([st.session_state.df, new_row_df], ignore_index=True)
-                    conn.update(spreadsheet=url, data=updated_df)
-                    
-                    # 場所マスター更新（新規地点の場合）
-                    if is_new_place:
-                        new_m = pd.DataFrame([{"group_id": final_group_id, "place_name": final_place_name, "latitude": lat_in, "longitude": lon_in}])
-                        updated_m = pd.concat([st.session_state.m_df, new_m], ignore_index=True)
-                        conn.update(spreadsheet=url, worksheet="place_master", data=updated_m)
-
   
 if st.button("🚀 この内容で保存する"):
             # --- 1. 画像のアップロード ---
@@ -974,6 +908,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
