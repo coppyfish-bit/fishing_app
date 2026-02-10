@@ -323,10 +323,10 @@ with tab1:
     final_fish_name = manual_fish_name if manual_fish_name else selected_fish
 
  # ==========================================
-    # 📏 全長クイックタップ（スマホ横並び強制）
+    # 📏 全長入力：スマホ最適化・縦型コントローラー
     # ==========================================
-
-    # 1. 魚種連動の初期値ロジック
+    
+    # 1. 魚種連動ロジック
     is_suzuki_family = final_fish_name in ["スズキ", "ヒラスズキ"]
     default_len = 60.0 if is_suzuki_family else 0.0
 
@@ -337,88 +337,64 @@ with tab1:
         st.session_state['len_val'] = default_len
         st.session_state['prev_fish_type'] = final_fish_name
 
-    # 2. 強力なCSS注入：縦並びを禁止し、横に3分割する
+    # 2. 表示用CSS
     st.markdown("""
         <style>
-        /* カラム（列）を強制的に横並びにする */
-        [data-testid="column"] {
-            width: 31% !important; /* 3つ並ぶように幅を制限 */
-            flex-direction: row !important;
-            display: flex !important;
-            min-width: 31% !important;
-        }
-        /* ボタンのデザイン：デカくて赤い縁取り */
-        .stButton > button {
-            width: 100% !important;
-            height: 75px !important;
-            font-size: 24px !important;
-            font-weight: 900 !important;
-            background-color: #1E1E1E !important;
-            color: white !important;
-            border: 3px solid #FF4B4B !important;
-            border-radius: 15px !important;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3) !important;
-        }
-        /* 数字の表示を少しスリムに */
         .len-display {
-            font-size: 70px !important;
+            font-size: 80px !important;
             color: #FF4B4B;
             font-weight: 900;
             text-align: center;
-            margin-bottom: 5px;
-            font-family: 'Arial Black', sans-serif;
+            line-height: 1;
+            margin: 10px 0;
         }
+        .unit-label { font-size: 20px; color: #888; margin-bottom: -10px; }
         </style>
     """, unsafe_allow_html=True)
 
-    # 3. 現在の数値を表示
-    st.markdown(f'<div class="len-display">{st.session_state.len_val:.1f} <span style="font-size:20px;">cm</span></div>', unsafe_allow_html=True)
+    # 3. 巨大な数字表示
+    st.markdown(f'<div class="len-display">{st.session_state.len_val:.1f}<span style="font-size:30px;">cm</span></div>', unsafe_allow_html=True)
 
-    # 4. ボタン配置（3分割 × 2段）
-    # --- 上段：マイナスボタン ---
-    c_m1, c_m2, c_m3 = st.columns(3)
-    with c_m1:
-        if st.button("ー10", key="m10_btn"):
+    # 4. 縦に並べるコントローラー（スマホで確実に動く形式）
+    st.write("---")
+    
+    # 10cm単位の調整
+    st.markdown('<p class="unit-label">10cm 単位</p>', unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("ー 10", key="m10", use_container_width=True):
             st.session_state.len_val -= 10.0
             st.rerun()
-    with c_m2:
-        if st.button("ー5", key="m5_btn"):
-            st.session_state.len_val -= 5.0
-            st.rerun()
-    with c_m3:
-        if st.button("ー1", key="m1_btn"):
-            st.session_state.len_val -= 1.0
-            st.rerun()
-
-    # --- 下段：プラスボタン ---
-    c_p1, c_p2, c_p3 = st.columns(3)
-    with c_p1:
-        if st.button("＋1", key="p1_btn"):
-            st.session_state.len_val += 1.0
-            st.rerun()
-    with c_p2:
-        if st.button("＋5", key="p5_btn"):
-            st.session_state.len_val += 5.0
-            st.rerun()
-    with c_p3:
-        if st.button("＋10", key="p10_btn"):
+    with c2:
+        if st.button("＋ 10", key="p10", use_container_width=True):
             st.session_state.len_val += 10.0
             st.rerun()
 
-    # --- 5. 手動微調整 ---
-    st.markdown("---")
-    num_input = st.number_input(
-        "手動入力 / 微調整 (cm)", 
-        min_value=0.0, max_value=300.0, 
-        value=float(st.session_state['len_val']),
-        step=0.1, format="%.1f", key="manual_num_input"
-    )
+    # 1cm単位の調整
+    st.markdown('<p class="unit-label">1cm 単位</p>', unsafe_allow_html=True)
+    c3, c4 = st.columns(2)
+    with c3:
+        if st.button("ー 1", key="m1", use_container_width=True):
+            st.session_state.len_val -= 1.0
+            st.rerun()
+    with c4:
+        if st.button("＋ 1", key="p1", use_container_width=True):
+            st.session_state.len_val += 1.0
+            st.rerun()
 
-    if num_input != st.session_state['len_val']:
-        st.session_state['len_val'] = num_input
-        st.rerun()
+    # 0.1cm単位の調整
+    st.markdown('<p class="unit-label">0.1cm 単位 (微調整)</p>', unsafe_allow_html=True)
+    c5, c6 = st.columns(2)
+    with c5:
+        if st.button("ー 0.1", key="m01", use_container_width=True):
+            st.session_state.len_val -= 0.1
+            st.rerun()
+    with c6:
+        if st.button("＋ 0.1", key="p01", use_container_width=True):
+            st.session_state.len_val += 0.1
+            st.rerun()
 
-    final_length = st.session_state['len_val']
+    final_length = round(st.session_state['len_val'], 1)
     # --- 6. その他入力項目 ---
     st.markdown("**ルアー・仕掛け**")
     lure_sel = st.text_input("ルアー名（例：カゲロウ125MD）", placeholder="英数字は半角推奨")
@@ -793,6 +769,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
