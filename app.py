@@ -717,13 +717,59 @@ with tab2:
         st.error(f"タブ2でエラーが発生しました: {e}")
         
 with tab3:
-        st.subheader("📸 ギャラリー")
-        for idx, row in df.head(5).iterrows():
-            img = str(row.get('filename', ''))
-            fish = f"{row.get('魚種', '不明')} {row.get('サイズ', '')}cm"
+        st.subheader("📸 釣果フォトギャラリー")
+        
+        # 表示件数の設定
+        display_count = st.slider("表示件数", 5, 50, 10)
+        
+        if not df.empty:
+            latest_data = df.sort_values(by=['date', 'time'], ascending=False).head(display_count)
             
-            # 💡 変数を使わず、1行にまとめた最短のHTML
-            st.markdown(f'<div style="position:relative"><img src="{img}" style="width:100%"><div style="position:absolute;top:10px;left:10px;background:red;color:white;padding:5px">{fish}</div></div>', unsafe_allow_html=True)
+            for idx, row in latest_data.iterrows():
+                # 1. データの準備（あらかじめ文字にしておく）
+                img = str(row.get('filename', '')).strip()
+                if not img.startswith('http'): continue
+                
+                fish = f"{row.get('魚種', '不明')} {row.get('サイズ', '---')}cm"
+                info = f"📅 {row.get('date')} {str(row.get('time'))[:5]} / 📍 {row.get('場所', '---')}"
+                details = f"🌊 {row.get('潮汐','--')}({row.get('潮回り','--')}) | 🍃 {row.get('風速','--')}m/s | 🎣 {row.get('ルアー','--')}"
+
+                # 2. 成功した「最短コード」の構造でデザインを適用
+                # 💡 f-stringの中に直接HTMLを書き、最後に unsafe_allow_html=True を指定
+                st.markdown(f'''
+                <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
+                    <img src="{img}" style="width: 100%; display: block;">
+                    
+                    <div style="position: absolute; top: 12px; left: 12px;">
+                        <div style="background: rgba(220, 20, 60, 0.9); color: white; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 14px;">
+                            {fish}
+                        </div>
+                    </div>
+
+                    <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.85)); color: white; padding: 20px 12px 10px 12px;">
+                        <div style="font-size: 13px; font-weight: bold; margin-bottom: 4px;">{info}</div>
+                        <div style="font-size: 11px; opacity: 0.9;">{details}</div>
+                    </div>
+                </div>
+                ''', unsafe_allow_html=True)
+
+                # 3. タイドグラフ（写真のすぐ下に表示）
+                try:
+                    t_date = pd.to_datetime(row.get('date')).date()
+                    t_df = get_tide_data(t_date) # お使いの関数名を確認してください
+                    if not t_df.empty:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(x=t_df['time'], y=t_df['level'], fill='tozeroy', line_color='#00BFFF'))
+                        fig.add_vline(x=str(row.get('time'))[:5], line_color="red", line_dash="dash")
+                        fig.update_layout(height=120, margin=dict(l=0,r=0,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                                          xaxis=dict(visible=False), yaxis=dict(visible=False))
+                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                except:
+                    pass
+                
+                st.write("---")
+        else:
+            st.info("釣果データが見つかりません。")
 
 
 
