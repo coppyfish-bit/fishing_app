@@ -32,30 +32,40 @@ def fetch_tide_data_safe(lat, lon, date_str):
         return None
     return None
 
-def display_tide_graph_fast(lat, lon, date_str, hit_time_str):
-    data = fetch_tide_data_safe(lat, lon, date_str)
-    if not data or "hourly" not in data:
-        st.caption("🌊 潮汐データを取得できませんでした（座標が陸地か通信エラー）")
-        return
+def display_tide_graph(lat, lon, date_str, hit_time_str):
+    try:
+        # 1. データの整形（念のためここでも行う）
+        clean_date = str(date_str).split(' ')[0].replace('/', '-')
+        
+        # 2. URL作成
+        url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={clean_date}&end_date={clean_date}"
+        
+        # 3. 通信実行
+        response = requests.get(url, timeout=5.0)
+        
+        # 4. API自体のエラー（404や400）をチェック
+        if response.status_code != 200:
+            st.error(f"❌ API接続エラー (Code: {response.status_code})")
+            st.write("理由:", response.json().get('reason', '不明なエラー'))
+            return
 
-    # グラフ描画処理
-    times = pd.to_datetime(data['hourly']['time'])
-    heights = data['hourly']['tide_height']
-    tide_df = pd.DataFrame({'time': times, 'height': heights})
+        data = response.json()
 
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=tide_df['time'], y=tide_df['height'], mode='lines', fill='tozeroy', line=dict(color='#007BFF')))
-    
-    # HITマーク
-    if hit_time_str and hit_time_str != 'None':
-        try:
-            hit_datetime = pd.to_datetime(f"{date_str} {hit_time_str[:5]}")
-            idx = (tide_df['time'] - hit_datetime).abs().idxmin()
-            fig.add_trace(go.Scatter(x=[hit_datetime], y=[tide_df.loc[idx, 'height']], mode='markers', marker=dict(color='red', size=12, symbol='star')))
-        except: pass
+        # 5. グラフ描画（ここが以前の「読み込めませんでした」の正体である可能性大）
+        times = pd.to_datetime(data['hourly']['time'])
+        heights = data['hourly']['tide_height']
+        tide_df = pd.DataFrame({'time': times, 'height': heights})
 
-    fig.update_layout(height=180, margin=dict(l=0, r=0, t=0, b=0), showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-    st.plotly_chart(fig, use_container_width=True)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=tide_df['time'], y=tide_df['height'], fill='tozeroy'))
+        st.plotly_chart(fig, use_container_width=True)
+
+    except Exception as e:
+        # 💡 ここがポイント：本当のエラーメッセージを画面に出す
+        st.error(f"❌ 詳細エラー: {e}")
+        # もし座標が原因ならここにヒントが出るはずです
+        if "NoneType" in str(e):
+            st.warning("緯度・経度が空（None）になっている可能性があります。")
     # (この下に既存のグラフ描画コードを続ける)
 
 # --- 🌊 APIから潮位を取得してグラフ化する関数 ---
@@ -870,6 +880,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
