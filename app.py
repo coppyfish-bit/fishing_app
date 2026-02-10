@@ -774,8 +774,8 @@ with tab3:
                 # --- 【修正ポイント】インデントを正してループ内に入れる ---
                 with st.expander("📊 タイドグラフを確認する"):
                     # 天草周辺の海上に座標を固定（エラー回避）
-                    fixed_lat = 32.40  
-                    fixed_lon = 130.10 
+                    fixed_lat = 32.19  
+                    fixed_lon = 129.99
                     
                     # 日付と時刻の掃除
                     clean_date = str(row.get('date')).split(' ')[0].strip().replace('/', '-')
@@ -821,6 +821,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
