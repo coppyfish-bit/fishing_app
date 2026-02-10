@@ -524,90 +524,91 @@ with tab1:
 # タブ2: 釣果の修正・削除
 # ==========================================
 with tab2:
-    st.subheader("📸 釣果履歴（直近5件は自動展開）")
+    st.subheader("📸 釣果履歴（直近5件展開）")
 
     # API制限対策：手動リロードボタン
-    if st.button("🔄 最新の履歴に更新", key="reload_history"):
+    if st.button("🔄 最新の履歴に更新", key="reload_history", use_container_width=True):
         st.cache_data.clear()
         if 'df' in st.session_state:
             del st.session_state.df
         st.rerun()
 
-    # タブ2全体を包む大きな try ブロック
     try:
-        # セッション状態からデータを取得
         df = st.session_state.get('df', None)
         
         if df is None or df.empty:
             st.info("履歴がまだありません。")
         else:
-            # 削除時のインデックスのズレを防ぐため、コピーを作成
             target_df = df.copy()
-            # 表示用に新しい順（最新が上）にする
-            display_df = target_df.iloc[::-1]
+            display_df = target_df.iloc[::-1] # 最新順
             
             for i, (original_index, row) in enumerate(display_df.iterrows()):
-                # 直近5件だけ最初から開く
                 is_expanded = True if i < 5 else False
                 
-                # 表示用ラベルの作成
+                # 表示用ラベル（日付 | 魚種 | サイズ）
                 d_val = row.get('date', '不明')
                 f_val = row.get('魚種', '不明')
-                p_val = row.get('場所', '不明')
-                expander_label = f"📌 {d_val} | {f_val} | {p_val}"
+                s_val = row.get('全長_cm', row.get('全長', '0')) # 全長_cm または 全長 を取得
+                expander_label = f"📌 {d_val} | {f_val} | {s_val}cm"
                 
                 with st.expander(expander_label, expanded=is_expanded):
-                    # --- 画像表示 ---
+                    # --- 1. 画像表示（ある場合のみ） ---
                     img_url = str(row.get('filename', '')).strip()
                     if img_url.startswith('http'):
                         st.image(img_url, use_container_width=True)
-                    else:
-                        st.caption("📷 画像データがありません")
-                    
-                    # --- 修正用入力フォーム ---
-                    new_fish = st.text_input("魚種を修正", value=str(f_val), key=f"edit_fish_{original_index}")
-                    new_place = st.text_input("場所を修正", value=str(p_val), key=f"edit_place_{original_index}")
-                    
-                    # 釣り人選択
-                    angler_list = ["長元", "川口", "山川", "その他"]
-                    current_angler = row.get('釣り人', 'その他')
+
+                    # --- 2. 修正入力フォーム（項目を4つに厳選） ---
+                    # ① サイズ
+                    new_size = st.number_input(
+                        "📏 サイズ (cm)", 
+                        value=float(s_val), 
+                        step=0.1, 
+                        format="%.1f",
+                        key=f"edit_size_{original_index}"
+                    )
+
+                    # ② 釣り人
+                    angler_list = ["長元", "川口", "山川"]
+                    current_angler = row.get('釣り人', '長元')
                     new_angler = st.selectbox(
-                        "👤 釣り人を修正", 
+                        "👤 釣り人", 
                         angler_list, 
-                        index=angler_list.index(current_angler) if current_angler in angler_list else 3,
+                        index=angler_list.index(current_angler) if current_angler in angler_list else 0,
                         key=f"edit_angler_{original_index}"
                     )
-                    
-                    col_edit1, col_edit2 = st.columns(2)
-                    with col_edit1:
-                        new_size = st.number_input("サイズ(cm)", value=float(row.get('全長_cm', 0)), step=0.5, key=f"edit_size_{original_index}")
-                        new_lure = st.text_input("ルアー", value=str(row.get('ルアー', '')), key=f"edit_lure_{original_index}")
+
+                    # ③ ルアー
+                    new_lure = st.text_input(
+                        "🎣 ルアー", 
+                        value=str(row.get('ルアー', '')), 
+                        key=f"edit_lure_{original_index}"
+                    )
+
+                    # ④ 備考
+                    new_memo = st.text_area(
+                        "📝 備考", 
+                        value=str(row.get('備考', '')), 
+                        key=f"edit_memo_{original_index}"
+                    )
+
+                    # --- 3. 更新ボタン（青色・シンプル） ---
+                    if st.button("🆙 この内容で修正保存", key=f"update_btn_{original_index}", type="primary", use_container_width=True):
+                        # original_index を使って元の行を更新
+                        df.at[original_index, '全長_cm'] = new_size # 列名はスプレッドシートに合わせて適宜修正してください
+                        df.at[original_index, '釣り人'] = new_angler
+                        df.at[original_index, 'ルアー'] = new_lure
+                        df.at[original_index, '備考'] = new_memo
                         
-                    with col_edit2:
-                        new_wind_speed = st.number_input("風速(m/s)", value=float(row.get('風速', 0)), step=0.1, key=f"edit_wind_s_{original_index}")
-                        new_tide_name = st.text_input("潮名", value=str(row.get('潮名', '')), key=f"edit_tide_{original_index}")
+                        # スプレッドシートへ書き込み
+                        conn.update(spreadsheet=url, data=df)
+                        
+                        st.success("修正を保存しました！")
+                        st.cache_data.clear()
+                        if 'df' in st.session_state: del st.session_state.df
+                        st.rerun()
 
-                    new_memo = st.text_area("備考を修正", value=str(row.get('備考', '')), key=f"edit_memo_{original_index}")
-
-                    # --- ボタンエリア ---
-                    col_btn1, col_btn2 = st.columns(2)
-                    with col_btn1:
-                        if st.button("🆙 修正を保存", key=f"update_btn_{original_index}"):
-                            # original_index を使って確実に元の行を更新
-                            df.at[original_index, '魚種'] = new_fish
-                            df.at[original_index, '場所'] = new_place
-                            df.at[original_index, '釣り人'] = new_angler
-                            df.at[original_index, '全長_cm'] = new_size
-                            df.at[original_index, 'ルアー'] = new_lure
-                            df.at[original_index, '風速'] = new_wind_speed
-                            df.at[original_index, '潮名'] = new_tide_name
-                            df.at[original_index, '備考'] = new_memo
-                            
-                            conn.update(spreadsheet=url, data=df)
-                            st.success("修正しました！")
-                            st.cache_data.clear()
-                            if 'df' in st.session_state: del st.session_state.df
-                            st.rerun()
+    except Exception as e:
+        st.error(f"エラーが発生しました: {e}")
                     
                     with col_btn2:
                         if st.button("🗑️ 削除する", key=f"del_btn_{original_index}", type="primary"):
@@ -760,6 +761,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
