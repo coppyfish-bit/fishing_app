@@ -18,23 +18,45 @@ import plotly.graph_objects as go
 from datetime import datetime
 
 def display_tide_graph(lat, lon, date_str, hit_time_str):
-    # --- 👇 ここから接続チェック専用コード ---
-    test_url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={date_str}&end_date={date_str}"
-    
-    st.code(test_url, language="markdown") # 生成されたURLを表示
-    
     try:
-        res = requests.get(test_url, timeout=5)
-        if res.status_code == 200:
-            st.success(f"✅ 接続成功！ (応答時間: {res.elapsed.total_seconds():.2f}秒)")
-            # データの先頭だけ中身を見せる
-            st.json(res.json()["hourly"]["tide_height"][:3]) 
-        else:
-            st.error(f"❌ 接続失敗 (エラーコード: {res.status_code})")
-            st.write(res.text) # 原因を表示
+        # 1. まず渡されたデータが正しいか画面に出す
+        st.write(f"🔍 診断中: 日付='{date_str}', 緯度={lat}, 経度={lon}")
+
+        # 2. URLを作って表示
+        url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={date_str}&end_date={date_str}"
+        st.code(url, language="markdown")
+
+        # 3. 通信実行
+        response = requests.get(url, timeout=5.0)
+        
+        if response.status_code != 200:
+            st.error(f"❌ APIがエラーを返しました (コード: {response.status_code})")
+            st.json(response.json()) # エラー理由を表示
+            return
+
+        data = response.json()
+        
+        # 4. データの中身チェック
+        if "hourly" not in data:
+            st.error("❌ データ構造が異常です")
+            st.write(data)
+            return
+
+        # 5. グラフ描画（ここでもしコケても原因が出るようにする）
+        times = pd.to_datetime(data['hourly']['time'])
+        heights = data['hourly']['tide_height']
+        tide_df = pd.DataFrame({'time': times, 'height': heights})
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=tide_df['time'], y=tide_df['height'], fill='tozeroy'))
+        st.plotly_chart(fig, use_container_width=True)
+        st.success("✅ グラフ描画成功")
+
     except Exception as e:
-        st.error(f"📡 通信エラー: {e}")
-    # --- 👆 ここまで ---
+        # 💡 ここで「なぜダメなのか」を画面に詳しく出す
+        st.error(f"❌ 実行エラーが発生しました:\n{str(e)}")
+        import traceback
+        st.code(traceback.format_exc()) # プログラムのどこで死んだか表示
     
     # (この下に既存のグラフ描画コードを続ける)
 
@@ -850,6 +872,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
