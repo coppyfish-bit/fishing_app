@@ -323,7 +323,7 @@ with tab1:
     final_fish_name = manual_fish_name if manual_fish_name else selected_fish
 
    # ==========================================
-    # 📏 全長クイックタップ（スマホ横並び強制版）
+    # 📏 全長クイックタップ（スマホ1列横並び強制）
     # ==========================================
 
     # 1. ロジック：初期値と魚種連動
@@ -337,70 +337,60 @@ with tab1:
         st.session_state['len_val'] = default_len
         st.session_state['prev_fish_type'] = final_fish_name
 
-    # 2. 強力なCSS：スマホでも強制的に横並び＆ボタン巨大化
+    # 2. 強力なCSS：1列に6カラムを強制
     st.markdown("""
         <style>
-        /* カラムの縦並びを禁止し、横に並べる */
+        /* 親コンテナのフレックス設定を強制 */
         [data-testid="column"] {
-            width: calc(33.33% - 8px) !important;
-            flex: 1 1 calc(33.33% - 8px) !important;
-            min-width: calc(33.33% - 8px) !important;
+            width: calc(16.6% - 4px) !important;
+            flex: 1 1 calc(16.6% - 4px) !important;
+            min-width: calc(16.6% - 4px) !important;
+            padding: 0px 2px !important;
         }
-        /* ボタンのデザイン */
+        /* ボタンのデザイン：小さくても押しやすく */
         .stButton > button {
             width: 100% !important;
-            height: 70px !important; /* ボタンの高さをさらにアップ */
-            font-size: 22px !important;
+            height: 45px !important; 
+            font-size: 14px !important; /* 文字を少し小さく */
             font-weight: 900 !important;
+            padding: 0px !important;
             background-color: #262730 !important;
             color: white !important;
-            border: 2px solid #FF4B4B !important;
-            border-radius: 12px !important;
+            border: 1px solid #FF4B4B !important;
+            border-radius: 6px !important;
         }
-        /* 数字の表示サイズ */
+        /* 数字の表示サイズ（ボタンに合わせて少し縮小） */
         .big-number {
-            font-size: 80px !important;
+            font-size: 50px !important;
             color: #FF4B4B;
             font-weight: 900;
             text-align: center;
-            margin: 10px 0;
+            margin: 5px 0;
         }
         </style>
     """, unsafe_allow_html=True)
 
     # 3. 表示：現在の数値
-    st.markdown(f'<p class="big-number">{st.session_state.len_val:.1f} <span style="font-size:20px;">cm</span></p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="big-number">{st.session_state.len_val:.1f} <span style="font-size:16px;">cm</span></p>', unsafe_allow_html=True)
 
-    # 4. ボタン配置（3つずつ2段に分けることで1つ1つを大きくします）
-    # --- 上段：マイナス系 ---
-    col_m1, col_m2, col_m3 = st.columns(3)
-    with col_m1:
-        if st.button("ー10", key="m10_btn"):
-            st.session_state.len_val -= 10.0
-            st.rerun()
-    with col_m2:
-        if st.button("ー5", key="m5_btn"):
-            st.session_state.len_val -= 5.0
-            st.rerun()
-    with col_m3:
-        if st.button("ー1", key="m1_btn"):
-            st.session_state.len_val -= 1.0
-            st.rerun()
+    # 4. ボタン配置（1列に6カラム作成）
+    cols = st.columns(6)
+    
+    # 各ボタンのラベルと増減値のリスト
+    btn_data = [
+        ("ー10", -10.0, "m10"),
+        ("ー5", -5.0, "m5"),
+        ("ー1", -1.0, "m1"),
+        ("＋1", 1.0, "p1"),
+        ("＋5", 5.0, "p5"),
+        ("＋10", 10.0, "p10")
+    ]
 
-    # --- 下段：プラス系 ---
-    col_p1, col_p2, col_p3 = st.columns(3)
-    with col_p1:
-        if st.button("＋1", key="p1_btn"):
-            st.session_state.len_val += 1.0
-            st.rerun()
-    with col_p2:
-        if st.button("＋5", key="p5_btn"):
-            st.session_state.len_val += 5.0
-            st.rerun()
-    with col_p3:
-        if st.button("＋10", key="p10_btn"):
-            st.session_state.len_val += 10.0
-            st.rerun()
+    for i, (label, val, k) in enumerate(btn_data):
+        with cols[i]:
+            if st.button(label, key=f"btn_{k}"):
+                st.session_state.len_val += val
+                st.rerun()
 
     # 5. 微調整用
     num_input = st.number_input(
@@ -415,7 +405,6 @@ with tab1:
         st.rerun()
 
     final_length = st.session_state['len_val']
-
     # --- 6. その他入力項目 ---
     st.markdown("**ルアー・仕掛け**")
     lure_sel = st.text_input("ルアー名（例：カゲロウ125MD）", placeholder="英数字は半角推奨")
@@ -790,6 +779,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
