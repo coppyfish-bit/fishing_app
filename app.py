@@ -738,20 +738,20 @@ with tab3:
                 )
                 st.markdown(html_block, unsafe_allow_html=True)
 
-                # --- 3. 以前の関数を呼び出してグラフを表示 ---
-                # 関数 display_tide_graph(lat, lon, date_str, hit_time_str) を呼び出し
+                # --- 3. 潮汐グラフを表示 ---
                 display_tide_graph(
-                    lat=row.get('latitude', 35.0), # カラム名がない場合はデフォルト値
+                    lat=row.get('latitude', 35.0),
                     lon=row.get('longitude', 135.0), 
                     date_str=f_date, 
-                    hit_time_str=f_time
-                    tide_val=row.get('潮位_cm', 150),       
+                    hit_time_str=f_time,    # ← ここにカンマが必要です
+                    tide_val=row.get('潮位_cm', 150),
                     tide_phase=row.get('潮位フェーズ', '---')
                 )
                 
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
