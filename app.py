@@ -739,22 +739,25 @@ with tab3:
                 lure_info = f"🎣 {row.get('ルアー','--')}"
                 rain_info = f"☔ {row.get('降水量','--')}mm"
 
-                # --- 2. 連結方式でHTMLを組み立て（衝突回避） ---
+               # --- 2. 連結方式でHTMLを組み立て（文字サイズ拡大版） ---
                 html_block = (
                     f'<div style="position:relative; width:100%; border-radius:15px; overflow:hidden; margin-bottom:10px; box-shadow:0 4px 10px rgba(0,0,0,0.3);">'
                     f'<img src="{img}" style="width:100%; display:block;">'
-                    # 左上タグ
-                    f'<div style="position:absolute; top:12px; left:12px; z-index:10; background:rgba(220,20,60,0.95); color:white; padding:4px 12px; border-radius:20px; font-weight:bold; font-size:14px;">'
+                    # 左上タグ（ここも少し大きく 14px -> 15px）
+                    f'<div style="position:absolute; top:12px; left:12px; z-index:10; background:rgba(220,20,60,0.95); color:white; padding:5px 14px; border-radius:20px; font-weight:bold; font-size:15px;">'
                     f'{fish_text}</div>'
-                    # 下部グラデーションパネル
-                    f'<div style="position:absolute; bottom:0; left:0; right:0; z-index:5; background:linear-gradient(transparent, rgba(0,0,0,0.9) 60%); color:white; padding:25px 12px 12px 12px;">'
-                    f'<div style="font-size:13px; font-weight:bold; margin-bottom:6px;">{info_text}</div>'
-                    # 詳細情報の2段表示
-                    f'<div style="display:flex; flex-wrap:wrap; gap:8px; font-size:11px; opacity:0.95;">'
-                    f'<div style="background:rgba(255,255,255,0.15); padding:2px 8px; border-radius:4px;">{tide_name}</div>'
-                    f'<div style="background:rgba(255,255,255,0.15); padding:2px 8px; border-radius:4px;">{wind_info}</div>'
-                    f'<div style="background:rgba(255,255,255,0.15); padding:2px 8px; border-radius:4px;">{lure_info}</div>'
-                    f'<div style="background:rgba(255,255,255,0.15); padding:2px 8px; border-radius:4px;">{rain_info}</div>'
+                    
+                    # 下部グラデーションパネル（高さを少し確保するため padding を調整）
+                    f'<div style="position:absolute; bottom:0; left:0; right:0; z-index:5; background:linear-gradient(transparent, rgba(0,0,0,0.95) 50%); color:white; padding:35px 15px 15px 15px;">'
+                    # 日時・場所（13px -> 15px）
+                    f'<div style="font-size:15px; font-weight:bold; margin-bottom:8px; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">{info_text}</div>'
+                    
+                    # 詳細情報のチップ（11px -> 13px）
+                    f'<div style="display:flex; flex-wrap:wrap; gap:10px; font-size:13px; font-weight:500;">'
+                    f'<div style="background:rgba(255,255,255,0.2); padding:3px 10px; border-radius:6px; border:0.5px solid rgba(255,255,255,0.3);">{tide_name}</div>'
+                    f'<div style="background:rgba(255,255,255,0.2); padding:3px 10px; border-radius:6px; border:0.5px solid rgba(255,255,255,0.3);">{wind_info}</div>'
+                    f'<div style="background:rgba(255,255,255,0.2); padding:3px 10px; border-radius:6px; border:0.5px solid rgba(255,255,255,0.3);">{lure_info}</div>'
+                    f'<div style="background:rgba(255,255,255,0.2); padding:3px 10px; border-radius:6px; border:0.5px solid rgba(255,255,255,0.3);">{rain_info}</div>'
                     f'</div></div></div>'
                 )
 
@@ -778,6 +781,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("表示できるデータがありません。")
+
 
 
 
