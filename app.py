@@ -720,46 +720,47 @@ with tab3:
         st.subheader("📸 釣果フォトギャラリー")
 
         if not df.empty:
-            # 最新10件
-            latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
+            # 最新10件を取得
+            try:
+                latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
+            except:
+                latest_10 = df.head(10) # ソートで失敗する場合の予備
             
             for idx, row in latest_10.iterrows():
-                # --- [重要] HTMLに渡す前に、すべての文字を変数にする ---
-                img_url = str(row.get('filename', '')).strip()
-                if not img_url.startswith('http'):
+                # --- [重要] エラーが起きやすい場所を個別にガード ---
+                try:
+                    img_url = str(row.get('filename', '')).strip()
+                    if not img_url.startswith('http'):
+                        continue
+
+                    # データを1つずつ安全に取得（列名が違っても止まらないようにする）
+                    f_name = str(row.get('魚種', '不明'))
+                    f_size = str(row.get('サイズ', '---'))
+                    f_place = str(row.get('場所', '---'))
+                    f_date = str(row.get('date', '---'))
+                    f_time = str(row.get('time', ''))[:5]
+
+                    # HTML用のテキスト作成
+                    fish_text = f"{f_name} {f_size}cm"
+                    info_text = f"📅 {f_date} {f_time} / 📍 {f_place}"
+                except Exception as e:
+                    # どこかで失敗したらその行は飛ばす
                     continue
 
-                # 魚の情報
-                fish_text = f"{row.get('魚種', '不明')} {row.get('サイズ', '---')}cm"
-                
-                # 日時と場所
-                time_val = str(row.get('time', ''))[:5]
-                date_val = str(row.get('date', ''))
-                place_val = str(row.get('場所', '---'))
-                info_text = f"📅 {date_val} {time_val} / 📍 {place_val}"
-                
-                # 潮と風
-                tide_val = f"🌊 {row.get('潮汐', '---')} ({row.get('潮回り', '---')})"
-                wind_val = f"🍃 {row.get('風速', '---')}m/s"
-
-                # --- テスト成功時と全く同じ、極シンプルHTML構造 ---
-                # ここには row.get() などを一切書かず、上の変数だけを入れます
+                # --- 成功した「テストコード」と全く同じ構造 ---
                 final_html = f"""
-                <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 30px;">
+                <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
                     <img src="{img_url}" style="width: 100%; display: block;">
-                    
                     <div style="position: absolute; top: 15px; left: 15px; background: rgba(220, 20, 60, 0.9); color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold;">
                         {fish_text}
                     </div>
-
                     <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, black, transparent); color: white; padding: 20px 15px;">
-                        <div style="font-size: 0.85rem; font-weight: bold; margin-bottom: 4px;">{info_text}</div>
-                        <div style="font-size: 0.75rem; opacity: 0.9;">{tide_val} | {wind_val}</div>
+                        <div style="font-size: 0.85rem; font-weight: bold;">{info_text}</div>
                     </div>
                 </div>
                 """
                 
-                # ここで実行
+                # 表示実行
                 st.markdown(final_html, unsafe_allow_html=True)
         else:
             st.write("データがありません。")
