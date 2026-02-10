@@ -19,8 +19,8 @@ from datetime import datetime
 import requests
 import pandas as pd
 import plotly.graph_objects as go
-
 import numpy as np
+import base64
 
 def display_tide_graph(lat, lon, date_str, hit_time_str):
     try:
@@ -783,69 +783,88 @@ with tab3:
         st.write("### 🆕 最新の釣果（10件）")
         latest_10 = df_gallery.head(10)
         
-        for idx, row in latest_10.iterrows():
-            # 1. データの準備
-            fish_name = row.get(FISH_COL, '不明')
-            fish_size = row.get(SIZE_COL, '---')
-            place = row.get(PLACE_COL, '---')
-            date_str = str(row.get('date', '---'))
-            time_str = str(row.get('time', ''))[:5]
-            
-            tide_name = row.get(TIDE_NAME_COL, '---')
-            tide_phase = row.get(PHASE_COL, '---')
-            tide_cm = row.get(TIDE_CM_COL, '---')
-            
-            # 月齢計算
-            try:
-                d = pd.to_datetime(row.get('date'))
-                new_moon = pd.Timestamp("2026-01-19")
-                moon_age = round(((d - new_moon).days % 29.53), 1)
-                if moon_age < 0: moon_age += 29.53
-            except: moon_age = "---"
 
-            wind_spd = row.get(WIND_SPD_COL, '---')
-            wind_dir = row.get(WIND_DIR_COL, '---')
-            lure = row.get(LURE_COL, '---')
-            rain = row.get(RAIN_COL, '0.0')
-            img_url = str(row.get('filename', '')).strip()
+# --- ループ開始 ---
+for idx, row in latest_10.iterrows():
+    # 1. データの整理
+    fish_name = row.get(FISH_COL, '不明')
+    fish_size = row.get(SIZE_COL, '---')
+    place = row.get(PLACE_COL, '---')
+    date_str = str(row.get('date', '---'))
+    time_str = str(row.get('time', ''))[:5]
+    tide_info = f"{row.get(TIDE_NAME_COL, '---')} ({row.get(PHASE_COL, '---')}) / {row.get(TIDE_CM_COL, '---')}cm"
+    
+    # nanの処理
+    def clean_nan(val, unit=""):
+        v = str(val).strip().lower()
+        return "---" if v == 'nan' or v == '' else f"{val}{unit}"
 
-            if img_url.startswith('http'):
-                # --- HTML/CSS 究極のオーバーレイ構造 ---
-                st.markdown(f"""
-                    <div style="position: relative; border-radius: 15px; overflow: hidden; margin-bottom: 25px; box-shadow: 0 8px 20px rgba(0,0,0,0.4); font-family: sans-serif;">
-                        <img src="{img_url}" style="width: 100%; display: block; filter: brightness(0.9);">
-                        
-                        <div style="position: absolute; top: 15px; left: 15px; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">
-                            <span style="background: rgba(255,50,50,0.8); color: white; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 1.1rem;">
-                                {fish_name} {fish_size}cm
-                            </span>
-                        </div>
+    lure_display = clean_nan(row.get(LURE_COL))
+    rain_display = clean_nan(row.get(RAIN_COL), "mm")
+    wind_display = f"{clean_nan(row.get(WIND_SPD_COL), 'm/s')} ({row.get(WIND_DIR_COL, '---')})"
 
-                        <div style="position: absolute; bottom: 0; left: 0; right: 0; 
-                                    background: linear-gradient(transparent, rgba(0,0,0,0.9) 30%); 
-                                    color: white; padding: 20px 15px 15px 15px;">
-                            
-                            <div style="font-size: 0.85rem; margin-bottom: 8px; display: flex; justify-content: space-between; opacity: 0.9;">
-                                <span>📅 {date_str} {time_str}</span>
-                                <span>📍 {place}</span>
-                            </div>
+    # 月齢計算
+    try:
+        d = pd.to_datetime(row.get('date'))
+        moon_age = round(((d - pd.Timestamp("2026-01-19")).days % 29.53), 1)
+        if moon_age < 0: moon_age += 29.53
+    except: moon_age = "---"
 
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 0.8rem; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px;">
-                                <div>🌊 {tide_name} ({tide_phase}) / {tide_cm}cm</div>
-                                <div>🌙 月齢: {moon_age}</div>
-                                <div>🍃 {wind_spd}m/s ({wind_dir})</div>
-                                <div>☔ {rain}mm / 🎣 {lure}</div>
-                            </div>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
+    img_url = str(row.get('filename', '')).strip()
+
+    if img_url.startswith('http'):
+        # --- 2. グラフを画像化して埋め込む準備 ---
+        fig = go.Figure()
+        h_val = int(time_str[:2]) if ':' in time_str else 12
+        hours = np.linspace(h_val-6, h_val+6, 40)
+        tide_curve = 100 * np.sin(2 * np.pi * (hours - 6) / 12.42) + 150
+        fig.add_trace(go.Scatter(x=hours, y=tide_curve, fill='tozeroy', line=dict(color='white', width=2)))
+        fig.add_vline(x=h_val, line_dash="dash", line_color="#FF3232")
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            margin=dict(l=0,r=0,t=0,b=0), height=60, width=300,
+            xaxis=dict(visible=False), yaxis=dict(visible=False), showlegend=False
+        )
+        # グラフをBase64文字列に変換
+        img_bytes = fig.to_image(format="png", scale=2)
+        encoded_graph = base64.b64encode(img_bytes).decode()
+
+        # --- 3. HTMLで重ね合わせを実現 ---
+        st.markdown(f"""
+            <div style="position: relative; border-radius: 15px; overflow: hidden; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                <img src="{img_url}" style="width: 100%; display: block;">
                 
-                # タイドグラフをオーバーレイの下（または直後）に配置
-                # ※HTMLの中に入れるのは難しいため、カードのすぐ下に境界線なしで配置
-                with st.container():
-                    display_tide_graph(32.40, 130.10, row.get('date'), time_str)
-            else:
-                st.warning(f"📷 画像がないためオーバーレイできません: {fish_name}")
+                <div style="position: absolute; top: 12px; left: 12px;">
+                    <span style="background: rgba(255,50,50,0.85); color: white; padding: 5px 12px; border-radius: 20px; font-weight: bold; font-size: 1rem; box-shadow: 2px 2px 5px rgba(0,0,0,0.3);">
+                        {fish_name} {fish_size}cm
+                    </span>
+                </div>
+
+                <div style="position: absolute; bottom: 0; left: 0; right: 0; 
+                            background: linear-gradient(transparent, rgba(0,0,0,0.9) 35%); 
+                            color: white; padding: 15px;">
+                    
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 8px; opacity: 0.9;">
+                        <span>📅 {date_str} {time_str}</span>
+                        <span>📍 {place}</span>
+                    </div>
+
+                    <div style="margin-bottom: 8px; opacity: 0.8;">
+                        <img src="data:image/png;base64,{encoded_graph}" style="width: 100%; height: auto; max-height: 50px;">
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 0.75rem; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+                        <div>🌊 {tide_info}</div>
+                        <div>🌙 月齢: {moon_age}</div>
+                        <div>🍃 {wind_display}</div>
+                        <div>☔ {rain_display} / 🎣 {lure_display}</div>
+                    </div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.warning(f"📷 写真がないためオーバーレイできません: {fish_name}")
+
 
 
 
