@@ -310,58 +310,75 @@ with tab1:
     else:
         final_fish_name = selected_fish
 
-    # --- 5. フィッシュメジャー風スライダー ---
-    current_len = st.session_state.get('len_slider', 0.0)
-    st.markdown(f"### 全長: <span style='font-size:40px; color:#FF4B4B; font-weight:900;'>{current_len}</span> cm", unsafe_allow_html=True)
+    # ==========================================
+# 📏 全長連動ロジック
+# ==========================================
 
-    st.markdown("""
-        <style>
-        .stSlider [data-baseweb="slider"] {
-            height: 60px !important;
-            width: calc(100% - 12px) !important; 
-            margin: 0 auto !important;
-            background-color: #FFFFFF !important;
-            border: 2px solid #001f3f !important;
-            border-radius: 4px !important;
-            background-image: 
-                linear-gradient(90deg, #001f3f 3px, transparent 3px),
-                linear-gradient(90deg, #001f3f 1px, transparent 1px) !important;
-            background-size: 8.08% 100%, 4.04% 50% !important;
-            background-position: 4.0px center !important; 
-            background-repeat: repeat-x !important;
-        }
-        .stSlider [role="slider"]::after {
-            content: "";
-            display: block;
-            width: 0; height: 0;
-            border-left: 15px solid transparent;
-            border-right: 15px solid transparent;
-            border-bottom: 25px solid #FF4B4B; 
-            margin-top: 85px; 
-            transform: translateX(0px); 
-        }
-        </style>
-        """, unsafe_allow_html=True)
+# 1. セッション状態の初期化
+if 'len_val' not in st.session_state:
+    st.session_state['len_val'] = 0.0
 
-    st.markdown("""
-        <div style="display: flex; justify-content: space-between; font-size: 16px; color: #FF4B4B; font-weight: 900; margin-bottom: -20px; position: relative; z-index: 10; pointer-events: none; line-height: 60px; font-family: 'Arial Black', sans-serif; transform: translateX(8px); padding: 0px;">
-            <span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
-            <span>70</span><span>80</span><span>90</span><span>100</span><span>110</span><span>120</span>
-        </div>
-        """, unsafe_allow_html=True)
+# 2. 手動入力欄が変更された時の関数
+def on_number_change():
+    st.session_state['len_val'] = st.session_state['num_in']
 
-    length_in = st.slider("", 0.0, 120.0, 0.0, step=1.0, key="len_slider", label_visibility="collapsed")
+# 3. スライダーが変更された時の関数
+def on_slider_change():
+    st.session_state['len_val'] = st.session_state['slider_in']
 
-    # 数値入力欄（自動で半角になります）
-    length_in = st.number_input(
-        "全長 (cm)", 
-        min_value=0.0, 
-        max_value=300.0, 
-        value=0.0, 
-        step=0.1, 
-        format="%.1f",
-        help="半角数値で入力してください。全角で入力しても自動で変換されます。"
-    )
+# --- デザイン（CSS） ---
+st.markdown(f"### 全長: <span style='font-size:40px; color:#FF4B4B; font-weight:900;'>{st.session_state.len_val}</span> cm", unsafe_allow_html=True)
+
+st.markdown("""
+    <style>
+    .stSlider [data-baseweb="slider"] {
+        height: 60px !important;
+        background-color: #FFFFFF !important;
+        border: 2px solid #001f3f !important;
+        background-image: 
+            linear-gradient(90deg, #001f3f 3px, transparent 3px),
+            linear-gradient(90deg, #001f3f 1px, transparent 1px) !important;
+        background-size: 8.33% 100%, 4.16% 50% !important;
+        background-repeat: repeat-x !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# メジャーの数字ラベル
+st.markdown("""
+    <div style="display: flex; justify-content: space-between; font-size: 14px; color: #FF4B4B; font-weight: 900; margin-bottom: -15px; font-family: 'Arial Black', sans-serif;">
+        <span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
+        <span>70</span><span>80</span><span>90</span><span>100</span><span>110</span><span>120</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+# --- 5. 連動ウィジェットの配置 ---
+
+# A: フィッシュメジャー（スライダー）
+length_slider = st.slider(
+    "", 0.0, 120.0, 
+    key="slider_in", 
+    value=st.session_state['len_val'],
+    step=0.5, 
+    on_change=on_slider_change,
+    label_visibility="collapsed"
+)
+
+# B: 数値入力欄（自動で半角）
+length_in = st.number_input(
+    "手動入力 (cm)", 
+    min_value=0.0, 
+    max_value=300.0, 
+    key="num_in",
+    value=st.session_state['len_val'],
+    step=0.1, 
+    format="%.1f",
+    on_change=on_number_change,
+    help="全角で入力しても自動で半角に変換されます。"
+)
+
+# 最終的な保存用の値
+final_length = st.session_state['len_val']
     # --- 6. 詳細情報の入力 ---
     with st.expander("日時・座標の微調整"):
         date_in = st.date_input("日付", default_dt.date())
@@ -735,6 +752,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
