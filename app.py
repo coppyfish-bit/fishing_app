@@ -721,6 +721,7 @@ with tab3:
         display_count = st.slider("表示件数", 5, 50, 10)
         
         if not df.empty:
+            # 最新のデータから順に取得
             latest_data = df.sort_values(by=['date', 'time'], ascending=False).head(display_count)
             
             for idx, row in latest_data.iterrows():
@@ -728,23 +729,23 @@ with tab3:
                 img = str(row.get('filename', '')).strip()
                 if not img.startswith('http'): continue
                 
+                # 表示用テキストの作成
                 fish_text = f"{row.get('魚種', '不明')} {row.get('全長_cm', '---')}cm"
-                f_date = row.get('date')
-                f_time_str = str(row.get('time'))[:5]
+                f_date = str(row.get('date'))
+                f_time = str(row.get('time'))[:5]
                 
-                info_text = f"📅 {f_date} {f_time_str} / 📍 {row.get('場所', '---')}"
+                info_text = f"📅 {f_date} {f_time} / 📍 {row.get('場所', '---')}"
                 tide_detail = f"🌊 {row.get('潮位_cm','--')}cm ({row.get('潮位フェーズ','--')})"
                 env_info = f"🍃 {row.get('風向','--')} {row.get('風速','--')}m/s | 🎣 {row.get('ルアー','--')} | ☔ {row.get('降水量','--')}mm"
 
-                # --- 2. 写真にデータを重ねる (HTML) ---
-                # 以前成功した「衝突回避型」の連結方式です
+                # --- 2. 写真にデータを重ねて表示 (HTML) ---
                 html_block = (
                     f'<div style="position:relative; width:100%; border-radius:15px; overflow:hidden; margin-top:20px; box-shadow:0 4px 12px rgba(0,0,0,0.3);">'
                     f'<img src="{img}" style="width:100%; display:block;">'
-                    # 左上タグ
+                    # 左上：魚種タグ
                     f'<div style="position:absolute; top:12px; left:12px; z-index:10; background:rgba(220,20,60,0.95); color:white; padding:5px 14px; border-radius:20px; font-weight:bold; font-size:15px;">'
                     f'{fish_text}</div>'
-                    # 下部グラデーションパネル
+                    # 下部：グラデーションパネル
                     f'<div style="position:absolute; bottom:0; left:0; right:0; z-index:5; background:linear-gradient(transparent, rgba(0,0,0,0.95) 50%); color:white; padding:40px 15px 15px 15px;">'
                     f'<div style="font-size:15px; font-weight:bold; margin-bottom:8px; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">{info_text}</div>'
                     f'<div style="display:flex; flex-wrap:wrap; gap:10px; font-size:12px; font-weight:500;">'
@@ -754,55 +755,18 @@ with tab3:
                 )
                 st.markdown(html_block, unsafe_allow_html=True)
 
-               # --- 3. 写真のすぐ下に前後6時間のグラフを表示 ---
-                try:
-                    # 1. 潮汐データの取得
-                    t_date = pd.to_datetime(f_date).date()
-                    t_df = get_tide_data(t_date)
-                    
-                    if t_df is not None and not t_df.empty:
-                        # 2. ヒット時刻を数値（分）に変換して、前後360分を計算
-                        hit_h, hit_m = map(int, f_time_str.split(':'))
-                        hit_total_min = hit_h * 60 + hit_m
-                        
-                        def time_to_min(t_str):
-                            h, m = map(int, str(t_str)[:5].split(':'))
-                            return h * 60 + m
-
-                        # 3. データのフィルタリング（前後6時間 = 360分）
-                        # 24時間を超える計算を避けるため、当日データの中から一番近い範囲を抽出
-                        t_df['total_min'] = t_df['time'].apply(time_to_min)
-                        plot_df = t_df[
-                            (t_df['total_min'] >= hit_total_min - 360) & 
-                            (t_df['total_min'] <= hit_total_min + 360)
-                        ].copy()
-
-                        if not plot_df.empty:
-                            fig = go.Figure()
-                            # 潮位曲線
-                            fig.add_trace(go.Scatter(
-                                x=plot_df['time'], y=plot_df['level'],
-                                mode='lines', line=dict(color='#00BFFF', width=4),
-                                fill='tozeroy', fillcolor='rgba(0,191,255,0.1)'
-                            ))
-                            # ヒット時刻の赤い縦線
-                            fig.add_vline(x=f_time_str, line_width=3, line_dash="dash", line_color="#ff4b4b")
-                            
-                            fig.update_layout(
-                                height=160, margin=dict(l=10, r=10, t=10, b=10),
-                                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                                xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.1)', tickfont=dict(color='gray', size=10)),
-                                yaxis=dict(showgrid=False, visible=False),
-                                showlegend=False
-                            )
-                            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-                        else:
-                            st.caption("⚠️ 該当時間の潮汐データが範囲外です")
-                    else:
-                        st.caption("⚠️ 潮汐データを取得できませんでした")
-                except Exception as e:
-                    # エラーが起きた場合に原因を表示（確認用）
-                    st.caption(f"📊 グラフ準備中... ({str(e)})")
+                # --- 3. 以前の関数を呼び出してグラフを表示 ---
+                # 関数 display_tide_graph(lat, lon, date_str, hit_time_str) を呼び出し
+                display_tide_graph(
+                    lat=row.get('latitude', 35.0), # カラム名がない場合はデフォルト値
+                    lon=row.get('longitude', 135.0), 
+                    date_str=f_date, 
+                    hit_time_str=f_time
+                )
+                
+                st.write("---")
+        else:
+            st.info("釣果データがありません。")
 
 
 
