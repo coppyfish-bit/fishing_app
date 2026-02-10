@@ -12,13 +12,8 @@ import cloudinary.uploader
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2 import service_account
-import requests
-import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
-import requests
-import pandas as pd
-import plotly.graph_objects as go
 import numpy as np
 import base64
 
@@ -723,7 +718,18 @@ with tab2:
         
 with tab3:
         st.subheader("📸 釣果フォトギャラリー")
-        
+        # --- 🚨 NameError対策：列名の定義をここに追加 ---
+        FISH_COL = '魚種'      # スプレッドシートの列名に合わせて変更してください
+        SIZE_COL = 'サイズ'    # 同上
+        PLACE_COL = '場所'     # 同上
+        TIDE_NAME_COL = '潮汐' # 同上
+        PHASE_COL = '潮回り'   # 同上
+        TIDE_CM_COL = '潮位'   # 同上
+        WIND_SPD_COL = '風速'  # 同上
+        WIND_DIR_COL = '風向'  # 同上
+        LURE_COL = 'ルアー'    # 同上
+        RAIN_COL = '降水量'    # 同上
+        # ------------------------------------------
         # データの存在チェック
         if not df.empty:
             # 最新の10件を取得
@@ -778,6 +784,7 @@ with tab3:
                     st.info(f"💡 写真なし: {fish_name} ({fish_size}cm)")
         else:
             st.write("データがありません。")
+
 
 
 
