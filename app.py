@@ -82,7 +82,14 @@ def display_tide_graph(lat, lon, date_str, hit_time_str):
         # 縦線（ヒット時刻を強調）
         fig.add_vline(x=hit_h, line_dash="dash", line_color="red", opacity=0.5)
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(
+            fig, 
+            use_container_width=True, 
+            config={
+                'staticPlot': True,       # グラフを「静止画」にしてスクロールを優先する
+                'displayModeBar': False   # 余計なメニューを出さない
+            }
+        )
 
     except Exception as e:
         st.error(f"グラフ作成エラー: {e}")
@@ -767,6 +774,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
