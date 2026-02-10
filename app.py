@@ -311,7 +311,7 @@ with tab1:
         final_fish_name = selected_fish
 
 # ==========================================
-    # 📏 全長連動ロジック
+    # 📏 全長連動ロジック（シンプル＆ビッグ）
     # ==========================================
     if 'len_val' not in st.session_state:
         st.session_state['len_val'] = 0.0
@@ -322,20 +322,47 @@ with tab1:
     def on_slider_change():
         st.session_state['len_val'] = st.session_state['slider_in']
 
-    # --- デザイン（表示） ---
-    st.markdown(f"### 全長: <span style='font-size:40px; color:#FF4B4B; font-weight:900;'>{st.session_state.len_val}</span> cm", unsafe_allow_html=True)
-
-    # メジャーの数字ラベル
-    st.markdown("""
-        <div style="display: flex; justify-content: space-between; font-size: 14px; color: #FF4B4B; font-weight: 900; margin-bottom: -15px; font-family: 'Arial Black', sans-serif;">
-            <span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
-            <span>70</span><span>80</span><span>90</span><span>100</span><span>110</span><span>120</span>
+    # --- 巨大な数字表示 ---
+    # つまみを動かすとここがリアルタイムで更新されます
+    st.markdown(f"""
+        <div style="text-align: center; margin-bottom: -10px;">
+            <span style="font-size: 80px; color: #FF4B4B; font-weight: 900; font-family: 'Arial Black', sans-serif; line-height: 1;">
+                {st.session_state.len_val}
+            </span>
+            <span style="font-size: 24px; color: #FF4B4B; font-weight: 900;"> cm</span>
         </div>
         """, unsafe_allow_html=True)
 
+    # --- メジャー風デザイン（目盛り数字なし） ---
+    st.markdown("""
+        <style>
+        /* スライダー全体の枠組み */
+        .stSlider [data-baseweb="slider"] {
+            height: 50px !important;
+            background-color: #FFFFFF !important;
+            border: 2px solid #001f3f !important;
+            border-radius: 5px !important;
+            /* 目盛り線だけを描画 */
+            background-image: 
+                linear-gradient(90deg, #001f3f 2px, transparent 2px),
+                linear-gradient(90deg, #001f3f 1px, transparent 1px) !important;
+            background-size: 8.33% 100%, 0.833% 40% !important; /* 10cmごとと1cmごとの線 */
+            background-repeat: repeat-x !important;
+        }
+        /* つまみのデザイン調整 */
+        .stSlider [role="slider"] {
+            background-color: #FF4B4B !important;
+            border: 2px solid #FFFFFF !important;
+            width: 25px !important;
+            height: 25px !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
     # A: フィッシュメジャー（スライダー）
+    # 目盛り数字を表示しないため label_visibility="collapsed" を使用
     st.slider(
-        "", 0.0, 120.0, 
+        "slider_hidden_label", 0.0, 120.0, 
         key="slider_in", 
         value=st.session_state['len_val'],
         step=0.5, 
@@ -343,17 +370,16 @@ with tab1:
         label_visibility="collapsed"
     )
 
-    # B: 数値入力欄（自動で半角）
+    # B: 手動入力欄（自動で半角）
     st.number_input(
-        "手動入力 (cm)", 
+        "手動入力・微調整用 (cm)", 
         min_value=0.0, 
         max_value=300.0, 
         key="num_in",
         value=st.session_state['len_val'],
         step=0.1, 
         format="%.1f",
-        on_change=on_number_change,
-        help="全角で入力しても自動で半角に変換されます。"
+        on_change=on_number_change
     )
 
     # 最終的な保存用の値
@@ -722,6 +748,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
