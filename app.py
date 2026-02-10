@@ -730,68 +730,69 @@ with tab3:
                 
                 fish_text = f"{row.get('魚種', '不明')} {row.get('全長_cm', '---')}cm"
                 f_date = row.get('date')
-                f_time = str(row.get('time'))[:5]
-                info_text = f"📅 {f_date} {f_time} / 📍 {row.get('場所', '---')}"
+                f_time_str = str(row.get('time'))[:5]
                 
-                tide_val = row.get('潮位_cm', '--')
-                tide_phase = row.get('潮位フェーズ', '--')
+                info_text = f"📅 {f_date} {f_time_str} / 📍 {row.get('場所', '---')}"
+                tide_detail = f"🌊 {row.get('潮位_cm','--')}cm ({row.get('潮位フェーズ','--')})"
                 env_info = f"🍃 {row.get('風向','--')} {row.get('風速','--')}m/s | 🎣 {row.get('ルアー','--')} | ☔ {row.get('降水量','--')}mm"
 
-                # --- 2. 日本近海データからSVGパスを生成 ---
-                svg_path = ""
-                dot_x, dot_y = 0, 0
+                # --- 2. 写真にデータを重ねる (HTML) ---
+                # 以前成功した「衝突回避型」の連結方式です
+                html_block = (
+                    f'<div style="position:relative; width:100%; border-radius:15px; overflow:hidden; margin-top:20px; box-shadow:0 4px 12px rgba(0,0,0,0.3);">'
+                    f'<img src="{img}" style="width:100%; display:block;">'
+                    # 左上タグ
+                    f'<div style="position:absolute; top:12px; left:12px; z-index:10; background:rgba(220,20,60,0.95); color:white; padding:5px 14px; border-radius:20px; font-weight:bold; font-size:15px;">'
+                    f'{fish_text}</div>'
+                    # 下部グラデーションパネル
+                    f'<div style="position:absolute; bottom:0; left:0; right:0; z-index:5; background:linear-gradient(transparent, rgba(0,0,0,0.95) 50%); color:white; padding:40px 15px 15px 15px;">'
+                    f'<div style="font-size:15px; font-weight:bold; margin-bottom:8px; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">{info_text}</div>'
+                    f'<div style="display:flex; flex-wrap:wrap; gap:10px; font-size:12px; font-weight:500;">'
+                    f'<div style="background:rgba(255,255,255,0.2); padding:3px 10px; border-radius:6px; border:0.5px solid rgba(255,255,255,0.3);">{tide_detail}</div>'
+                    f'<div style="background:rgba(255,255,255,0.2); padding:3px 10px; border-radius:6px; border:0.5px solid rgba(255,255,255,0.3);">{env_info}</div>'
+                    f'</div></div></div>'
+                )
+                st.markdown(html_block, unsafe_allow_html=True)
+
+                # --- 3. 写真のすぐ下に前後6時間のグラフを表示 ---
                 try:
-                    # 以前の関数で24時間分のデータを取得
                     t_df = get_tide_data(pd.to_datetime(f_date).date())
                     if not t_df.empty:
-                        # グラフのサイズを 120x40 とした時の座標計算
-                        # x: 0〜23時を 0〜120に変換, y: 潮位を 0〜40に変換
-                        points = []
-                        max_l, min_l = t_df['level'].max(), t_df['level'].min()
-                        range_l = max_l - min_l if max_l != min_l else 1
+                        # ヒット時刻の前後6時間を抽出
+                        hit_dt = pd.to_datetime(f_time_str)
+                        start_t = (hit_dt - pd.Timedelta(hours=6)).strftime('%H:%M')
+                        end_t = (hit_dt + pd.Timedelta(hours=6)).strftime('%H:%M')
                         
-                        for i, r in t_df.iterrows():
-                            x = (i / len(t_df)) * 120
-                            y = 35 - ((r['level'] - min_l) / range_l * 25) # 35px〜10pxの間で描画
-                            points.append(f"{x},{y}")
-                            
-                            # 釣れた時間のドット位置を特定
-                            if str(r['time'])[:5] == f_time:
-                                dot_x, dot_y = x, y
+                        # 24時間を跨ぐ場合も考慮したフィルタリング
+                        if start_t < end_t:
+                            plot_df = t_df[(t_df['time'] >= start_t) & (t_df['time'] <= end_t)].copy()
+                        else:
+                            plot_df = t_df[(t_df['time'] >= start_t) | (t_df['time'] <= end_t)].copy()
+
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(
+                            x=plot_df['time'], y=plot_df['level'],
+                            mode='lines', line=dict(color='#00BFFF', width=4),
+                            fill='tozeroy', fillcolor='rgba(0,191,255,0.1)'
+                        ))
+                        # ヒット時刻の赤い縦線
+                        fig.add_vline(x=f_time_str, line_width=3, line_dash="dash", line_color="#ff4b4b")
                         
-                        svg_path = f'<polyline points="{" ".join(points)}" fill="none" stroke="#00BFFF" stroke-width="2" />'
-                        if dot_x == 0: # ぴったり一致がない場合の予備計算
-                            h, m = map(int, f_time.split(':'))
-                            dot_x = ((h + m/60) / 24) * 120
-                            # yは近似値（簡易）
+                        fig.update_layout(
+                            height=150, margin=dict(l=10, r=10, t=10, b=10),
+                            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                            xaxis=dict(gridcolor='rgba(128,128,128,0.2)', tickfont=dict(color='gray')),
+                            yaxis=dict(showgrid=False, visible=False),
+                            showlegend=False
+                        )
+                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 except:
-                    # エラー時は汎用サインカーブ
-                    svg_path = '<path d="M0 30 Q 30 10 60 30 T 120 30" fill="none" stroke="#00BFFF" stroke-width="2" />'
+                    pass
+                
+                st.write("---")
+        else:
+            st.info("釣果データがありません。")
 
-                # --- 3. HTML組み立て ---
-                html_block = (
-                    f'<div style="position:relative; width:100%; border-radius:15px; overflow:hidden; margin-bottom:20px; box-shadow:0 4px 12px rgba(0,0,0,0.4);">'
-                    f'<img src="{img}" style="width:100%; display:block;">'
-                    
-                    # 左上タグ
-                    f'<div style="position:absolute; top:12px; left:12px; z-index:10; background:rgba(220,20,60,0.95); color:white; padding:5px 14px; border-radius:20px; font-weight:bold; font-size:15px;">{fish_text}</div>'
-                    
-                    # 右下：正確なタイドグラフ（SVG）
-                    f'<div style="position:absolute; bottom:65px; right:12px; z-index:10; background:rgba(0,0,0,0.6); padding:8px; border-radius:12px; border:1px solid rgba(255,255,255,0.2); width:130px; backdrop-filter:blur(5px);">'
-                    f'<div style="font-size:10px; color:white; margin-bottom:4px; font-weight:bold; display:flex; justify-content:space-between;"><span>TIDE</span><span>{tide_val}cm</span></div>'
-                    f'<svg width="120" height="40" viewBox="0 0 120 40">{svg_path}'
-                    f'<circle cx="{dot_x}" cy="{dot_y}" r="4" fill="#ff4b4b" stroke="white" stroke-width="1" /></svg>'
-                    f'<div style="font-size:9px; color:#00BFFF; margin-top:3px; text-align:center;">{tide_phase}</div>'
-                    f'</div>'
-
-                    # 下部パネル
-                    f'<div style="position:absolute; bottom:0; left:0; right:0; z-index:5; background:linear-gradient(transparent, rgba(0,0,0,0.95) 50%); color:white; padding:35px 15px 15px 15px;">'
-                    f'<div style="font-size:15px; font-weight:bold; margin-bottom:8px;">{info_text}</div>'
-                    f'<div style="font-size:12px; opacity:0.95;">{env_info}</div>'
-                    f'</div></div>'
-                )
-
-                st.markdown(html_block, unsafe_allow_html=True)
 
 
 
