@@ -718,63 +718,48 @@ with tab2:
         
 with tab3:
         st.subheader("📸 釣果フォトギャラリー")
-        display_count = st.slider("表示件数", 5, 50, 10)
-
+        
+        # データの存在確認
         if not df.empty:
-            latest_data = df.sort_values(by=['date', 'time'], ascending=False).head(display_count)
+            # 最新10件を取得
+            latest_data = df.sort_values(by=['date', 'time'], ascending=False).head(10)
             
             for idx, row in latest_data.iterrows():
-                # 1. データを事前に「ただの文字」として完成させる（重要！）
+                # 1. データの安全な文字列化（ここでHTMLを壊す原因を排除）
                 img_url = str(row.get('filename', '')).strip()
-                if not img_url.startswith('http'): continue
+                if not img_url.startswith('http'):
+                    continue
 
-                f_name = f"{row.get('魚種', '不明')} {row.get('サイズ', '---')}cm"
-                f_info = f"📅 {row.get('date')} {str(row.get('time'))[:5]} / 📍 {row.get('場所', '---')}"
+                fish = f"{row.get('魚種', '不明')} {row.get('サイズ', '---')}cm"
+                date_p = f"📅 {row.get('date')} {str(row.get('time'))[:5]}"
+                place_p = f"📍 {row.get('場所', '---')}"
                 
-                # 詳細（アイコン付き）
-                d_tide = f"🌊 {row.get('潮汐', '---')}({row.get('潮回り', '---')})"
-                d_wind = f"🍃 {row.get('風速', '---')}m/s({row.get('風向', '---')})"
-                d_lure = f"🎣 {row.get('ルアー', '---')}"
-                d_rain = f"☔ {row.get('降水量', '---')}mm"
-
-                # 2. 【絶対重なるHTML】テスト成功時と同じ構造
-                overlay_html = f"""
-                <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-top: 20px;">
+                # 2. HTMLの組み立て（変数を埋め込むだけのシンプルな構造）
+                # position: relative の中に absolute を入れるテスト成功時の構造を完全再現
+                html_code = f"""
+                <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
                     <img src="{img_url}" style="width: 100%; display: block;">
                     
-                    <div style="position: absolute; top: 10px; left: 10px; z-index: 10;">
-                        <div style="background: rgba(220, 20, 60, 0.9); color: white; padding: 4px 12px; border-radius: 15px; font-weight: bold; font-size: 0.9rem;">
-                            {f_name}
+                    <div style="position: absolute; top: 12px; left: 12px; z-index: 999;">
+                        <div style="background: #dc143c; color: white; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 14px;">
+                            {fish}
                         </div>
                     </div>
 
-                    <div style="position: absolute; bottom: 0; left: 0; right: 0; z-index: 5; background: linear-gradient(transparent, rgba(0,0,0,0.8) 70%); color: white; padding: 20px 10px 10px 10px;">
-                        <div style="font-size: 0.8rem; font-weight: bold; margin-bottom: 5px;">{f_info}</div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.7rem;">
-                            <div>{d_tide}</div><div>{d_wind}</div>
-                            <div>{d_lure}</div><div>{d_rain}</div>
-                        </div>
+                    <div style="position: absolute; bottom: 0; left: 0; right: 0; z-index: 998; background: linear-gradient(transparent, rgba(0,0,0,0.85)); color: white; padding: 20px 12px 10px 12px;">
+                        <div style="font-size: 13px; font-weight: bold; margin-bottom: 2px;">{date_p}</div>
+                        <div style="font-size: 12px; opacity: 0.9;">{place_p}</div>
                     </div>
                 </div>
                 """
-                st.markdown(overlay_html, unsafe_allow_html=True)
-
-                # 3. タイドグラフ（写真のすぐ下に配置）
-                try:
-                    # 以前作成したタイドグラフ表示用関数があればここで呼び出し
-                    # ※もし関数名が違う場合は、ここを書き換えてください
-                    tide_df = get_tide_data(pd.to_datetime(row.get('date')).date())
-                    if not tide_df.empty:
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=tide_df['time'], y=tide_df['level'], fill='tozeroy', line_color='#00BFFF'))
-                        fig.add_vline(x=str(row.get('time'))[:5], line_color="red", line_dash="dash")
-                        fig.update_layout(height=120, margin=dict(l=0,r=0,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                                          xaxis=dict(visible=False), yaxis=dict(visible=False))
-                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-                except:
-                    pass
-
-                st.write("---") # 次の釣果との区切り
+                
+                # 3. 実行（unsafe_allow_htmlを絶対忘れない）
+                st.markdown(html_code, unsafe_allow_html=True)
+                
+                # --- タイドグラフは重なりが成功してから、この下に追加しましょう ---
+                
+        else:
+            st.write("データが表示できません。")
 
 
 
