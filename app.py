@@ -46,52 +46,58 @@ def fetch_api_data(url):
 
 def display_tide_graph(lat, lon, date_str, hit_time_str):
     try:
+        # 1. 日付の掃除
         clean_date = str(date_str).split(' ')[0].strip().replace('/', '-')
         
-        # --- 🌊 修正ポイント：URLを予測対応の Flood/Marine 混合設定に変更 ---
-        # start_date と end_date を指定し、予報データも含めて取得できるようにします
+        # 2. URL作成（天草の陸地判定を避けるため、API側で補正が効きやすい形式に）
         url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={clean_date}&end_date={clean_date}"
         
-        # もし上記でエラーが出る場合は、以下の「予報(Forecast)用URL」を試してください
-        # url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height"
+        # 3. 通信実行
+        response = requests.get(url, timeout=5.0)
+        
+        # --- ここが重要！エラーならここで止める ---
+        if response.status_code != 200:
+            st.warning(f"⚠️ {clean_date} の潮汐データが取得できませんでした。")
+            st.caption("原因: 座標が陸地判定されているか、APIのデータ範囲外です。")
+            return # ここで処理を終了させる（重要！）
 
-        # 3. グラフ描画
+        # 4. 正常な時だけデータを取り出す
+        data = response.json()
+        
+        # 以降、データがある前提で処理
+        if "hourly" not in data:
+            st.error("❌ データ形式が正しくありません")
+            return
+
         times = pd.to_datetime(data['hourly']['time'])
         heights = data['hourly']['tide_height']
         tide_df = pd.DataFrame({'time': times, 'height': heights})
 
+        # グラフ描画
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=tide_df['time'], y=tide_df['height'], fill='tozeroy', line=dict(color='#007BFF')))
-        
-        # 釣れた時間の星印
+        fig.add_trace(go.Scatter(
+            x=tide_df['time'], y=tide_df['height'], 
+            fill='tozeroy', line=dict(color='#007BFF', width=3),
+            name="潮位"
+        ))
+
+        # ヒット時刻のマーカー
         if hit_time_str and str(hit_time_str) != 'nan':
-            hit_dt = pd.to_datetime(f"{clean_date} {str(hit_time_str)[:5]}")
-            idx = (tide_df['time'] - hit_dt).abs().idxmin()
-            fig.add_trace(go.Scatter(x=[hit_dt], y=[tide_df.loc[idx, 'height']], mode='markers', marker=dict(color='red', size=15, symbol='star')))
+            try:
+                hit_dt = pd.to_datetime(f"{clean_date} {str(hit_time_str)[:5]}")
+                idx = (tide_df['time'] - hit_dt).abs().idxmin()
+                fig.add_trace(go.Scatter(
+                    x=[hit_dt], y=[tide_df.loc[idx, 'height']], 
+                    mode='markers', marker=dict(color='red', size=15, symbol='star'),
+                    name="HIT!"
+                ))
+            except: pass
 
         fig.update_layout(height=200, margin=dict(l=0,r=0,t=0,b=0), showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
-        # 💡 犯人を突き止めるメッセージを表示
-        st.error(f"❌ 読み込めない原因: {e}")
-        # もし座標が原因ならここにヒントが出る
-        st.write(f"デバッグ情報: 緯度={lat}, 経度={lon}, 日付={date_str}")
-
-        fig.update_layout(
-            height=250,
-            margin=dict(l=0, r=0, t=20, b=0),
-            xaxis=dict(tickformat="%H:%M", font=dict(size=10)),
-            yaxis=dict(title="潮位 (m)", side="right"),
-            showlegend=False,
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)'
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-    except Exception as e:
-        st.caption(f"⚠️ タイドグラフを読み込めませんでした")
-
+        st.error(f"❌ 予期せぬエラー: {e}")
 def upload_to_drive(uploaded_file):
     # Secretsから設定を読み込み（関数を呼ぶたびに確実に設定）
     import cloudinary.uploader # 追加
@@ -851,6 +857,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
