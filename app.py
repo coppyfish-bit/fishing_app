@@ -784,111 +784,60 @@ with tab3:
         latest_10 = df_gallery.head(10)
         
         for idx, row in latest_10.iterrows():
-            with st.container(border=True):
-                col_img, col_info = st.columns([1, 1])
-                with col_img:
-                    img_url = str(row.get('filename', '')).strip()
-                    if img_url.startswith('http'):
-                        st.image(img_url, use_container_width=True)
-                    else:
-                        st.info("📷 画像なし")
-                
-                with col_info:
-                    st.markdown(f"### {row.get(FISH_COL, '不明')} ({row.get(SIZE_COL, '---')}cm)")
-                    st.write(f"📅 {row.get('date', '---')} {str(row.get('time', ''))[:5]}")
-                    st.write(f"📍 {row.get(PLACE_COL, '---')} | 👤 {row.get(ANGLER_COL, '---')}")
+            # データの準備
+            fish_name = row.get(FISH_COL, '不明')
+            fish_size = row.get(SIZE_COL, '---')
+            place = row.get(PLACE_COL, '---')
+            date_val = f"{row.get('date', '---')} {str(row.get('time', ''))[:5]}"
+            img_url = str(row.get('filename', '')).strip()
+
+            # --- CSS/HTMLによるオーバーレイ表示 ---
+            if img_url.startswith('http'):
+                st.markdown(f"""
+                    <div style="position: relative; border-radius: 10px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+                        <img src="{img_url}" style="width: 100%; display: block;">
+                        <div style="position: absolute; bottom: 0; left: 0; right: 0; 
+                                    background: linear-gradient(transparent, rgba(0,0,0,0.8)); 
+                                    color: white; padding: 15px;">
+                            <h3 style="margin: 0; color: white; font-size: 1.2rem;">{fish_name} ({fish_size}cm)</h3>
+                            <p style="margin: 5px 0 0; font-size: 0.8rem; opacity: 0.9;">
+                                📅 {date_val} / 📍 {place}
+                            </p>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.info(f"📷 画像なし: {fish_name}")
+
+            # --- 詳細情報とタイドグラフは下に配置（スッキリさせるため） ---
+            with st.expander(f"📊 詳細データを確認する"):
+                col_sub1, col_sub2 = st.columns(2)
+                with col_sub1:
                     st.write(f"🌊 {row.get(TIDE_NAME_COL, '---')} ({row.get(PHASE_COL, '---')})")
-                    
-                    # --- 追加情報セクション ---
-                    col_sub1, col_sub2 = st.columns(2)
-                    with col_sub1:
-                        # 潮位と月齢
-                        tide_cm = row.get(TIDE_CM_COL, '---')
-                        st.write(f"📏 潮位: {tide_cm}cm")
-                        
-                        # 簡易月齢計算 (日付から算出)
-                        try:
-                            d = pd.to_datetime(row.get('date'))
-                            # 2010年1月1日がほぼ新月であることを基準にした簡易計算
-                            base_date = pd.Timestamp("2010-01-01")
-                            days_diff = (d - base_date).days
-                            moon_age = round((days_diff % 29.53), 1)
-                            st.write(f"🌙 月齢: {moon_age}")
-                        except:
-                            st.write(f"🌙 月齢: ---")
-
-                    with col_sub2:
-                        # 風速と風向
-                        w_spd = row.get(WIND_SPD_COL, '---')
-                        w_dir = row.get(WIND_DIR_COL, '---')
-                        st.write(f"🍃 風速: {w_spd}m/s")
-                        st.write(f"🧭 風向: {w_dir}")
-                       # --- 🎣 ルアー表示（インデント修正版） ---
-                  # --- 🎣 ルアー表示 ---
-                    lure_val = row.get(LURE_COL)
-                    if pd.notna(lure_val) and str(lure_val).strip().lower() != 'nan' and str(lure_val).strip() != '':
-                        st.write(f"🎣 ルアー: {lure_val}")
-                    else:
-                        st.write(f"🎣 ルアー: ---")
-
-                    # --- ☔ 降水量表示 ---
-                    # ここにあった「st.write(idx)」などは削除！
-                    rain_val = row.get(RAIN_COL)
-                    if pd.notna(rain_val) and str(rain_val).strip().lower() != 'nan' and str(rain_val).strip() != '':
-                        st.write(f"☔ 降水量: {rain_val}mm")
-                    else:
-                        st.write(f"☔ 降水量: ---")
-
-                # --- 【修正ポイント】インデントを正してループ内に入れる ---
-                with st.expander("📊 タイドグラフを確認する"):
-                    # 天草周辺の海上に座標を固定（エラー回避）
-                    fixed_lat = 32.19  
-                    fixed_lon = 129.99
-                    
-                    # 日付と時刻の掃除
-                    clean_date = str(row.get('date')).split(' ')[0].strip().replace('/', '-')
-                    clean_time = str(row.get('time', '12:00'))[:5]
-                    
-                    # グラフ表示関数の実行
-                    display_tide_graph(fixed_lat, fixed_lon, clean_date, clean_time)
-
-        # --- 2. 11件目以降のリスト表示 ---
-        if len(df_gallery) > 10:
-            st.write("---")
-            st.write("### 📜 過去の履歴リスト（11件目以降）")
-            past_logs = df_gallery.iloc[10:].copy()
-            past_logs['list_label'] = past_logs['date'].astype(str) + " | " + past_logs[FISH_COL].astype(str) + " | " + past_logs[SIZE_COL].astype(str) + "cm"
-            
-            selected_log_label = st.selectbox("記録を選択して詳細を表示", ["選択してください"] + past_logs['list_label'].tolist())
-            
-            if selected_log_label != "選択してください":
-                selected_row = past_logs[past_logs['list_label'] == selected_log_label].iloc[0]
+                    st.write(f"📏 潮位: {row.get(TIDE_CM_COL, '---')}cm")
+                    # 月齢計算（先ほどのコードをここに）
+                    try:
+                        d = pd.to_datetime(row.get('date'))
+                        new_moon = pd.Timestamp("2026-01-19")
+                        moon_age = round(((d - new_moon).days % 29.53), 1)
+                        if moon_age < 0: moon_age += 29.53
+                        st.write(f"🌙 月齢: {moon_age}")
+                    except: st.write("🌙 月齢: ---")
                 
-                with st.container(border=True):
-                    st.info(f"📋 詳細: {selected_log_label}")
-                    col_p_img, col_p_info = st.columns([1, 1])
-                    with col_p_img:
-                        p_img_url = str(selected_row.get('filename', '')).strip()
-                        if p_img_url.startswith('http'):
-                            st.image(p_img_url, use_container_width=True)
-                        else:
-                            st.info("📷 画像なし")
-                    
-                    with col_p_info:
-                        st.write(f"👤 **釣り人:** {selected_row.get(ANGLER_COL, '---')}")
-                        st.write(f"🎣 **ルアー:** {selected_row.get(LURE_COL, '---')}")
-                        st.write(f"💬 **備考:** {selected_row.get('備考', '---')}")
-
-                    # 過去ログ用タイドグラフ（こちらも座標固定）
-                    st.write("---")
-                    st.caption("🌊 当時のタイドグラフ")
-                    p_clean_date = str(selected_row.get('date')).split(' ')[0].strip().replace('/', '-')
-                    p_clean_time = str(selected_row.get('time', '12:00'))[:5]
-                    
-                    display_tide_graph(32.40, 130.10, "2026-02-10", clean_time)
-
+                with col_sub2:
+                    st.write(f"🍃 風速: {row.get(WIND_SPD_COL, '---')}m/s")
+                    st.write(f"🧭 風向: {row.get(WIND_DIR_COL, '---')}")
+                    st.write(f"🎣 ルアー: {row.get(LURE_COL, '---')}")
+                
+                st.write(f"☔ 降水量: {row.get(RAIN_COL, '---')}mm")
+                st.write("---")
+                
+                # タイドグラフ
+                clean_time = str(row.get('time', '12:00'))[:5]
+                display_tide_graph(32.40, 130.10, row.get('date'), clean_time)
     else:
         st.info("履歴がまだありません。")
+
 
 
 
