@@ -569,6 +569,49 @@ with tab1:
                         "次の満潮まで_分": t_info.get("次の満潮まで_分", ""),
                         "次の干潮まで_分": t_info.get("次の干潮まで_分", ""),
                         "直前の満潮_時刻": t_info.get("直前の満潮_時刻"),
+if st.button("🚀 この内容で保存する"):
+            # --- 1. 画像のアップロード ---
+            drive_url = ""
+            try:
+                if uploaded_file is not None:
+                    with st.spinner('📸 画像をアップロード中...'):
+                        upload_result = cloudinary.uploader.upload(
+                            uploaded_file,
+                            folder="fishing_app"
+                        )
+                        drive_url = upload_result.get("secure_url")
+                else:
+                    # 画像がない場合のデフォルト画像
+                    drive_url = "https://via.placeholder.com/400x300.png?text=No+Image"
+            except Exception as e:
+                st.error(f"❌ 画像アップロード失敗: {e}")
+                st.stop()  # アップロード失敗時はここで停止
+
+            # --- 2. データの解析と保存 ---
+            with st.spinner('📊 データを解析して保存中...'):
+                try:
+                    # 日付と時刻の結合（date_in, time_in がフォームで定義されている前提）
+                    target_dt = datetime.combine(date_in, time_in)
+                    
+                    # 潮汐・気象データの取得
+                    t_name = get_tide_name(target_dt)
+                    t_info = get_tide_details(lat_in, lon_in, target_dt, final_place_name)
+                    temp, wind_s, wind_d, prec = get_weather_data(lat_in, lon_in, target_dt)
+
+                    # 保存用データ（全26項目）
+                    save_data = {
+                        "filename": drive_url,
+                        "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
+                        "date": date_in.strftime('%Y-%m-%d'),
+                        "time": time_in.strftime('%H:%M'),
+                        "lat": lat_in, "lon": lon_in,
+                        "気温": temp, "風速": wind_s, "風向": get_wind_direction_label(wind_d), "降水量": prec,
+                        "潮位_cm": t_info.get("潮位_cm"),
+                        "月齢": get_moon_age(target_dt),
+                        "潮名": t_name,
+                        "次の満潮まで_分": t_info.get("次の満潮まで_分", ""),
+                        "次の干潮まで_分": t_info.get("次の干潮まで_分", ""),
+                        "直前の満潮_時刻": t_info.get("直前の満潮_時刻"),
                         "直前の干潮_時刻": t_info.get("直前の干潮_時刻"),
                         "潮位フェーズ": t_info.get("潮位フェーズ"),
                         "場所": final_place_name,
@@ -581,22 +624,13 @@ with tab1:
                         "釣り人": angler
                     }
 
-                    # カラムリスト（スプレッドシートの並び順と一致させる）
-                    cols = [
-                        "filename", "datetime", "date", "time", "lat", "lon", 
-                        "気温", "風速", "風向", "降水量", "潮位_cm", "月齢", 
-                        "潮名", "次の満潮まで_分", "次の干潮まで_分", 
-                        "直前の満潮_時刻", "直前の干潮_時刻", "潮位フェーズ", 
-                        "場所", "魚種", "全長_cm", "ルアー", "備考", 
-                        "group_id", "観測所", "釣り人"
-                    ]
+                    # カラムリスト
+                    cols = ["filename", "datetime", "date", "time", "lat", "lon", "気温", "風速", "風向", "降水量", "潮位_cm", "月齢", "潮名", "次の満潮まで_分", "次の干潮まで_分", "直前の満潮_時刻", "直前の干潮_時刻", "潮位フェーズ", "場所", "魚種", "全長_cm", "ルアー", "備考", "group_id", "観測所", "釣り人"]
                     
-                    # 新しい行の作成
                     new_row_df = pd.DataFrame([save_data])[cols]
                     
-                    # スプレッドシート更新（セッション状態のdfと連結）
+                    # スプレッドシートのメインシート更新
                     if "df" not in st.session_state:
-                        # セッションにdfがない場合は最新を読み込み
                         st.session_state.df = conn.read(spreadsheet=url)
                     
                     updated_df = pd.concat([st.session_state.df, new_row_df], ignore_index=True)
@@ -619,7 +653,7 @@ with tab1:
                     st.success(f"🎉 {final_place_name} での釣果を保存しました！")
                     st.balloons()
                     
-                    # キャッシュをクリアして次回表示を最新にする
+                    # キャッシュをクリア
                     st.cache_data.clear()
                     if "df" in st.session_state: 
                         del st.session_state.df
@@ -630,9 +664,8 @@ with tab1:
                     st.rerun()
                     
                 except Exception as e:
-                    # エラーの詳細を画面に表示
                     st.error(f"❌ 保存エラーが発生しました: {e}")
-                    st.info("※date_in や time_in が正しく定義されているか、入力フォームの変数名を確認してください。")
+                    st.info("※入力項目（date_in, time_inなど）が定義されているか確認してください。")
 # タブ2: 釣果の修正・削除)
 # ==========================================
 with tab2:
@@ -806,6 +839,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
