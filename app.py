@@ -718,72 +718,69 @@ with tab2:
         
 with tab3:
         st.subheader("📸 釣果フォトギャラリー")
-        # --- 🚨 NameError対策：列名の定義をここに追加 ---
-        FISH_COL = '魚種'      # スプレッドシートの列名に合わせて変更してください
-        SIZE_COL = 'サイズ'    # 同上
-        PLACE_COL = '場所'     # 同上
-        TIDE_NAME_COL = '潮汐' # 同上
-        PHASE_COL = '潮回り'   # 同上
-        TIDE_CM_COL = '潮位'   # 同上
-        WIND_SPD_COL = '風速'  # 同上
-        WIND_DIR_COL = '風向'  # 同上
-        LURE_COL = 'ルアー'    # 同上
-        RAIN_COL = '降水量'    # 同上
-        # ------------------------------------------
-        # データの存在チェック
+        
+        # --- 列名の定義（NameError対策） ---
+        # お使いのスプレッドシートの見出し名に合わせてください
+        F_COL = '魚種'
+        S_COL = 'サイズ'
+        P_COL = '場所'
+        T_COL = '潮汐'
+        PH_COL = '潮回り'
+        W_S_COL = '風速'
+        W_D_COL = '風向'
+        L_COL = 'ルアー'
+        R_COL = '降水量'
+
         if not df.empty:
             # 最新の10件を取得
             latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
             
             for idx, row in latest_10.iterrows():
-                # --- データの準備 ---
-                fish_name = row.get(FISH_COL, '不明')
-                fish_size = row.get(SIZE_COL, '---')
-                place = row.get(PLACE_COL, '---')
+                # データの整理
+                fish_name = str(row.get(F_COL, '不明'))
+                fish_size = str(row.get(S_COL, '---'))
+                place = str(row.get(P_COL, '---'))
                 date_str = str(row.get('date', '---'))
                 time_str = str(row.get('time', ''))[:5]
                 img_url = str(row.get('filename', '')).strip()
 
-                # --- 詳細データの整理（nan対策） ---
-                def clean(v, unit=""):
-                    val = str(v).strip().lower()
-                    return "---" if val == 'nan' or val == '' else f"{v}{unit}"
+                # nan対策の関数
+                def clean(val, unit=""):
+                    v = str(val).strip().lower()
+                    return "---" if v == 'nan' or v == '' else f"{val}{unit}"
 
-                tide_info = f"{row.get(TIDE_NAME_COL, '---')} ({row.get(PHASE_COL, '---')})"
-                wind_info = f"{clean(row.get(WIND_SPD_COL), 'm/s')} ({row.get(WIND_DIR_COL, '---')})"
-                lure_info = clean(row.get(LURE_COL))
-                rain_info = clean(row.get(RAIN_COL), "mm")
-
+                # --- 🎨 ここからオーバーレイHTML ---
                 if img_url.startswith('http'):
-                    # --- 🎨 HTML/CSSによるオーバーレイ表示 ---
                     st.markdown(f"""
-                        <div style="position: relative; border-radius: 15px; overflow: hidden; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
-                            <img src="{img_url}" style="width: 100%; display: block;">
+                        <div style="position: relative; border-radius: 15px; overflow: hidden; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); font-family: sans-serif;">
+                            <img src="{img_url}" style="width: 100%; display: block; min-height: 250px; object-fit: cover;">
                             
                             <div style="position: absolute; top: 12px; left: 12px;">
-                                <div style="background: rgba(220, 20, 60, 0.85); color: white; padding: 5px 12px; border-radius: 20px; font-weight: bold; font-size: 1rem;">
+                                <div style="background: rgba(220, 20, 60, 0.9); color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 1.1rem; box-shadow: 2px 2px 8px rgba(0,0,0,0.5);">
                                     {fish_name} {fish_size}cm
                                 </div>
                             </div>
 
-                            <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.95) 40%); color: white; padding: 15px;">
-                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 8px; opacity: 0.9;">
+                            <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.9) 50%); color: white; padding: 20px 15px 15px 15px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 8px; font-weight: bold; opacity: 0.9;">
                                     <span>📅 {date_str} {time_str}</span>
                                     <span>📍 {place}</span>
                                 </div>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 0.75rem; background: rgba(255,255,255,0.1); padding: 8px; border-radius: 8px;">
-                                    <div>🌊 {tide_info}</div>
-                                    <div>🍃 {wind_info}</div>
-                                    <div>☔ {rain_info}</div>
-                                    <div>🎣 {lure_info}</div>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 0.75rem; background: rgba(255,255,255,0.15); padding: 10px; border-radius: 10px; backdrop-filter: blur(4px);">
+                                    <div>🌊 {row.get(T_COL, '---')} ({row.get(PH_COL, '---')})</div>
+                                    <div>🍃 {clean(row.get(W_S_COL), 'm/s')} ({row.get(W_D_COL, '---')})</div>
+                                    <div>☔ {clean(row.get(R_COL), 'mm')}</div>
+                                    <div>🎣 {clean(row.get(L_COL))}</div>
                                 </div>
                             </div>
                         </div>
-                    """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)  # ←これが最重要！
                 else:
                     st.info(f"💡 写真なし: {fish_name} ({fish_size}cm)")
         else:
             st.write("データがありません。")
+
 
 
 
