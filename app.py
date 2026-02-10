@@ -20,22 +20,6 @@ import requests
 import pandas as pd
 import plotly.graph_objects as go
 
-# キャッシュを有効化（1時間は同じリクエストを再送しない）
-@st.cache_data(ttl=3600)
-def fetch_tide_data_safe(lat, lon, date_str):
-    url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={date_str}&end_date={date_str}"
-    try:
-        response = requests.get(url, timeout=3.0) # タイムアウトを短く設定
-        if response.status_code == 200:
-            return response.json()
-    except:
-        return None
-    return None
-
-import requests
-import pandas as pd
-import plotly.graph_objects as go
-
 # キャッシュを1時間に設定（同じリクエストは2回目から一瞬で表示）
 @st.cache_data(ttl=3600)
 def fetch_api_data(url):
@@ -45,24 +29,20 @@ def fetch_api_data(url):
     return response.json()
 
 def display_tide_graph(lat, lon, date_str, hit_time_str):
+    # 作成されたURLを画面に出して、クリックして確認できるようにする
+    url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={date_str}&end_date={date_str}"
+    
+    st.write(f"🔗 [APIを直接開く]({url})") # ←これをクリックしてエラーが出るか確認
+    
     try:
-        # 1. 日付の掃除
-        clean_date = str(date_str).split(' ')[0].strip().replace('/', '-')
-        
-        # 2. URL作成（天草の陸地判定を避けるため、API側で補正が効きやすい形式に）
-        url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={clean_date}&end_date={clean_date}"
-        
-        # 3. 通信実行
         response = requests.get(url, timeout=5.0)
-        
-        # --- ここが重要！エラーならここで止める ---
         if response.status_code != 200:
-            st.warning(f"⚠️ {clean_date} の潮汐データが取得できませんでした。")
-            st.caption("原因: 座標が陸地判定されているか、APIのデータ範囲外です。")
-            return # ここで処理を終了させる（重要！）
-
-        # 4. 正常な時だけデータを取り出す
+            st.error(f"❌ APIエラー: {response.status_code}")
+            st.json(response.json()) # APIが返してきた具体的なエラー理由を表示
+            return
+            
         data = response.json()
+        # (以下、グラフ描画コード...)
         
         # 以降、データがある前提で処理
         if "hourly" not in data:
@@ -857,6 +837,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
