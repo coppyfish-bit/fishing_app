@@ -723,48 +723,19 @@ with tab2:
 
 with tab3:
     st.subheader("🎣 釣果フォトギャラリー")
-
+    
+    # いったんHTMLは使わず、Streamlitの標準機能だけで表示
     if not df.empty:
-        # 最新10件
         latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
-
         for idx, row in latest_10.iterrows():
-            # データの準備
-            fish_name = str(row.get(FISH_COL, '不明'))
-            fish_size = str(row.get(SIZE_COL, '---'))
-            place = str(row.get(PLACE_COL, '---'))
-            date_str = str(row.get('date', '---'))
-            time_str = str(row.get('time', ''))[:5]
-            
-            # 画像URL
-            img_url = str(row.get('filename', '')).strip()
-
-            if img_url.startswith('http'):
-                # HTMLを組み立てる（エラー回避のためシンプルに）
-                html_content = f"""
-                <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 30px; background-color: #222;">
-                    <img src="{img_url}" style="width: 100%; display: block;">
-                    
-                    <div style="position: absolute; top: 15px; left: 15px;">
-                        <div style="background: rgba(220, 20, 60, 0.9); color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold;">
-                            {fish_name} {fish_size}cm
-                        </div>
-                    </div>
-
-                    <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,1), transparent); color: white; padding: 20px 15px;">
-                        <div style="font-size: 0.9rem; font-weight: bold;">
-                            📅 {date_str} {time_str} / 📍 {place}
-                        </div>
-                    </div>
-                </div>
-                """
-                st.markdown(html_content, unsafe_allow_html=True)
-            else:
-                st.info(f"💡 写真なし: {fish_name}")
+            with st.container(border=True):
+                st.write(f"🐟 {row.get(FISH_COL)} ({row.get(SIZE_COL)}cm)")
+                img_url = str(row.get('filename', '')).strip()
+                if img_url.startswith('http'):
+                    st.image(img_url, use_container_width=True)
+                st.write(f"📅 {row.get('date')} | 📍 {row.get(PLACE_COL)}")
     else:
         st.write("データがありません")
-
-
 
 
 
