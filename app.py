@@ -17,79 +17,55 @@ from datetime import datetime
 import numpy as np
 import base64
 
-def display_tide_graph(lat, lon, date_str, hit_time_str):
+def display_tide_graph(lat, lon, date_str, hit_time_str, tide_val, tide_phase):
     try:
-        # 1. ヒット時刻を数値化（デフォルトは正午）
+        # 1. ヒット時刻を数値化
         if hit_time_str and str(hit_time_str) != 'nan':
-            try:
-                h, m = map(int, str(hit_time_str).split(':')[:2])
-                hit_h = h + m/60
-            except:
-                hit_h = 12.0
+            h, m = map(int, str(hit_time_str).split(':')[:2])
+            hit_h = h + m/60
         else:
             hit_h = 12.0
 
-        # 2. 表示範囲（★の前後6時間 = 合計12時間）を計算
+        # 2. 表示範囲（前後6時間）
         start_h = hit_h - 6
         end_h = hit_h + 6
-        
-        # 3. グラフ用の時間軸（48地点）を作成
         hours = np.linspace(start_h, end_h, 48)
         
-        # 4. 潮汐シミュレーション（周期 12.42時間）
-        tide_curve = 100 * np.sin(2 * np.pi * (hours - 6) / 12.42) + 150
+        # 3. 【修正】シミュレーションではなく、シートの潮位(tide_val)を基準にする
+        # 潮位フェーズが「下げ」なら右下がり、「上げ」なら右上がりの波を作る
+        base_level = float(tide_val) if str(tide_val).isdigit() else 150
+        direction = -1 if "下" in str(tide_phase) else 1
         
-        # 5. グラフ描画
+        # ヒット時を中心に、潮位フェーズに合わせた傾斜をつける
+        tide_curve = direction * 50 * np.sin(2 * np.pi * (hours - hit_h) / 12.42) + base_level
+        
+        # 4. グラフ描画
         fig = go.Figure()
-        
-        # 潮位の波
         fig.add_trace(go.Scatter(
             x=hours, y=tide_curve,
-            mode='lines',
-            fill='tozeroy',
+            mode='lines', fill='tozeroy',
             line=dict(color='#007BFF', width=3),
             hovertemplate='%{x:.1f}時: %{y:.1f}cm<extra></extra>'
         ))
 
-        # ★ヒット地点（必ず真ん中にくる）
-        hit_y = 100 * np.sin(2 * np.pi * (hit_h - 6) / 12.42) + 150
+        # HIT! 地点（シートの潮位をそのまま使う）
         fig.add_trace(go.Scatter(
-            x=[hit_h], y=[hit_y],
+            x=[hit_h], y=[base_level],
             mode='markers+text',
-            text=["HIT!"],
-            textposition="top center",
+            text=["HIT!"], textposition="top center",
             marker=dict(color='red', size=18, symbol='star'),
-            name="HIT!"
         ))
 
-        # 6. レイアウト設定
         fig.update_layout(
-            height=250, 
-            margin=dict(l=10, r=10, t=30, b=10),
-            xaxis=dict(
-                title="時間 (前後6時間表示)",
-                tickvals=np.arange(np.floor(start_h), np.ceil(end_h) + 1, 2), # 2時間刻み
-                gridcolor='lightgray'
-            ),
+            height=200, margin=dict(l=10, r=10, t=30, b=10),
+            xaxis=dict(title="時間", tickvals=np.arange(np.floor(start_h), np.ceil(end_h) + 1, 2), gridcolor='lightgray'),
             yaxis=dict(visible=False),
             showlegend=False,
-            title=dict(
-                text=f"📌 {date_str} {hit_time_str[:5]} 前後の潮汐",
-                font=dict(size=14)
-            )
+            title=dict(text=f"📌 {tide_phase} (潮位:{tide_val}cm)", font=dict(size=14))
         )
         
-        # 縦線（ヒット時刻を強調）
-        fig.add_vline(x=hit_h, line_dash="dash", line_color="red", opacity=0.5)
-
-        st.plotly_chart(
-            fig, 
-            use_container_width=True, 
-            config={
-                'staticPlot': True,       # グラフを「静止画」にしてスクロールを優先する
-                'displayModeBar': False   # 余計なメニューを出さない
-            }
-        )
+        # スマホでのスクロールを優先する設定
+        st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True})
 
     except Exception as e:
         st.error(f"グラフ作成エラー: {e}")
@@ -774,6 +750,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
