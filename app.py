@@ -721,129 +721,81 @@ with tab2:
     except Exception as e:
         st.error(f"タブ2でエラーが発生しました: {e}")
 
-# ==========================================
-# タブ3: ギャラリー（天草固定・高速版）
-# ==========================================
 with tab3:
-    st.subheader("🖼️ 釣果フォトギャラリー")
+    st.subheader("🎣 釣果フォトギャラリー")
 
-    if 'df' in st.session_state and not st.session_state.df.empty:
-        # --- 変数定義 ---
-        SIZE_COL = "全長_cm"
-        FISH_COL = "魚種"
-        PLACE_COL = "場所"
-        PHASE_COL = "潮位フェーズ"
-        TIDE_NAME_COL = "潮名"
-        TIDE_CM_COL = "潮位_cm"
-        LURE_COL = "ルアー"
-        WIND_SPD_COL = "風速"
-        WIND_DIR_COL = "風向"
-        RAIN_COL = "降水量"
-        ANGLER_COL = "釣り人"
+    # データがあるか確認
+    if not df.empty:
+        # 最新の10件を取得
+        latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
 
-        df_gallery = st.session_state.df.copy()
-        df_gallery['date'] = pd.to_datetime(df_gallery['date']).dt.date
+        for idx, row in latest_10.iterrows():
+            # --- 1. データの整理 ---
+            fish_name = row.get(FISH_COL, '不明')
+            fish_size = row.get(SIZE_COL, '---')
+            place = row.get(PLACE_COL, '---')
+            date_str = str(row.get('date', '---'))
+            time_str = str(row.get('time', ''))[:5]
+            
+            # nanのクリーニング用関数
+            def clean_text(val, unit=""):
+                v = str(val).strip().lower()
+                if v == 'nan' or v == '' or v == 'none':
+                    return "---"
+                return f"{val}{unit}"
 
-        # --- 絞り込みセクション ---
-        st.write("🔍 絞り込み条件")
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            min_d, max_d = df_gallery['date'].min(), df_gallery['date'].max()
-            date_range = st.date_input("日付範囲", value=(min_d, max_d), key="gal_date")
-        with col_f2:
-            unique_places = ["すべて"] + sorted(df_gallery[PLACE_COL].dropna().unique().tolist())
-            select_place = st.selectbox("場所を選択", unique_places, key="gal_place_select")
+            tide_text = f"{row.get(TIDE_NAME_COL, '---')} ({row.get(PHASE_COL, '---')})"
+            tide_cm = clean_text(row.get(TIDE_CM_COL), "cm")
+            lure = clean_text(row.get(LURE_COL))
+            rain = clean_text(row.get(RAIN_COL), "mm")
+            wind = f"{clean_text(row.get(WIND_SPD_COL), 'm/s')} ({row.get(WIND_DIR_COL, '---')})"
 
-        col_f3, col_f4, col_f5 = st.columns(3)
-        with col_f3:
-            unique_fish = ["すべて"] + sorted(df_gallery[FISH_COL].dropna().unique().tolist())
-            select_fish = st.selectbox("魚種を選択", unique_fish, key="gal_fish_select")
-        with col_f4:
-            min_size = st.number_input("◯◯cm以上", min_value=0.0, step=1.0, value=0.0, key="gal_size_input")
-        with col_f5:
-            tide_filter = st.radio("潮位方向", ["すべて", "上げ", "下げ"], horizontal=True, key="gal_tide_dir")
+            # 月齢計算
+            try:
+                d = pd.to_datetime(row.get('date'))
+                # 2026年1月19日の新月を基準
+                moon_age = round(((d - pd.Timestamp("2026-01-19")).days % 29.53), 1)
+                if moon_age < 0: moon_age += 29.53
+            except:
+                moon_age = "---"
 
-        # --- フィルタリング実行 ---
-        if isinstance(date_range, tuple) and len(date_range) == 2:
-            df_gallery = df_gallery[(df_gallery['date'] >= date_range[0]) & (df_gallery['date'] <= date_range[1])]
-        if select_place != "すべて":
-            df_gallery = df_gallery[df_gallery[PLACE_COL] == select_place]
-        if select_fish != "すべて":
-            df_gallery = df_gallery[df_gallery[FISH_COL] == select_fish]
-        if SIZE_COL in df_gallery.columns:
-            df_gallery[SIZE_COL] = pd.to_numeric(df_gallery[SIZE_COL], errors='coerce').fillna(0)
-            df_gallery = df_gallery[df_gallery[SIZE_COL] >= min_size]
-        if tide_filter != "すべて":
-            df_gallery = df_gallery[df_gallery[PHASE_COL].str.contains(tide_filter, na=False)]
+            img_url = str(row.get('filename', '')).strip()
 
-        # 最新順に並び替え
-        df_gallery = df_gallery.iloc[::-1]
+            # --- 2. HTMLで重ね合わせを実現 ---
+            if img_url.startswith('http'):
+                st.markdown(f"""
+                    <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 30px; box-shadow: 0 10px 20px rgba(0,0,0,0.3); background-color: #333;">
+                        <img src="{img_url}" style="width: 100%; display: block; min-height: 200px; object-fit: cover;">
+                        
+                        <div style="position: absolute; top: 15px; left: 15px;">
+                            <div style="background: rgba(220, 20, 60, 0.9); color: white; padding: 6px 16px; border-radius: 25px; font-weight: bold; font-size: 1.1rem; box-shadow: 2px 2px 8px rgba(0,0,0,0.5);">
+                                {fish_name} {fish_size}cm
+                            </div>
+                        </div>
 
-        # --- 1. 直近10件の表示 ---
-        st.write("### 🆕 最新の釣果（10件）")
-        latest_10 = df_gallery.head(10)
-        
-# --- ループ開始 ---
-for idx, row in latest_10.iterrows():
-    # --- 1. データの準備（表示用） ---
-    fish_name = row.get(FISH_COL, '不明')
-    fish_size = row.get(SIZE_COL, '---')
-    place = row.get(PLACE_COL, '---')
-    date_str = str(row.get('date', '---'))
-    time_str = str(row.get('time', ''))[:5]
-    
-    # nanのクリーニング
-    def get_val(col, unit=""):
-        v = str(row.get(col, '---')).strip().lower()
-        return "---" if v == 'nan' or v == '' else f"{row.get(col)}{unit}"
+                        <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.7) 60%, transparent 100%); color: white; padding: 25px 15px 15px 15px;">
+                            
+                            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 10px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 5px;">
+                                <span>📅 {date_str} {time_str}</span>
+                                <span>📍 {place}</span>
+                            </div>
 
-    tide_text = f"{row.get(TIDE_NAME_COL, '---')} ({row.get(PHASE_COL, '---')})"
-    tide_cm = get_val(TIDE_CM_COL, "cm")
-    lure = get_val(LURE_COL)
-    rain = get_val(RAIN_COL, "mm")
-    wind = f"{get_val(WIND_SPD_COL, 'm/s')} ({row.get(WIND_DIR_COL, '---')})"
-
-    # 月齢計算
-    try:
-        d = pd.to_datetime(row.get('date'))
-        moon_age = round(((d - pd.Timestamp("2026-01-19")).days % 29.53), 1)
-        if moon_age < 0: moon_age += 29.53
-    except: moon_age = "---"
-
-    img_url = str(row.get('filename', '')).strip()
-
-    # --- 2. 強制オーバーレイHTML ---
-    if img_url.startswith('http'):
-        st.markdown(f"""
-            <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 25px; aspect-ratio: 4 / 3;">
-                <img src="{img_url}" style="width: 100%; height: 100%; object-fit: cover; display: block;">
-                
-                <div style="position: absolute; top: 10px; left: 10px;">
-                    <div style="background: rgba(255, 50, 50, 0.85); color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 1.1rem; box-shadow: 2px 2px 10px rgba(0,0,0,0.5);">
-                        {fish_name} {fish_size}cm
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.8rem;">
+                                <div style="background: rgba(255,255,255,0.1); padding: 5px 8px; border-radius: 5px;">🌊 {tide_text}</div>
+                                <div style="background: rgba(255,255,255,0.1); padding: 5px 8px; border-radius: 5px;">📏 {tide_cm}</div>
+                                <div style="background: rgba(255,255,255,0.1); padding: 5px 8px; border-radius: 5px;">🌙 月齢: {moon_age}</div>
+                                <div style="background: rgba(255,255,255,0.1); padding: 5px 8px; border-radius: 5px;">🍃 {wind}</div>
+                                <div style="background: rgba(255,255,255,0.1); padding: 5px 8px; border-radius: 5px;">☔ {rain}</div>
+                                <div style="background: rgba(255,255,255,0.1); padding: 5px 8px; border-radius: 5px;">🎣 {lure}</div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-
-                <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.5) 70%, transparent 100%); color: white; padding: 20px 15px 15px 15px;">
-                    
-                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 8px; font-weight: bold;">
-                        <span>📅 {date_str} {time_str}</span>
-                        <span>📍 {place}</span>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 0.75rem; background: rgba(255,255,255,0.15); padding: 10px; border-radius: 10px; backdrop-filter: blur(5px);">
-                        <div>🌊 {tide_text}</div>
-                        <div>📏 {tide_cm}</div>
-                        <div>🌙 月齢: {moon_age}</div>
-                        <div>🍃 {wind}</div>
-                        <div>☔ {rain}</div>
-                        <div>🎣 {lure}</div>
-                    </div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            else:
+                # 画像がない場合
+                st.info(f"💡 写真なし: {fish_name} ({fish_size}cm) / 📅 {date_str}")
     else:
-        st.warning(f"📷 写真がないため表示できません: {fish_name}")
+        st.write("データがありません。")
 
 
 
