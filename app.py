@@ -318,43 +318,47 @@ with tab1:
 
     final_fish_name = manual_fish_name if manual_fish_name else selected_fish
 
-    # ==========================================
-    # 📏 全長入力：未入力（プレースホルダー）形式
+# ==========================================
+    # 📏 全長入力：見切れないプレースホルダー版
     # ==========================================
     
-    # 1. デザイン：入力欄を巨大化し、視認性を最大にする
+    # デザイン調整：入力後の数字は大きく、プレースホルダーは収まるサイズに
     st.markdown("""
         <style>
-        /* 入力欄のデザインをカスタマイズ */
+        /* 入力後の数字のデザイン */
         div[data-testid="stNumberInput"] input {
-            font-size: 45px !important;
+            font-size: 40px !important; /* 少しだけ小さくして安定感を出す */
             height: 70px !important;
             font-weight: bold !important;
             color: #FF4B4B !important;
             text-align: center !important;
         }
-        /* ラベル（タイトル）の調整 */
+        /* 入力前の説明文字（プレースホルダー）のサイズだけを小さく調整 */
+        div[data-testid="stNumberInput"] input::placeholder {
+            font-size: 18px !important; 
+            font-weight: normal !important;
+            color: #888 !important;
+        }
+        /* ラベルの調整 */
         div[data-testid="stNumberInput"] label p {
-            font-size: 18px !important;
-            color: #ffffff !important;
+            font-size: 16px !important;
         }
         </style>
     """, unsafe_allow_html=True)
 
-    # 2. メイン入力：初期値を空(None)にしてプレースホルダーを表示
-    # スマホでタップするとすぐにテンキーが立ち上がります
+    # メイン入力
     val = st.number_input(
         "全長 (cm)", 
         min_value=0.0, 
         max_value=300.0, 
-        value=None,  # ここをNoneにすることで初期値を空にします
+        value=None, 
         placeholder="ここをタップして入力",
         step=0.1, 
         format="%.1f",
-        key="final_len_input_blank"
+        key="final_len_input_fixed"
     )
 
-    # 3. 値が入力されていない場合の処理（保存時にエラーにならないよう0.0を代入）
+    # 保存用の値確定
     final_length = val if val is not None else 0.0
     # --- 6. その他入力項目 ---
     st.markdown("---")
@@ -723,6 +727,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
