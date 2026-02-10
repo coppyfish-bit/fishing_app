@@ -795,11 +795,39 @@ with tab3:
                 
                 with col_info:
                     st.markdown(f"### {row.get(FISH_COL, '不明')} ({row.get(SIZE_COL, '---')}cm)")
-                    st.write(f"📅 {row.get('date', '---')} {row.get('time', '')}")
+                    st.write(f"📅 {row.get('date', '---')} {str(row.get('time', ''))[:5]}")
                     st.write(f"📍 {row.get(PLACE_COL, '---')} | 👤 {row.get(ANGLER_COL, '---')}")
                     st.write(f"🌊 {row.get(TIDE_NAME_COL, '---')} ({row.get(PHASE_COL, '---')})")
-                    if row.get(LURE_COL):
-                        st.caption(f"🎣 {row[LURE_COL]}")
+                    
+                    # --- 追加情報セクション ---
+                    col_sub1, col_sub2 = st.columns(2)
+                    with col_sub1:
+                        # 潮位と月齢
+                        tide_cm = row.get(TIDE_CM_COL, '---')
+                        st.write(f"📏 潮位: {tide_cm}cm")
+                        
+                        # 簡易月齢計算 (日付から算出)
+                        try:
+                            d = pd.to_datetime(row.get('date'))
+                            # 2010年1月1日がほぼ新月であることを基準にした簡易計算
+                            base_date = pd.Timestamp("2010-01-01")
+                            days_diff = (d - base_date).days
+                            moon_age = round((days_diff % 29.53), 1)
+                            st.write(f"🌙 月齢: {moon_age}")
+                        except:
+                            st.write(f"🌙 月齢: ---")
+
+                    with col_sub2:
+                        # 風速と風向
+                        w_spd = row.get(WIND_SPD_COL, '---')
+                        w_dir = row.get(WIND_DIR_COL, '---')
+                        st.write(f"🍃 風速: {w_spd}m/s")
+                        st.write(f"🧭 風向: {w_dir}")
+
+                    if row.get(LURE_COL) and str(row.get(LURE_COL)) != 'nan':
+                        st.caption(f"🎣 ルアー: {row[LURE_COL]}")
+                    if row.get(RAIN_COL):
+                        st.caption(f"☔ 降水量: {row[RAIN_COL]}mm")
 
                 # --- 【修正ポイント】インデントを正してループ内に入れる ---
                 with st.expander("📊 タイドグラフを確認する"):
@@ -851,6 +879,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
