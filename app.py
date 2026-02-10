@@ -374,7 +374,7 @@ with tab1:
     # --- 6. その他入力項目 ---
     st.markdown("---")
     st.markdown("**ルアー・仕掛け**")
-    lure_sel = st.text_input("ルアー名", placeholder="例：カゲロウ125MD ←数字、英字は半角でお願いします",.key="lure_name_final")
+    lure_sel = st.text_input("ルアー名", placeholder="例：カゲロウ125MD ←数字、英字は半角でお願いします", key="lure_name_final")
     lure_extra = st.text_input("詳細・カラー (任意)", key="lure_color_final")
     lure_in = lure_sel + (f" ({lure_extra})" if lure_extra else "")
 
@@ -760,6 +760,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
