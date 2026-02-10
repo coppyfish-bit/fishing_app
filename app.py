@@ -322,11 +322,11 @@ with tab1:
 
     final_fish_name = manual_fish_name if manual_fish_name else selected_fish
 
-  # ==========================================
-    # 📏 全長クイックタップ（スマホ1列横並び強制）
+ # ==========================================
+    # 📏 全長クイックタップ（スマホ横並び強制）
     # ==========================================
 
-    # 1. ロジック：初期値と魚種連動
+    # 1. 魚種連動の初期値ロジック
     is_suzuki_family = final_fish_name in ["スズキ", "ヒラスズキ"]
     default_len = 60.0 if is_suzuki_family else 0.0
 
@@ -337,62 +337,76 @@ with tab1:
         st.session_state['len_val'] = default_len
         st.session_state['prev_fish_type'] = final_fish_name
 
-    # 2. 強力なCSS：1列に6カラムを強制
+    # 2. 強力なCSS注入：縦並びを禁止し、横に3分割する
     st.markdown("""
         <style>
-        /* 親コンテナのフレックス設定を強制 */
+        /* カラム（列）を強制的に横並びにする */
         [data-testid="column"] {
-            width: calc(16.6% - 4px) !important;
-            flex: 1 1 calc(16.6% - 4px) !important;
-            min-width: calc(16.6% - 4px) !important;
-            padding: 0px 2px !important;
+            width: 31% !important; /* 3つ並ぶように幅を制限 */
+            flex-direction: row !important;
+            display: flex !important;
+            min-width: 31% !important;
         }
-        /* ボタンのデザイン：小さくても押しやすく */
+        /* ボタンのデザイン：デカくて赤い縁取り */
         .stButton > button {
             width: 100% !important;
-            height: 45px !important; 
-            font-size: 14px !important; /* 文字を少し小さく */
+            height: 75px !important;
+            font-size: 24px !important;
             font-weight: 900 !important;
-            padding: 0px !important;
-            background-color: #262730 !important;
+            background-color: #1E1E1E !important;
             color: white !important;
-            border: 1px solid #FF4B4B !important;
-            border-radius: 6px !important;
+            border: 3px solid #FF4B4B !important;
+            border-radius: 15px !important;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3) !important;
         }
-        /* 数字の表示サイズ（ボタンに合わせて少し縮小） */
-        .big-number {
-            font-size: 50px !important;
+        /* 数字の表示を少しスリムに */
+        .len-display {
+            font-size: 70px !important;
             color: #FF4B4B;
             font-weight: 900;
             text-align: center;
-            margin: 5px 0;
+            margin-bottom: 5px;
+            font-family: 'Arial Black', sans-serif;
         }
         </style>
     """, unsafe_allow_html=True)
 
-    # 3. 表示：現在の数値
-    st.markdown(f'<p class="big-number">{st.session_state.len_val:.1f} <span style="font-size:16px;">cm</span></p>', unsafe_allow_html=True)
+    # 3. 現在の数値を表示
+    st.markdown(f'<div class="len-display">{st.session_state.len_val:.1f} <span style="font-size:20px;">cm</span></div>', unsafe_allow_html=True)
 
-    # 4. ボタン配置（1列に6カラム作成）
-    cols = st.columns(6)
-    
-    # 各ボタンのラベルと増減値のリスト
-    btn_data = [
-        ("ー10", -10.0, "m10"),
-        ("ー5", -5.0, "m5"),
-        ("ー1", -1.0, "m1"),
-        ("＋1", 1.0, "p1"),
-        ("＋5", 5.0, "p5"),
-        ("＋10", 10.0, "p10")
-    ]
+    # 4. ボタン配置（3分割 × 2段）
+    # --- 上段：マイナスボタン ---
+    c_m1, c_m2, c_m3 = st.columns(3)
+    with c_m1:
+        if st.button("ー10", key="m10_btn"):
+            st.session_state.len_val -= 10.0
+            st.rerun()
+    with c_m2:
+        if st.button("ー5", key="m5_btn"):
+            st.session_state.len_val -= 5.0
+            st.rerun()
+    with c_m3:
+        if st.button("ー1", key="m1_btn"):
+            st.session_state.len_val -= 1.0
+            st.rerun()
 
-    for i, (label, val, k) in enumerate(btn_data):
-        with cols[i]:
-            if st.button(label, key=f"btn_{k}"):
-                st.session_state.len_val += val
-                st.rerun()
+    # --- 下段：プラスボタン ---
+    c_p1, c_p2, c_p3 = st.columns(3)
+    with c_p1:
+        if st.button("＋1", key="p1_btn"):
+            st.session_state.len_val += 1.0
+            st.rerun()
+    with c_p2:
+        if st.button("＋5", key="p5_btn"):
+            st.session_state.len_val += 5.0
+            st.rerun()
+    with c_p3:
+        if st.button("＋10", key="p10_btn"):
+            st.session_state.len_val += 10.0
+            st.rerun()
 
-    # 5. 微調整用
+    # --- 5. 手動微調整 ---
+    st.markdown("---")
     num_input = st.number_input(
         "手動入力 / 微調整 (cm)", 
         min_value=0.0, max_value=300.0, 
@@ -779,6 +793,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
