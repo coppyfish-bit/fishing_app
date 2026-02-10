@@ -829,8 +829,12 @@ with tab3:
                         st.write(f"🎣 ルアー: {lure_val}")
                     else:
                         st.write(f"🎣 ルアー: ---")
-                    if row.get(RAIN_COL):
-                        st.caption(f"☔ 降水量: {row[RAIN_COL]}mm")
+                    i# --- ☔ 降水量表示（スタイルを統一） ---
+                    rain_val = row.get(RAIN_COL)
+                    if pd.notna(rain_val) and str(rain_val).strip().lower() != 'nan' and str(rain_val).strip() != '':
+                        st.write(f"☔ 降水量: {rain_val}mm")
+                    else:
+                        st.write(f"☔ 降水量: ---")
 
                 # --- 【修正ポイント】インデントを正してループ内に入れる ---
                 with st.expander("📊 タイドグラフを確認する"):
@@ -882,6 +886,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
