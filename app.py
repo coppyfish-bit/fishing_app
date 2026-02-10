@@ -473,46 +473,22 @@ with tab1:
         if 'final_place_name' not in locals() or not final_place_name:
             st.error("⚠️ 釣り場名を入力してください。")
         else:
-            drive_url = "" 
-            # 1. 画像アップロード (Cloudinary)
-            if uploaded_file:
-                with st.spinner('📸 画像を処理中...'):
-                    try:
-                        import io
-                        from PIL import Image
-                        import cloudinary
-                        import cloudinary.uploader
-
-                        # ファイルを先頭から読み直す
-                        uploaded_file.seek(0)
-                        input_image = Image.open(uploaded_file)
-                        rgb_image = input_image.convert('RGB')
-                        
-                        img_byte_arr = io.BytesIO()
-                        rgb_image.save(img_byte_arr, format='JPEG', quality=85)
-                        img_data = img_byte_arr.getvalue()
-
-                        # Cloudinary設定
-                        cloudinary.config(
-                            cloud_name = st.secrets["cloudinary"]["cloud_name"],
-                            api_key = st.secrets["cloudinary"]["api_key"],
-                            api_secret = st.secrets["cloudinary"]["api_secret"],
-                            secure = True
-                        )
-                        
+            # --- 1. 画像のアップロード ---
+            drive_url = ""
+            try:
+                if uploaded_file is not None:
+                    with st.spinner('📸 画像をアップロード中...'):
                         upload_result = cloudinary.uploader.upload(
-                            img_data,
-                            folder = "fishing_app",
-                            transformation = [
-                                {'width': 800, 'crop': "limit"},
-                                {'quality': "auto", 'fetch_format': "auto"}
-                            ]
+                            uploaded_file,
+                            folder="fishing_app"
                         )
                         drive_url = upload_result.get("secure_url")
-                        
-                    except Exception as e:
-                        st.error(f"❌ 画像アップロード失敗: {e}")
-                        st.stop()
+                else:
+                    # 画像がない場合のデフォルト画像
+                    drive_url = "https://via.placeholder.com/400x300.png?text=No+Image"
+            except Exception as e:
+                st.error(f"❌ 画像アップロード失敗: {e}")
+                st.stop()  # アップロード失敗時はここで停止
 
             # 2. データの解析と保存
             with st.spinner('📊 データを解析して保存中...'):
@@ -830,6 +806,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
