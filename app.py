@@ -466,13 +466,6 @@ with tab1:
     st.write("")
     # type="primary" を指定することで、上記の青色CSSが適用されます
     submit = st.button("釣果を記録する", type="primary", use_container_width=True, key="blue_submit_btn")
-
-    # --- 8. 保存処理実行 ---
-    if submit:
-        # 必須入力チェック（final_place_nameが定義されていることを確認してください）
-        if 'final_place_name' not in locals() or not final_place_name:
-            st.error("⚠️ 釣り場名を入力してください。")
-        else:
   
 if st.button("🚀 この内容で保存する"):
             # --- 1. 画像のアップロード ---
@@ -908,6 +901,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
