@@ -722,20 +722,33 @@ with tab2:
         st.error(f"タブ2でエラーが発生しました: {e}")
         
    with tab3:
-    st.subheader("🎣 釣果フォトギャラリー")
-    
-    # いったんHTMLは使わず、Streamlitの標準機能だけで表示
-    if not df.empty:
-        latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
-        for idx, row in latest_10.iterrows():
-            with st.container(border=True):
-                st.write(f"🐟 {row.get(FISH_COL)} ({row.get(SIZE_COL)}cm)")
-                img_url = str(row.get('filename', '')).strip()
-                if img_url.startswith('http'):
-                    st.image(img_url, use_container_width=True)
-                st.write(f"📅 {row.get('date')} | 📍 {row.get(PLACE_COL)}")
-    else:
-        st.write("データがありません")
+        st.subheader("🎣 釣果フォトギャラリー")
+        
+        # データが空でないか確認
+        if not df.empty:
+            # 最新の10件をソートして取得
+            latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
+            
+            for idx, row in latest_10.iterrows():
+                # 1つずつの枠を作成
+                with st.container(border=True):
+                    f_name = row.get(FISH_COL, "不明")
+                    f_size = row.get(SIZE_COL, "---")
+                    st.write(f"### {f_name} ({f_size}cm)")
+                    
+                    # 画像の表示
+                    img_url = str(row.get('filename', '')).strip()
+                    if img_url.startswith('http'):
+                        st.image(img_url, use_container_width=True)
+                    else:
+                        st.info("📷 画像がありません")
+                    
+                    # 基本データ
+                    st.write(f"📅 {row.get('date')} {str(row.get('time'))[:5]}")
+                    st.write(f"📍 {row.get(PLACE_COL)} | 🌊 {row.get(TIDE_NAME_COL)}")
+        else:
+            st.write("表示できるデータがありません。")
+
 
 
 
