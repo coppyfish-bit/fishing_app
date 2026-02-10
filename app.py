@@ -724,60 +724,51 @@ with tab3:
             latest_data = df.sort_values(by=['date', 'time'], ascending=False).head(display_count)
             
             for idx, row in latest_data.iterrows():
-                # 1. データの準備
+                # --- 1. データの準備 ---
                 img = str(row.get('filename', '')).strip()
                 if not img.startswith('http'): continue
                 
                 fish_text = f"{row.get('魚種', '不明')} {row.get('全長_cm', '---')}cm"
                 info_text = f"📅 {row.get('date')} {str(row.get('time'))[:5]} / 📍 {row.get('場所', '---')}"
-                tide_detail = f"🌊 {row.get('潮位_cm','--')}cm({row.get('潮位フェーズ','--')})"
+                
+                # 潮位を視覚的に表現するための計算（例: 200cmを100%とするバー）
+                tide_val = row.get('潮位_cm', 0)
+                try:
+                    tide_percent = min(int(float(tide_val) / 200 * 100), 100) # 200cmで満タン
+                except:
+                    tide_percent = 0
+                
+                tide_phase = row.get('潮位フェーズ', '--')
                 env_info = f"🍃 {row.get('風向','--')} {row.get('風速','--')}m/s | 🎣 {row.get('ルアー','--')} | ☔ {row.get('降水量','--')}mm"
 
-                # 2. タイドグラフを画像として生成（透過処理）
-                tide_img_tag = ""
-                try:
-                    t_date = pd.to_datetime(row.get('date')).date()
-                    t_df = get_tide_data(t_date)
-                    if not t_df.empty:
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=t_df['time'], y=t_df['level'], fill='tozeroy', 
-                                               line=dict(color='#00BFFF', width=3), fillcolor='rgba(0,191,255,0.3)'))
-                        fig.add_vline(x=str(row.get('time'))[:5], line_color="red", line_width=2)
-                        
-                        # 透過設定と余白ゼロ
-                        fig.update_layout(
-                            width=250, height=100, margin=dict(l=0,r=0,t=0,b=0),
-                            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                            xaxis=dict(visible=False), yaxis=dict(visible=False)
-                        )
-                        # 画像としてBase64変換して埋め込み
-                        img_bytes = fig.to_image(format="png")
-                        import base64
-                        encoded = base64.b64encode(img_bytes).decode()
-                        tide_img_tag = f'<img src="data:image/png;base64,{encoded}" style="width:120px; opacity:0.8;">'
-                except:
-                    tide_img_tag = ""
-
-                # 3. HTML組み立て（グラフを右下に絶対配置）
+                # --- 2. HTML組み立て（グラフをシンプルなバーで代用） ---
                 html_block = (
-                    f'<div style="position:relative; width:100%; border-radius:15px; overflow:hidden; margin-bottom:25px; box-shadow:0 4px 15px rgba(0,0,0,0.4);">'
+                    f'<div style="position:relative; width:100%; border-radius:15px; overflow:hidden; margin-bottom:20px; box-shadow:0 4px 10px rgba(0,0,0,0.3);">'
                     f'<img src="{img}" style="width:100%; display:block;">'
+                    
                     # 左上：魚種
-                    f'<div style="position:absolute; top:12px; left:12px; z-index:10; background:rgba(220,20,60,0.95); color:white; padding:5px 14px; border-radius:20px; font-weight:bold; font-size:15px;">{fish_text}</div>'
-                    # 右下：タイドグラフ
-                    f'<div style="position:absolute; bottom:55px; right:12px; z-index:10;">{tide_img_tag}</div>'
-                    # 下部：黒パネル
-                    f'<div style="position:absolute; bottom:0; left:0; right:0; z-index:5; background:linear-gradient(transparent, rgba(0,0,0,0.95) 50%); color:white; padding:40px 15px 15px 15px;">'
-                    f'<div style="font-size:15px; font-weight:bold; margin-bottom:6px;">{info_text}</div>'
-                    f'<div style="font-size:12px; font-weight:500; display:flex; flex-direction:column; gap:4px; opacity:0.95;">'
-                    f'<div>{tide_detail}</div>'
-                    f'<div>{env_info}</div>'
-                    f'</div></div></div>'
+                    f'<div style="position:absolute; top:12px; left:12px; z-index:10; background:rgba(220,20,60,0.95); color:white; padding:5px 14px; border-radius:20px; font-weight:bold; font-size:15px;">'
+                    f'{fish_text}</div>'
+                    
+                    # 右下：潮位レベルメーター（グラフの代わり）
+                    f'<div style="position:absolute; bottom:60px; right:12px; z-index:10; background:rgba(0,0,0,0.5); padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); width:80px; text-align:center;">'
+                    f'<div style="font-size:10px; color:white; margin-bottom:4px;">TIDE {tide_val}cm</div>'
+                    f'<div style="width:100%; height:6px; background:#333; border-radius:3px; overflow:hidden;">'
+                    f'<div style="width:{tide_percent}%; height:100%; background:#00BFFF;"></div>'
+                    f'</div>'
+                    f'<div style="font-size:9px; color:#00BFFF; margin-top:2px;">{tide_phase}</div>'
+                    f'</div>'
+
+                    # 下部：データパネル
+                    f'<div style="position:absolute; bottom:0; left:0; right:0; z-index:5; background:linear-gradient(transparent, rgba(0,0,0,0.95) 50%); color:white; padding:35px 15px 15px 15px;">'
+                    f'<div style="font-size:15px; font-weight:bold; margin-bottom:8px;">{info_text}</div>'
+                    f'<div style="font-size:12px; opacity:0.95;">{env_info}</div>'
+                    f'</div></div>'
                 )
 
                 st.markdown(html_block, unsafe_allow_html=True)
         else:
-            st.info("釣果データがありません。")
+            st.info("データがありません。")
 
 
 
