@@ -827,7 +827,6 @@ with tab3:
                         lure_val = row.get(LURE_COL)
                         if pd.notna(lure_val) and str(lure_val).strip().lower() != 'nan' and str(lure_val).strip() != '':
                         st.write(f"🎣 ルアー: {lure_val}")
-                    else:
                         st.write(f"🎣 ルアー: ---")
                     if row.get(RAIN_COL):
                         st.caption(f"☔ 降水量: {row[RAIN_COL]}mm")
@@ -882,6 +881,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
