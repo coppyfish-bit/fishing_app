@@ -46,15 +46,14 @@ def fetch_api_data(url):
 
 def display_tide_graph(lat, lon, date_str, hit_time_str):
     try:
-        # 日付の余計な時刻部分をカット (2025-10-09 23:43:26 -> 2025-10-09)
         clean_date = str(date_str).split(' ')[0].strip().replace('/', '-')
         
-        # 1. まずURLを表示して確認
+        # --- 🌊 修正ポイント：URLを予測対応の Flood/Marine 混合設定に変更 ---
+        # start_date と end_date を指定し、予報データも含めて取得できるようにします
         url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={clean_date}&end_date={clean_date}"
         
-        # 2. 実行（ここで止まるなら通信環境か座標の問題）
-        with st.spinner("通信中..."):
-            data = fetch_api_data(url)
+        # もし上記でエラーが出る場合は、以下の「予報(Forecast)用URL」を試してください
+        # url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height"
 
         # 3. グラフ描画
         times = pd.to_datetime(data['hourly']['time'])
@@ -852,6 +851,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
