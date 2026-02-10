@@ -533,32 +533,38 @@ with tab2:
             del st.session_state.df
         st.rerun()
 
+    # タブ2全体を包む大きな try ブロック
     try:
+        # セッション状態からデータを取得
         df = st.session_state.get('df', None)
         
         if df is None or df.empty:
             st.info("履歴がまだありません。")
         else:
+            # 削除時のインデックスのズレを防ぐため、コピーを作成
             target_df = df.copy()
-            display_df = target_df.iloc[::-1] # 最新順
+            # 表示用に新しい順（最新が上）にする
+            display_df = target_df.iloc[::-1]
             
             for i, (original_index, row) in enumerate(display_df.iterrows()):
+                # 直近5件だけ最初から開く
                 is_expanded = True if i < 5 else False
                 
-                # 表示用ラベル（日付 | 魚種 | サイズ）
+                # 表示用ラベルの作成
                 d_val = row.get('date', '不明')
                 f_val = row.get('魚種', '不明')
-                s_val = row.get('全長_cm', row.get('全長', '0')) # 全長_cm または 全長 を取得
+                s_val = row.get('全長_cm', row.get('全長', '0'))
                 expander_label = f"📌 {d_val} | {f_val} | {s_val}cm"
                 
                 with st.expander(expander_label, expanded=is_expanded):
-                    # --- 1. 画像表示（ある場合のみ） ---
+                    # --- 1. 画像表示 ---
                     img_url = str(row.get('filename', '')).strip()
                     if img_url.startswith('http'):
                         st.image(img_url, use_container_width=True)
-
-                    # --- 2. 修正入力フォーム（項目を4つに厳選） ---
-                    # ① サイズ
+                    else:
+                        st.caption("📷 画像なし")
+                    
+                    # --- 2. 修正用入力フォーム（項目を4つに厳選） ---
                     new_size = st.number_input(
                         "📏 サイズ (cm)", 
                         value=float(s_val), 
@@ -567,7 +573,6 @@ with tab2:
                         key=f"edit_size_{original_index}"
                     )
 
-                    # ② 釣り人
                     angler_list = ["長元", "川口", "山川"]
                     current_angler = row.get('釣り人', '長元')
                     new_angler = st.selectbox(
@@ -577,56 +582,52 @@ with tab2:
                         key=f"edit_angler_{original_index}"
                     )
 
-                    # ③ ルアー
                     new_lure = st.text_input(
                         "🎣 ルアー", 
                         value=str(row.get('ルアー', '')), 
                         key=f"edit_lure_{original_index}"
                     )
 
-                    # ④ 備考
                     new_memo = st.text_area(
                         "📝 備考", 
                         value=str(row.get('備考', '')), 
                         key=f"edit_memo_{original_index}"
                     )
 
-                    # --- 3. 更新ボタン（青色・シンプル） ---
-                    if st.button("🆙 この内容で修正保存", key=f"update_btn_{original_index}", type="primary", use_container_width=True):
-                        # original_index を使って元の行を更新
-                        df.at[original_index, '全長_cm'] = new_size # 列名はスプレッドシートに合わせて適宜修正してください
-                        df.at[original_index, '釣り人'] = new_angler
-                        df.at[original_index, 'ルアー'] = new_lure
-                        df.at[original_index, '備考'] = new_memo
-                        
-                        # スプレッドシートへ書き込み
-                        conn.update(spreadsheet=url, data=df)
-                        
-                        st.success("修正を保存しました！")
-                        st.cache_data.clear()
-                        if 'df' in st.session_state: del st.session_state.df
-                        st.rerun()
-
-    except Exception as e:
-        st.error(f"エラーが発生しました: {e}")
+                    # --- 3. ボタンエリア（修正と削除を横並びに） ---
+                    st.write("")
+                    col_btn1, col_btn2 = st.columns(2)
                     
+                    with col_btn1:
+                        if st.button("🆙 修正保存", key=f"update_btn_{original_index}", type="primary", use_container_width=True):
+                            # データ更新
+                            df.at[original_index, '全長_cm'] = new_size
+                            df.at[original_index, '釣り人'] = new_angler
+                            df.at[original_index, 'ルアー'] = new_lure
+                            df.at[original_index, '備考'] = new_memo
+                            
+                            # 保存実行（conn, url が定義されている前提）
+                            conn.update(spreadsheet=url, data=df)
+                            st.success("修正しました！")
+                            st.cache_data.clear()
+                            if 'df' in st.session_state: del st.session_state.df
+                            st.rerun()
+
                     with col_btn2:
-                        if st.button("🗑️ 削除する", key=f"del_btn_{original_index}", type="primary"):
+                        # 削除ボタン。誤操作防止のため type="secondary"（または指定なし）が推奨ですが、統一のため記述
+                        if st.button("🗑️ 削除する", key=f"del_btn_{original_index}", use_container_width=True):
                             with st.spinner('🗑️ 削除中...'):
                                 try:
-                                    current_df = st.session_state.df.copy()
-                                    updated_df = current_df.drop(original_index)
+                                    updated_df = df.drop(original_index)
                                     conn.update(spreadsheet=url, data=updated_df)
                                     st.cache_data.clear()
-                                    if 'df' in st.session_state:
-                                        del st.session_state.df
-                                    st.success("削除完了しました")
+                                    if 'df' in st.session_state: del st.session_state.df
+                                    st.success("削除しました")
                                     st.rerun()
                                 except Exception as e:
-                                    st.error(f"❌ 削除に失敗しました: {e}")
+                                    st.error(f"削除失敗: {e}")
 
     except Exception as e:
-        # try ブロック全体のフタをここで閉じる
         st.error(f"タブ2でエラーが発生しました: {e}")
 
 # ==========================================
@@ -761,6 +762,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
