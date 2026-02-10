@@ -269,10 +269,6 @@ with tab1:
         }
         </style>
     """, unsafe_allow_html=True)
-
-    # 写真選択ボタン本体（ここが 273行目付近）
-    # ※周りのコードと左端を揃えて貼り付けてください
-    uploaded_file = st.file_uploader("写真を選択", type=['jpg', 'jpeg', 'png'], key="fish_photo_uploader")
     
     # --- 2. ファイルアップロードとEXIF解析 ---
     uploaded_file = st.file_uploader("📸 写真を選択", type=['jpg', 'jpeg'], key="main_uploader")
@@ -764,6 +760,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
