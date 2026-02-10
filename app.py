@@ -724,30 +724,30 @@ with tab2:
    with tab3:
         st.subheader("🎣 釣果フォトギャラリー")
         
-        # データが空でないか確認
+        # データの存在チェック
         if not df.empty:
-            # 最新の10件をソートして取得
+            # 最新の10件を取得
             latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
             
             for idx, row in latest_10.iterrows():
-                # 1つずつの枠を作成
                 with st.container(border=True):
-                    f_name = row.get(FISH_COL, "不明")
-                    f_size = row.get(SIZE_COL, "---")
-                    st.write(f"### {f_name} ({f_size}cm)")
+                    # --- データの準備 ---
+                    fish_name = row.get(FISH_COL, "不明")
+                    fish_size = row.get(SIZE_COL, "---")
                     
-                    # 画像の表示
+                    # --- 表示 ---
+                    st.write(f"### {fish_name} ({fish_size}cm)")
+                    
                     img_url = str(row.get('filename', '')).strip()
                     if img_url.startswith('http'):
                         st.image(img_url, use_container_width=True)
                     else:
-                        st.info("📷 画像がありません")
+                        st.info("📷 画像なし")
                     
-                    # 基本データ
-                    st.write(f"📅 {row.get('date')} {str(row.get('time'))[:5]}")
-                    st.write(f"📍 {row.get(PLACE_COL)} | 🌊 {row.get(TIDE_NAME_COL)}")
+                    st.write(f"📅 {row.get('date')} | 📍 {row.get(PLACE_COL)}")
         else:
-            st.write("表示できるデータがありません。")
+            st.info("データがありません")
+
 
 
 
