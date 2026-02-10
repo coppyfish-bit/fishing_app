@@ -12,6 +12,63 @@ import cloudinary.uploader
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2 import service_account
+import requests
+import pandas as pd
+import plotly.graph_objects as go
+from datetime import datetime
+
+# --- 🌊 APIから潮位を取得してグラフ化する関数 ---
+def display_tide_graph(lat, lon, date_str, hit_time_str):
+    try:
+        # Open-Meteo API (海洋データ)
+        url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={date_str}&end_date={date_str}"
+        response = requests.get(url, timeout=5)
+        data = response.json()
+
+        times = pd.to_datetime(data['hourly']['time'])
+        heights = data['hourly']['tide_height']
+        tide_df = pd.DataFrame({'time': times, 'height': heights})
+
+        # グラフ作成
+        fig = go.Figure()
+
+        # 潮汐曲線（塗りつぶしありで海っぽく）
+        fig.add_trace(go.Scatter(
+            x=tide_df['time'], y=tide_df['height'],
+            mode='lines',
+            fill='tozeroy',
+            line=dict(color='#007BFF', width=3),
+            name='潮位'
+        ))
+
+        # ヒット時刻のマーカー
+        if hit_time_str:
+            hit_datetime = pd.to_datetime(f"{date_str} {hit_time_str}")
+            # 最も近い時間の潮位を取得
+            idx = (tide_df['time'] - hit_datetime).abs().idxmin()
+            hit_height = tide_df.loc[idx, 'height']
+
+            fig.add_trace(go.Scatter(
+                x=[hit_datetime], y=[hit_height],
+                mode='markers+text',
+                text=["HIT!"], textposition="top center",
+                marker=dict(color='red', size=12, symbol='star'),
+                name='ヒット時刻'
+            ))
+
+        fig.update_layout(
+            height=250,
+            margin=dict(l=0, r=0, t=20, b=0),
+            xaxis=dict(tickformat="%H:%M", font=dict(size=10)),
+            yaxis=dict(title="潮位 (m)", side="right"),
+            showlegend=False,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)'
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    except Exception as e:
+        st.caption(f"⚠️ タイドグラフを読み込めませんでした")
 
 def upload_to_drive(uploaded_file):
     # Secretsから設定を読み込み（関数を呼ぶたびに確実に設定）
@@ -762,6 +819,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
