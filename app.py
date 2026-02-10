@@ -311,7 +311,7 @@ with tab1:
         final_fish_name = selected_fish
 
 # ==========================================
-    # 📏 全長連動ロジック（シンプル＆ビッグ）
+    # 📏 全長連動ロジック（目盛りなし・超シンプル）
     # ==========================================
     if 'len_val' not in st.session_state:
         st.session_state['len_val'] = 0.0
@@ -323,46 +323,45 @@ with tab1:
         st.session_state['len_val'] = st.session_state['slider_in']
 
     # --- 巨大な数字表示 ---
-    # つまみを動かすとここがリアルタイムで更新されます
     st.markdown(f"""
-        <div style="text-align: center; margin-bottom: -10px;">
-            <span style="font-size: 80px; color: #FF4B4B; font-weight: 900; font-family: 'Arial Black', sans-serif; line-height: 1;">
+        <div style="text-align: center; margin-top: 10px; margin-bottom: 0px;">
+            <span style="font-size: 90px; color: #FF4B4B; font-weight: 900; font-family: 'Arial Black', sans-serif; line-height: 1;">
                 {st.session_state.len_val}
             </span>
             <span style="font-size: 24px; color: #FF4B4B; font-weight: 900;"> cm</span>
         </div>
         """, unsafe_allow_html=True)
 
-    # --- メジャー風デザイン（目盛り数字なし） ---
+    # --- スライダーデザイン（線も数字もすべて削除） ---
     st.markdown("""
         <style>
-        /* スライダー全体の枠組み */
+        /* スライダーのレール部分をただの細いグレーの線にする */
         .stSlider [data-baseweb="slider"] {
-            height: 50px !important;
-            background-color: #FFFFFF !important;
-            border: 2px solid #001f3f !important;
-            border-radius: 5px !important;
-            /* 目盛り線だけを描画 */
-            background-image: 
-                linear-gradient(90deg, #001f3f 2px, transparent 2px),
-                linear-gradient(90deg, #001f3f 1px, transparent 1px) !important;
-            background-size: 8.33% 100%, 0.833% 40% !important; /* 10cmごとと1cmごとの線 */
-            background-repeat: repeat-x !important;
+            height: 10px !important;
+            background-color: #E6E9EF !important; /* 薄いグレーのレール */
+            border: none !important;
+            background-image: none !important; /* 目盛り線を完全に消去 */
+            margin-top: 30px !important;
+            margin-bottom: 30px !important;
         }
-        /* つまみのデザイン調整 */
+        /* つまみのデザイン（赤くて大きく、押しやすく） */
         .stSlider [role="slider"] {
             background-color: #FF4B4B !important;
-            border: 2px solid #FFFFFF !important;
-            width: 25px !important;
-            height: 25px !important;
+            border: 3px solid #FFFFFF !important;
+            width: 35px !important;
+            height: 35px !important;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2) !important;
+        }
+        /* 左右の最小・最大値ラベルを非表示にする */
+        [data-testid="stSliderTickBar"] {
+            display: none !important;
         }
         </style>
         """, unsafe_allow_html=True)
 
-    # A: フィッシュメジャー（スライダー）
-    # 目盛り数字を表示しないため label_visibility="collapsed" を使用
+    # A: スライダー（レールのみ表示）
     st.slider(
-        "slider_hidden_label", 0.0, 120.0, 
+        "len_slider_hidden", 0.0, 120.0, 
         key="slider_in", 
         value=st.session_state['len_val'],
         step=0.5, 
@@ -370,9 +369,9 @@ with tab1:
         label_visibility="collapsed"
     )
 
-    # B: 手動入力欄（自動で半角）
+    # B: 手動入力欄
     st.number_input(
-        "手動入力・微調整用 (cm)", 
+        "手動入力・微調整 (cm)", 
         min_value=0.0, 
         max_value=300.0, 
         key="num_in",
@@ -382,7 +381,6 @@ with tab1:
         on_change=on_number_change
     )
 
-    # 最終的な保存用の値
     final_length = st.session_state['len_val']
 
     # --- 6. その他入力項目 ---
@@ -748,6 +746,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
