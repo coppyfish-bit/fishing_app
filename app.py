@@ -32,80 +32,52 @@ def fetch_tide_data_safe(lat, lon, date_str):
         return None
     return None
 
+import requests
+import pandas as pd
+import plotly.graph_objects as go
+
+# キャッシュを1時間に設定（同じリクエストは2回目から一瞬で表示）
+@st.cache_data(ttl=3600)
+def fetch_api_data(url):
+    # タイムアウトを2秒に短縮して「重さ」を解消
+    response = requests.get(url, timeout=2.0)
+    response.raise_for_status()
+    return response.json()
+
 def display_tide_graph(lat, lon, date_str, hit_time_str):
     try:
-        # 1. データの整形（念のためここでも行う）
-        clean_date = str(date_str).split(' ')[0].replace('/', '-')
+        # 日付の余計な時刻部分をカット (2025-10-09 23:43:26 -> 2025-10-09)
+        clean_date = str(date_str).split(' ')[0].strip().replace('/', '-')
         
-        # 2. URL作成
+        # 1. まずURLを表示して確認
         url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={clean_date}&end_date={clean_date}"
         
-        # 3. 通信実行
-        response = requests.get(url, timeout=5.0)
-        
-        # 4. API自体のエラー（404や400）をチェック
-        if response.status_code != 200:
-            st.error(f"❌ API接続エラー (Code: {response.status_code})")
-            st.write("理由:", response.json().get('reason', '不明なエラー'))
-            return
+        # 2. 実行（ここで止まるなら通信環境か座標の問題）
+        with st.spinner("通信中..."):
+            data = fetch_api_data(url)
 
-        data = response.json()
-
-        # 5. グラフ描画（ここが以前の「読み込めませんでした」の正体である可能性大）
+        # 3. グラフ描画
         times = pd.to_datetime(data['hourly']['time'])
         heights = data['hourly']['tide_height']
         tide_df = pd.DataFrame({'time': times, 'height': heights})
 
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=tide_df['time'], y=tide_df['height'], fill='tozeroy'))
+        fig.add_trace(go.Scatter(x=tide_df['time'], y=tide_df['height'], fill='tozeroy', line=dict(color='#007BFF')))
+        
+        # 釣れた時間の星印
+        if hit_time_str and str(hit_time_str) != 'nan':
+            hit_dt = pd.to_datetime(f"{clean_date} {str(hit_time_str)[:5]}")
+            idx = (tide_df['time'] - hit_dt).abs().idxmin()
+            fig.add_trace(go.Scatter(x=[hit_dt], y=[tide_df.loc[idx, 'height']], mode='markers', marker=dict(color='red', size=15, symbol='star')))
+
+        fig.update_layout(height=200, margin=dict(l=0,r=0,t=0,b=0), showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
-        # 💡 ここがポイント：本当のエラーメッセージを画面に出す
-        st.error(f"❌ 詳細エラー: {e}")
-        # もし座標が原因ならここにヒントが出るはずです
-        if "NoneType" in str(e):
-            st.warning("緯度・経度が空（None）になっている可能性があります。")
-    # (この下に既存のグラフ描画コードを続ける)
-
-# --- 🌊 APIから潮位を取得してグラフ化する関数 ---
-def display_tide_graph(lat, lon, date_str, hit_time_str):
-    try:
-        # Open-Meteo API (海洋データ)
-        url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={date_str}&end_date={date_str}"
-        response = requests.get(url, timeout=5)
-        data = response.json()
-
-        times = pd.to_datetime(data['hourly']['time'])
-        heights = data['hourly']['tide_height']
-        tide_df = pd.DataFrame({'time': times, 'height': heights})
-
-        # グラフ作成
-        fig = go.Figure()
-
-        # 潮汐曲線（塗りつぶしありで海っぽく）
-        fig.add_trace(go.Scatter(
-            x=tide_df['time'], y=tide_df['height'],
-            mode='lines',
-            fill='tozeroy',
-            line=dict(color='#007BFF', width=3),
-            name='潮位'
-        ))
-
-        # ヒット時刻のマーカー
-        if hit_time_str:
-            hit_datetime = pd.to_datetime(f"{date_str} {hit_time_str}")
-            # 最も近い時間の潮位を取得
-            idx = (tide_df['time'] - hit_datetime).abs().idxmin()
-            hit_height = tide_df.loc[idx, 'height']
-
-            fig.add_trace(go.Scatter(
-                x=[hit_datetime], y=[hit_height],
-                mode='markers+text',
-                text=["HIT!"], textposition="top center",
-                marker=dict(color='red', size=12, symbol='star'),
-                name='ヒット時刻'
-            ))
+        # 💡 犯人を突き止めるメッセージを表示
+        st.error(f"❌ 読み込めない原因: {e}")
+        # もし座標が原因ならここにヒントが出る
+        st.write(f"デバッグ情報: 緯度={lat}, 経度={lon}, 日付={date_str}")
 
         fig.update_layout(
             height=250,
@@ -880,6 +852,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
