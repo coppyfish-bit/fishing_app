@@ -754,44 +754,55 @@ with tab3:
                 )
                 st.markdown(html_block, unsafe_allow_html=True)
 
-                # --- 3. 写真のすぐ下に前後6時間のグラフを表示 ---
+               # --- 3. 写真のすぐ下に前後6時間のグラフを表示 ---
                 try:
-                    t_df = get_tide_data(pd.to_datetime(f_date).date())
-                    if not t_df.empty:
-                        # ヒット時刻の前後6時間を抽出
-                        hit_dt = pd.to_datetime(f_time_str)
-                        start_t = (hit_dt - pd.Timedelta(hours=6)).strftime('%H:%M')
-                        end_t = (hit_dt + pd.Timedelta(hours=6)).strftime('%H:%M')
+                    # 1. 潮汐データの取得
+                    t_date = pd.to_datetime(f_date).date()
+                    t_df = get_tide_data(t_date)
+                    
+                    if t_df is not None and not t_df.empty:
+                        # 2. ヒット時刻を数値（分）に変換して、前後360分を計算
+                        hit_h, hit_m = map(int, f_time_str.split(':'))
+                        hit_total_min = hit_h * 60 + hit_m
                         
-                        # 24時間を跨ぐ場合も考慮したフィルタリング
-                        if start_t < end_t:
-                            plot_df = t_df[(t_df['time'] >= start_t) & (t_df['time'] <= end_t)].copy()
-                        else:
-                            plot_df = t_df[(t_df['time'] >= start_t) | (t_df['time'] <= end_t)].copy()
+                        def time_to_min(t_str):
+                            h, m = map(int, str(t_str)[:5].split(':'))
+                            return h * 60 + m
 
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(
-                            x=plot_df['time'], y=plot_df['level'],
-                            mode='lines', line=dict(color='#00BFFF', width=4),
-                            fill='tozeroy', fillcolor='rgba(0,191,255,0.1)'
-                        ))
-                        # ヒット時刻の赤い縦線
-                        fig.add_vline(x=f_time_str, line_width=3, line_dash="dash", line_color="#ff4b4b")
-                        
-                        fig.update_layout(
-                            height=150, margin=dict(l=10, r=10, t=10, b=10),
-                            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                            xaxis=dict(gridcolor='rgba(128,128,128,0.2)', tickfont=dict(color='gray')),
-                            yaxis=dict(showgrid=False, visible=False),
-                            showlegend=False
-                        )
-                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-                except:
-                    pass
-                
-                st.write("---")
-        else:
-            st.info("釣果データがありません。")
+                        # 3. データのフィルタリング（前後6時間 = 360分）
+                        # 24時間を超える計算を避けるため、当日データの中から一番近い範囲を抽出
+                        t_df['total_min'] = t_df['time'].apply(time_to_min)
+                        plot_df = t_df[
+                            (t_df['total_min'] >= hit_total_min - 360) & 
+                            (t_df['total_min'] <= hit_total_min + 360)
+                        ].copy()
+
+                        if not plot_df.empty:
+                            fig = go.Figure()
+                            # 潮位曲線
+                            fig.add_trace(go.Scatter(
+                                x=plot_df['time'], y=plot_df['level'],
+                                mode='lines', line=dict(color='#00BFFF', width=4),
+                                fill='tozeroy', fillcolor='rgba(0,191,255,0.1)'
+                            ))
+                            # ヒット時刻の赤い縦線
+                            fig.add_vline(x=f_time_str, line_width=3, line_dash="dash", line_color="#ff4b4b")
+                            
+                            fig.update_layout(
+                                height=160, margin=dict(l=10, r=10, t=10, b=10),
+                                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                                xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.1)', tickfont=dict(color='gray', size=10)),
+                                yaxis=dict(showgrid=False, visible=False),
+                                showlegend=False
+                            )
+                            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                        else:
+                            st.caption("⚠️ 該当時間の潮汐データが範囲外です")
+                    else:
+                        st.caption("⚠️ 潮汐データを取得できませんでした")
+                except Exception as e:
+                    # エラーが起きた場合に原因を表示（確認用）
+                    st.caption(f"📊 グラフ準備中... ({str(e)})")
 
 
 
