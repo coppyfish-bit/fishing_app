@@ -17,6 +17,27 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
 
+def display_tide_graph(lat, lon, date_str, hit_time_str):
+    # --- 👇 ここから接続チェック専用コード ---
+    test_url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={date_str}&end_date={date_str}"
+    
+    st.code(test_url, language="markdown") # 生成されたURLを表示
+    
+    try:
+        res = requests.get(test_url, timeout=5)
+        if res.status_code == 200:
+            st.success(f"✅ 接続成功！ (応答時間: {res.elapsed.total_seconds():.2f}秒)")
+            # データの先頭だけ中身を見せる
+            st.json(res.json()["hourly"]["tide_height"][:3]) 
+        else:
+            st.error(f"❌ 接続失敗 (エラーコード: {res.status_code})")
+            st.write(res.text) # 原因を表示
+    except Exception as e:
+        st.error(f"📡 通信エラー: {e}")
+    # --- 👆 ここまで ---
+    
+    # (この下に既存のグラフ描画コードを続ける)
+
 # --- 🌊 APIから潮位を取得してグラフ化する関数 ---
 def display_tide_graph(lat, lon, date_str, hit_time_str):
     try:
@@ -829,6 +850,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
