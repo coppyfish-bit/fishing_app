@@ -313,8 +313,12 @@ with tab1:
 # --- 4. 魚種登録 ---
     st.subheader("🐟 魚種")
     fish_options = ["スズキ", "ヒラスズキ", "ターポン", "タチウオ", "コチ", "ヒラメ","カサゴ", "クロダイ", "キビレ","キジハタ","マダイ","その他（手入力）"]
-    selected_fish = st.selectbox("魚種を選択", fish_options)
-    manual_fish_name = st.text_input("魚種名（手入力）", placeholder="例：アカハタなど")
+    
+    # 修正ポイント: key="fish_selector_main" を追加して重複エラーを回避
+    selected_fish = st.selectbox("魚種を選択", fish_options, key="fish_selector_main")
+    
+    # 修正ポイント: ここにも key を追加しておくとより安全です
+    manual_fish_name = st.text_input("魚種名（手入力）", placeholder="例：アカハタなど", key="manual_fish_input")
 
     final_fish_name = manual_fish_name if manual_fish_name else selected_fish
 
@@ -751,6 +755,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
