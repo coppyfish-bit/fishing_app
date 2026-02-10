@@ -310,110 +310,89 @@ with tab1:
     else:
         final_fish_name = selected_fish
 
-    # ==========================================
-# 📏 全長連動ロジック
 # ==========================================
+    # 📏 全長連動ロジック
+    # ==========================================
+    if 'len_val' not in st.session_state:
+        st.session_state['len_val'] = 0.0
 
-# 1. セッション状態の初期化
-if 'len_val' not in st.session_state:
-    st.session_state['len_val'] = 0.0
+    def on_number_change():
+        st.session_state['len_val'] = st.session_state['num_in']
 
-# 2. 手動入力欄が変更された時の関数
-def on_number_change():
-    st.session_state['len_val'] = st.session_state['num_in']
+    def on_slider_change():
+        st.session_state['len_val'] = st.session_state['slider_in']
 
-# 3. スライダーが変更された時の関数
-def on_slider_change():
-    st.session_state['len_val'] = st.session_state['slider_in']
+    # --- デザイン（表示） ---
+    st.markdown(f"### 全長: <span style='font-size:40px; color:#FF4B4B; font-weight:900;'>{st.session_state.len_val}</span> cm", unsafe_allow_html=True)
 
-# --- デザイン（CSS） ---
-st.markdown(f"### 全長: <span style='font-size:40px; color:#FF4B4B; font-weight:900;'>{st.session_state.len_val}</span> cm", unsafe_allow_html=True)
+    # メジャーの数字ラベル
+    st.markdown("""
+        <div style="display: flex; justify-content: space-between; font-size: 14px; color: #FF4B4B; font-weight: 900; margin-bottom: -15px; font-family: 'Arial Black', sans-serif;">
+            <span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
+            <span>70</span><span>80</span><span>90</span><span>100</span><span>110</span><span>120</span>
+        </div>
+        """, unsafe_allow_html=True)
 
-st.markdown("""
-    <style>
-    .stSlider [data-baseweb="slider"] {
-        height: 60px !important;
-        background-color: #FFFFFF !important;
-        border: 2px solid #001f3f !important;
-        background-image: 
-            linear-gradient(90deg, #001f3f 3px, transparent 3px),
-            linear-gradient(90deg, #001f3f 1px, transparent 1px) !important;
-        background-size: 8.33% 100%, 4.16% 50% !important;
-        background-repeat: repeat-x !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    # A: フィッシュメジャー（スライダー）
+    st.slider(
+        "", 0.0, 120.0, 
+        key="slider_in", 
+        value=st.session_state['len_val'],
+        step=0.5, 
+        on_change=on_slider_change,
+        label_visibility="collapsed"
+    )
 
-# メジャーの数字ラベル
-st.markdown("""
-    <div style="display: flex; justify-content: space-between; font-size: 14px; color: #FF4B4B; font-weight: 900; margin-bottom: -15px; font-family: 'Arial Black', sans-serif;">
-        <span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
-        <span>70</span><span>80</span><span>90</span><span>100</span><span>110</span><span>120</span>
-    </div>
-    """, unsafe_allow_html=True)
+    # B: 数値入力欄（自動で半角）
+    st.number_input(
+        "手動入力 (cm)", 
+        min_value=0.0, 
+        max_value=300.0, 
+        key="num_in",
+        value=st.session_state['len_val'],
+        step=0.1, 
+        format="%.1f",
+        on_change=on_number_change,
+        help="全角で入力しても自動で半角に変換されます。"
+    )
 
-# --- 5. 連動ウィジェットの配置 ---
+    # 最終的な保存用の値
+    final_length = st.session_state['len_val']
 
-# A: フィッシュメジャー（スライダー）
-length_slider = st.slider(
-    "", 0.0, 120.0, 
-    key="slider_in", 
-    value=st.session_state['len_val'],
-    step=0.5, 
-    on_change=on_slider_change,
-    label_visibility="collapsed"
-)
-
-# B: 数値入力欄（自動で半角）
-length_in = st.number_input(
-    "手動入力 (cm)", 
-    min_value=0.0, 
-    max_value=300.0, 
-    key="num_in",
-    value=st.session_state['len_val'],
-    step=0.1, 
-    format="%.1f",
-    on_change=on_number_change,
-    help="全角で入力しても自動で半角に変換されます。"
-)
-
-# 最終的な保存用の値
-final_length = st.session_state['len_val']
-    
+    # --- 6. その他入力項目 ---
     st.markdown("**ルアー・仕掛け**")
-    lure_sel = st.text_input("ルアー名（例：カゲロウ125MD数字、英字は半角でお願いします。コピペ用 50s 55 60f 60s 60ES 70f 70s 70ES 73 80f 80s 82s 87 88 95f 95ss 100f 100s 100ss 110f 110s 111f 120f 120s 124f 125f 125ss 130f 130s 140f 140s 150f 150s 156MD 160f 160s 165f 170f 170J 180f 190f 190ss)")
+    lure_sel = st.text_input("ルアー名（例：カゲロウ125MD）", placeholder="英数字は半角でお願いします")
     lure_extra = st.text_input("詳細・カラー (任意)")
     lure_in = lure_sel + (f" ({lure_extra})" if lure_extra else "")
 
-    angler = st.selectbox("👤 釣り人", ["長元", "川口","山川" ])
+    angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"])
 
     st.markdown("**メモ**")
     memo_in = st.text_area("", placeholder="ヒットパターンなど", label_visibility="collapsed", key="memo_main")
 
     st.markdown("---")
-    submit = st.button("🚀 釣果をする", use_container_width=True, type="primary")
+    submit = st.button("🚀 釣果を記録する", use_container_width=True, type="primary")
 
-   # --- 7. 処理 ---
+    # --- 7. 保存処理 ---
     if submit:
         if not final_place_name:
             st.error("⚠️ 釣り場名を入力してください。")
         else:
-          # 1. 画像アップロード (Cloudinary)
             drive_url = "" 
+            # 1. 画像アップロード (Cloudinary)
             if uploaded_file:
                 with st.spinner('📸 画像を処理中...'):
                     try:
                         import io
                         from PIL import Image
-                        
-                        # 重要：ファイルの読み取り位置を先頭に戻す
+                        import cloudinary
+                        import cloudinary.uploader
+
+                        # ファイルを先頭から読み直す
                         uploaded_file.seek(0)
-                        
-                        # 画像を開いて変換（念のためRGB変換して確実に有効なJPEGデータにする）
                         input_image = Image.open(uploaded_file)
                         rgb_image = input_image.convert('RGB')
                         
-                        # メモリ上にJPEGとして書き出し
                         img_byte_arr = io.BytesIO()
                         rgb_image.save(img_byte_arr, format='JPEG', quality=85)
                         img_data = img_byte_arr.getvalue()
@@ -426,7 +405,6 @@ final_length = st.session_state['len_val']
                             secure = True
                         )
                         
-                        # 変換後のデータをアップロード
                         upload_result = cloudinary.uploader.upload(
                             img_data,
                             folder = "fishing_app",
@@ -436,11 +414,9 @@ final_length = st.session_state['len_val']
                             ]
                         )
                         drive_url = upload_result.get("secure_url")
-                        st.success(f"✅ 画像のアップロードに成功しました！")
                         
                     except Exception as e:
-                        # ここで具体的なエラー内容を表示
-                        st.error(f"❌ アップロード失敗: {e}")
+                        st.error(f"❌ 画像アップロード失敗: {e}")
                         st.stop()
 
             # 2. データの解析と保存
@@ -746,6 +722,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
