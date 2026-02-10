@@ -784,59 +784,69 @@ with tab3:
         latest_10 = df_gallery.head(10)
         
         for idx, row in latest_10.iterrows():
-            # データの準備
+            # 1. データの準備
             fish_name = row.get(FISH_COL, '不明')
             fish_size = row.get(SIZE_COL, '---')
             place = row.get(PLACE_COL, '---')
-            date_val = f"{row.get('date', '---')} {str(row.get('time', ''))[:5]}"
+            date_str = str(row.get('date', '---'))
+            time_str = str(row.get('time', ''))[:5]
+            
+            tide_name = row.get(TIDE_NAME_COL, '---')
+            tide_phase = row.get(PHASE_COL, '---')
+            tide_cm = row.get(TIDE_CM_COL, '---')
+            
+            # 月齢計算
+            try:
+                d = pd.to_datetime(row.get('date'))
+                new_moon = pd.Timestamp("2026-01-19")
+                moon_age = round(((d - new_moon).days % 29.53), 1)
+                if moon_age < 0: moon_age += 29.53
+            except: moon_age = "---"
+
+            wind_spd = row.get(WIND_SPD_COL, '---')
+            wind_dir = row.get(WIND_DIR_COL, '---')
+            lure = row.get(LURE_COL, '---')
+            rain = row.get(RAIN_COL, '0.0')
             img_url = str(row.get('filename', '')).strip()
 
-            # --- CSS/HTMLによるオーバーレイ表示 ---
             if img_url.startswith('http'):
+                # --- HTML/CSS 究極のオーバーレイ構造 ---
                 st.markdown(f"""
-                    <div style="position: relative; border-radius: 10px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
-                        <img src="{img_url}" style="width: 100%; display: block;">
+                    <div style="position: relative; border-radius: 15px; overflow: hidden; margin-bottom: 25px; box-shadow: 0 8px 20px rgba(0,0,0,0.4); font-family: sans-serif;">
+                        <img src="{img_url}" style="width: 100%; display: block; filter: brightness(0.9);">
+                        
+                        <div style="position: absolute; top: 15px; left: 15px; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">
+                            <span style="background: rgba(255,50,50,0.8); color: white; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 1.1rem;">
+                                {fish_name} {fish_size}cm
+                            </span>
+                        </div>
+
                         <div style="position: absolute; bottom: 0; left: 0; right: 0; 
-                                    background: linear-gradient(transparent, rgba(0,0,0,0.8)); 
-                                    color: white; padding: 15px;">
-                            <h3 style="margin: 0; color: white; font-size: 1.2rem;">{fish_name} ({fish_size}cm)</h3>
-                            <p style="margin: 5px 0 0; font-size: 0.8rem; opacity: 0.9;">
-                                📅 {date_val} / 📍 {place}
-                            </p>
+                                    background: linear-gradient(transparent, rgba(0,0,0,0.9) 30%); 
+                                    color: white; padding: 20px 15px 15px 15px;">
+                            
+                            <div style="font-size: 0.85rem; margin-bottom: 8px; display: flex; justify-content: space-between; opacity: 0.9;">
+                                <span>📅 {date_str} {time_str}</span>
+                                <span>📍 {place}</span>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 0.8rem; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px;">
+                                <div>🌊 {tide_name} ({tide_phase}) / {tide_cm}cm</div>
+                                <div>🌙 月齢: {moon_age}</div>
+                                <div>🍃 {wind_spd}m/s ({wind_dir})</div>
+                                <div>☔ {rain}mm / 🎣 {lure}</div>
+                            </div>
                         </div>
                     </div>
                 """, unsafe_allow_html=True)
+                
+                # タイドグラフをオーバーレイの下（または直後）に配置
+                # ※HTMLの中に入れるのは難しいため、カードのすぐ下に境界線なしで配置
+                with st.container():
+                    display_tide_graph(32.40, 130.10, row.get('date'), time_str)
             else:
-                st.info(f"📷 画像なし: {fish_name}")
+                st.warning(f"📷 画像がないためオーバーレイできません: {fish_name}")
 
-            # --- 詳細情報とタイドグラフは下に配置（スッキリさせるため） ---
-            with st.expander(f"📊 詳細データを確認する"):
-                col_sub1, col_sub2 = st.columns(2)
-                with col_sub1:
-                    st.write(f"🌊 {row.get(TIDE_NAME_COL, '---')} ({row.get(PHASE_COL, '---')})")
-                    st.write(f"📏 潮位: {row.get(TIDE_CM_COL, '---')}cm")
-                    # 月齢計算（先ほどのコードをここに）
-                    try:
-                        d = pd.to_datetime(row.get('date'))
-                        new_moon = pd.Timestamp("2026-01-19")
-                        moon_age = round(((d - new_moon).days % 29.53), 1)
-                        if moon_age < 0: moon_age += 29.53
-                        st.write(f"🌙 月齢: {moon_age}")
-                    except: st.write("🌙 月齢: ---")
-                
-                with col_sub2:
-                    st.write(f"🍃 風速: {row.get(WIND_SPD_COL, '---')}m/s")
-                    st.write(f"🧭 風向: {row.get(WIND_DIR_COL, '---')}")
-                    st.write(f"🎣 ルアー: {row.get(LURE_COL, '---')}")
-                
-                st.write(f"☔ 降水量: {row.get(RAIN_COL, '---')}mm")
-                st.write("---")
-                
-                # タイドグラフ
-                clean_time = str(row.get('time', '12:00'))[:5]
-                display_tide_graph(32.40, 130.10, row.get('date'), clean_time)
-    else:
-        st.info("履歴がまだありません。")
 
 
 
