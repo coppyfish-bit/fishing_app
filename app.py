@@ -731,17 +731,20 @@ with tab3:
                 fish_text = f"{row.get('魚種', '不明')} {row.get('全長_cm', '---')}cm"
                 info_text = f"📅 {row.get('date')} {str(row.get('time'))[:5]} / 📍 {row.get('場所', '---')}"
                 
-                # 潮位を視覚的に表現するための計算（例: 200cmを100%とするバー）
-                tide_val = row.get('潮位_cm', 0)
-                try:
-                    tide_percent = min(int(float(tide_val) / 200 * 100), 100) # 200cmで満タン
-                except:
-                    tide_percent = 0
-                
+                # 潮位・環境情報
+                tide_val = row.get('潮位_cm', '--')
                 tide_phase = row.get('潮位フェーズ', '--')
                 env_info = f"🍃 {row.get('風向','--')} {row.get('風速','--')}m/s | 🎣 {row.get('ルアー','--')} | ☔ {row.get('降水量','--')}mm"
 
-                # --- 2. HTML組み立て（グラフをシンプルなバーで代用） ---
+                # --- 2. SVGでサインカーブを描画 ---
+                # 潮位フェーズに合わせて波の色や形を変えることも可能ですが、まずは標準的な波を表示します
+                svg_wave = f'''
+                <svg width="100" height="40" viewBox="0 0 100 40" preserveAspectRatio="none" style="display:block;">
+                    <path d="M0 30 Q 25 10 50 30 T 100 30" fill="none" stroke="#00BFFF" stroke-width="3" />
+                    <circle cx="50" cy="30" r="4" fill="red" /> </svg>
+                '''
+
+                # --- 3. HTML組み立て（サインカーブを右下に配置） ---
                 html_block = (
                     f'<div style="position:relative; width:100%; border-radius:15px; overflow:hidden; margin-bottom:20px; box-shadow:0 4px 10px rgba(0,0,0,0.3);">'
                     f'<img src="{img}" style="width:100%; display:block;">'
@@ -750,13 +753,11 @@ with tab3:
                     f'<div style="position:absolute; top:12px; left:12px; z-index:10; background:rgba(220,20,60,0.95); color:white; padding:5px 14px; border-radius:20px; font-weight:bold; font-size:15px;">'
                     f'{fish_text}</div>'
                     
-                    # 右下：潮位レベルメーター（グラフの代わり）
-                    f'<div style="position:absolute; bottom:60px; right:12px; z-index:10; background:rgba(0,0,0,0.5); padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); width:80px; text-align:center;">'
-                    f'<div style="font-size:10px; color:white; margin-bottom:4px;">TIDE {tide_val}cm</div>'
-                    f'<div style="width:100%; height:6px; background:#333; border-radius:3px; overflow:hidden;">'
-                    f'<div style="width:{tide_percent}%; height:100%; background:#00BFFF;"></div>'
-                    f'</div>'
-                    f'<div style="font-size:9px; color:#00BFFF; margin-top:2px;">{tide_phase}</div>'
+                    # 右下：サインカーブ・インジケーター
+                    f'<div style="position:absolute; bottom:65px; right:12px; z-index:10; background:rgba(0,0,0,0.4); padding:8px; border-radius:10px; border:1px solid rgba(255,255,255,0.2); width:110px; backdrop-filter:blur(4px);">'
+                    f'<div style="font-size:10px; color:white; margin-bottom:2px; font-weight:bold;">TIDE {tide_val}cm</div>'
+                    f'{svg_wave}'
+                    f'<div style="font-size:9px; color:#00BFFF; margin-top:2px; text-align:center;">{tide_phase}</div>'
                     f'</div>'
 
                     # 下部：データパネル
@@ -769,6 +770,7 @@ with tab3:
                 st.markdown(html_block, unsafe_allow_html=True)
         else:
             st.info("データがありません。")
+
 
 
 
