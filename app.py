@@ -320,69 +320,63 @@ manual_fish_name = st.text_input("魚種名（手入力）", placeholder="例：
 final_fish_name = manual_fish_name if manual_fish_name else selected_fish
 
 # ==========================================
-# 📏 全長クイックタップ・ロジック
-# ==========================================
+    # 📏 全長クイックタップ・ロジック
+    # ==========================================
+    # 1. デフォルト値の設定
+    is_suzuki_family = final_fish_name in ["スズキ", "ヒラスズキ"]
+    default_len = 60.0 if is_suzuki_family else 0.0
 
-# 1. デフォルト値の設定（スズキ or ヒラスズキなら60, それ以外は0）
-is_suzuki_family = final_fish_name in ["スズキ", "ヒラスズキ"]
-default_len = 60.0 if is_suzuki_family else 0.0
+    # 2. セッション状態の管理
+    if 'len_val' not in st.session_state:
+        st.session_state['len_val'] = default_len
 
-# 2. セッション状態の初期化
-if 'len_val' not in st.session_state:
-    st.session_state['len_val'] = default_len
+    if 'prev_fish' not in st.session_state:
+        st.session_state['prev_fish'] = final_fish_name
 
-# 魚種が切り替わった時に自動で初期値（60 or 0）にする処理
-if 'prev_fish' not in st.session_state:
-    st.session_state['prev_fish'] = final_fish_name
+    # 魚種が変わったらリセット
+    if st.session_state['prev_fish'] != final_fish_name:
+        st.session_state['len_val'] = default_len
+        st.session_state['prev_fish'] = final_fish_name
 
-if st.session_state['prev_fish'] != final_fish_name:
-    st.session_state['len_val'] = default_len
-    st.session_state['prev_fish'] = final_fish_name
+    # --- 巨大な数字表示 ---
+    st.markdown(f"""
+        <div style="text-align: center; margin-top: 20px;">
+            <span style="font-size: 100px; color: #FF4B4B; font-weight: 900; font-family: 'Arial Black', sans-serif; line-height: 1;">
+                {st.session_state.len_val:.1f}
+            </span>
+            <span style="font-size: 24px; color: #FF4B4B; font-weight: 900;"> cm</span>
+        </div>
+        """, unsafe_allow_html=True)
 
-# --- 巨大な数字表示 ---
-st.markdown(f"""
-    <div style="text-align: center; margin-top: 20px;">
-        <span style="font-size: 100px; color: #FF4B4B; font-weight: 900; font-family: 'Arial Black', sans-serif; line-height: 1;">
-            {st.session_state.len_val:.1f}
-        </span>
-        <span style="font-size: 24px; color: #FF4B4B; font-weight: 900;"> cm</span>
-    </div>
-    """, unsafe_allow_html=True)
+    # --- クイックタップボタン ---
+    st.write("") 
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    with c1:
+        if st.button("ー10", key="m10"): st.session_state.len_val -= 10.0
+    with c2:
+        if st.button("ー5", key="m5"): st.session_state.len_val -= 5.0
+    with c3:
+        if st.button("ー1", key="m1"): st.session_state.len_val -= 1.0
+    with c4:
+        if st.button("＋1", key="p1"): st.session_state.len_val += 1.0
+    with c5:
+        if st.button("＋5", key="p5"): st.session_state.len_val += 5.0
+    with c6:
+        if st.button("＋10", key="p10"): st.session_state.len_val += 10.0
 
-# --- クイックタップボタンの配置 ---
-st.write("") 
-col1, col2, col3, col4, col5, col6 = st.columns(6)
+    # 数値入力
+    num_input = st.number_input(
+        "手動で微調整 (cm)", 
+        min_value=0.0, max_value=300.0, 
+        value=float(st.session_state['len_val']),
+        step=0.1, format="%.1f", key="manual_num_input"
+    )
 
-with col1:
-    if st.button("ー10", key="minus_10"): st.session_state.len_val -= 10.0
-with col2:
-    if st.button("ー5", key="minus_5"): st.session_state.len_val -= 5.0
-with col3:
-    if st.button("ー1", key="minus_1"): st.session_state.len_val -= 1.0
-with col4:
-    if st.button("＋1", key="plus_1"): st.session_state.len_val += 1.0
-with col5:
-    if st.button("＋5", key="plus_5"): st.session_state.len_val += 5.0
-with col6:
-    if st.button("＋10", key="plus_10"): st.session_state.len_val += 10.0
+    if num_input != st.session_state['len_val']:
+        st.session_state['len_val'] = num_input
+        st.rerun()
 
-# 微調整用の数値入力
-num_input = st.number_input(
-    "手動で微調整 (cm)", 
-    min_value=0.0, 
-    max_value=300.0, 
-    value=float(st.session_state['len_val']),
-    step=0.1, 
-    format="%.1f",
-    key="manual_num_input"
-)
-
-# 数値入力欄が直接操作された場合
-if num_input != st.session_state['len_val']:
-    st.session_state['len_val'] = num_input
-    st.rerun()
-
-final_length = st.session_state['len_val']
+    final_length = st.session_state['len_val']
 
     # --- 6. その他入力項目 ---
     st.markdown("**ルアー・仕掛け**")
@@ -747,6 +741,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
