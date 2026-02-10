@@ -700,13 +700,13 @@ with tab2:
         st.error(f"タブ2でエラーが発生しました: {e}")
 
 # ==========================================
-# タブ3: ギャラリー（全絞り込み ＆ 変数定義修正版）
+# タブ3: ギャラリー（動的タイドグラフ搭載版）
 # ==========================================
 with tab3:
     st.subheader("🖼️ 釣果フォトギャラリー")
 
     if 'df' in st.session_state and not st.session_state.df.empty:
-        # 変数定義を最初に行う（NameError対策）
+        # --- 変数定義 ---
         SIZE_COL = "全長_cm"
         FISH_COL = "魚種"
         PLACE_COL = "場所"
@@ -720,14 +720,10 @@ with tab3:
         ANGLER_COL = "釣り人"
 
         df_gallery = st.session_state.df.copy()
-
-        # 日付データの型変換
         df_gallery['date'] = pd.to_datetime(df_gallery['date']).dt.date
 
         # --- 絞り込みセクション ---
         st.write("🔍 絞り込み条件")
-        
-        # 1段目：日付と場所
         col_f1, col_f2 = st.columns(2)
         with col_f1:
             min_d, max_d = df_gallery['date'].min(), df_gallery['date'].max()
@@ -736,7 +732,6 @@ with tab3:
             unique_places = ["すべて"] + sorted(df_gallery[PLACE_COL].dropna().unique().tolist())
             select_place = st.selectbox("場所を選択", unique_places, key="gal_place_select")
 
-        # 2段目：魚種・サイズ・上げ下げ
         col_f3, col_f4, col_f5 = st.columns(3)
         with col_f3:
             unique_fish = ["すべて"] + sorted(df_gallery[FISH_COL].dropna().unique().tolist())
@@ -749,53 +744,51 @@ with tab3:
         # --- フィルタリング実行 ---
         if isinstance(date_range, tuple) and len(date_range) == 2:
             df_gallery = df_gallery[(df_gallery['date'] >= date_range[0]) & (df_gallery['date'] <= date_range[1])]
-        
         if select_place != "すべて":
             df_gallery = df_gallery[df_gallery[PLACE_COL] == select_place]
-
         if select_fish != "すべて":
             df_gallery = df_gallery[df_gallery[FISH_COL] == select_fish]
-        
         if SIZE_COL in df_gallery.columns:
             df_gallery[SIZE_COL] = pd.to_numeric(df_gallery[SIZE_COL], errors='coerce').fillna(0)
             df_gallery = df_gallery[df_gallery[SIZE_COL] >= min_size]
-
         if tide_filter != "すべて":
             df_gallery = df_gallery[df_gallery[PHASE_COL].str.contains(tide_filter, na=False)]
 
-        # 最新順に並び替え
+        # 最新順
         df_gallery = df_gallery.iloc[::-1]
 
-        # --- 1. 直近10件の画像表示 ---
+        # --- 1. 直近10件の表示 ---
         st.write("### 🆕 最新の釣果（10件）")
         latest_10 = df_gallery.head(10)
         
         for idx, row in latest_10.iterrows():
-            st.write("---")
-            col_img, col_info = st.columns([1, 1])
-            with col_img:
-                img_url = str(row.get('filename', '')).strip()
-                # 「http」から始まる正規のURLがある場合のみ表示
-                if img_url.startswith('http'):
-                    st.image(img_url, use_container_width=True)
-                else:
-                    st.info("📷 画像なし")
-            with col_info:
-                st.markdown(f"### {row.get(FISH_COL, '不明')} ({row.get(SIZE_COL, '---')}cm)")
-                st.write(f"👤 **釣り人:** {row.get(ANGLER_COL, '---')}")
-                st.write(f"📅 **日時:** {row.get('date', '---')} {row.get('time', '')}")
-                st.write(f"📍 **場所:** {row.get(PLACE_COL, '---')}")
+            with st.container(border=True):
+                col_img, col_info = st.columns([1, 1])
+                with col_img:
+                    img_url = str(row.get('filename', '')).strip()
+                    if img_url.startswith('http'):
+                        st.image(img_url, use_container_width=True)
+                    else:
+                        st.info("📷 画像なし")
                 
-                # 潮名・フェーズ・潮位を1行に
-                tide_display = f"{row.get(TIDE_NAME_COL, '---')} / {row.get(PHASE_COL, '---')} ({row.get(TIDE_CM_COL, '---')}cm)"
-                st.write(f"🌊 **潮汐:** {tide_display}")
-                
-                # 気象情報
-                weather_info = f"{row.get(WIND_DIR_COL, '---')} {row.get(WIND_SPD_COL, '0')}m / ☔ {row.get(RAIN_COL, '0')}mm"
-                st.write(f"🚩 **気象:** {weather_info}")
-                
-                if row.get(LURE_COL):
-                    st.write(f"🎣 **ルアー:** {row[LURE_COL]}")
+                with col_info:
+                    st.markdown(f"### {row.get(FISH_COL, '不明')} ({row.get(SIZE_COL, '---')}cm)")
+                    st.write(f"📅 {row.get('date', '---')} {row.get('time', '')}")
+                    st.write(f"📍 {row.get(PLACE_COL, '---')} | 👤 {row.get(ANGLER_COL, '---')}")
+                    st.write(f"🌊 {row.get(TIDE_NAME_COL, '---')} ({row.get(PHASE_COL, '---')})")
+                    if row.get(LURE_COL):
+                        st.caption(f"🎣 {row[LURE_COL]}")
+
+                # --- 動的タイドグラフ（詳細タブの中に配置） ---
+                with st.expander("📊 この時のタイドグラフを表示"):
+                    # 緯度経度（データにない場合はデフォルト値を設定）
+                    lat = row.get('lat', 33.5) 
+                    lon = row.get('lon', 129.8)
+                    date_str = str(row.get('date'))
+                    time_str = str(row.get('time', '12:00'))
+                    
+                    # API関数を呼び出し（以前作成した関数 display_tide_graph がある前提）
+                    display_tide_graph(lat, lon, date_str, time_str)
 
         # --- 2. 11件目以降のリスト表示 ---
         if len(df_gallery) > 10:
@@ -804,19 +797,16 @@ with tab3:
             past_logs = df_gallery.iloc[10:].copy()
             past_logs['list_label'] = past_logs['date'].astype(str) + " | " + past_logs[FISH_COL].astype(str) + " | " + past_logs[SIZE_COL].astype(str) + "cm"
             
-            selected_log_label = st.selectbox("過去の記録を選択して詳細を表示", ["選択してください"] + past_logs['list_label'].tolist())
+            selected_log_label = st.selectbox("記録を選択して詳細を表示", ["選択してください"] + past_logs['list_label'].tolist())
             
             if selected_log_label != "選択してください":
-                # 選択された行を抽出
                 selected_row = past_logs[past_logs['list_label'] == selected_log_label].iloc[0]
                 
                 with st.container(border=True):
-                    st.info(f"📋 過去ログ詳細: {selected_log_label}")
+                    st.info(f"📋 詳細: {selected_log_label}")
                     col_p_img, col_p_info = st.columns([1, 1])
-                    
                     with col_p_img:
                         p_img_url = str(selected_row.get('filename', '')).strip()
-                        # インデントに注意：if の中はさらに4スペース下げる
                         if p_img_url.startswith('http'):
                             st.image(p_img_url, use_container_width=True)
                         else:
@@ -824,10 +814,18 @@ with tab3:
                     
                     with col_p_info:
                         st.write(f"👤 **釣り人:** {selected_row.get(ANGLER_COL, '---')}")
-                        st.write(f"🌊 **潮汐:** {selected_row.get(TIDE_NAME_COL, '---')} / {selected_row.get(PHASE_COL, '---')}")
-                        st.write(f"🚩 **気象:** {selected_row.get(WIND_DIR_COL, '---')} {selected_row.get(WIND_SPD_COL, '0')}m")
                         st.write(f"🎣 **ルアー:** {selected_row.get(LURE_COL, '---')}")
                         st.write(f"💬 **備考:** {selected_row.get('備考', '---')}")
+
+                    # 過去ログ用タイドグラフ
+                    st.write("---")
+                    st.caption("🌊 当時のタイドグラフ")
+                    display_tide_graph(
+                        selected_row.get('lat', 33.5), 
+                        selected_row.get('lon', 129.8), 
+                        str(selected_row.get('date')), 
+                        str(selected_row.get('time', '12:00'))
+                    )
 
     else:
         st.info("履歴がまだありません。")
