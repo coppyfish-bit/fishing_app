@@ -718,17 +718,50 @@ with tab2:
         
 with tab3:
         st.subheader("📸 釣果フォトギャラリー")
-        # テスト用の強制オーバーレイ
-        test_url = "https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg"
-        test_html = f"""
-        <div style="position: relative; width: 100%;">
-            <img src="{test_url}" style="width: 100%; border-radius: 10px;">
-            <div style="position: absolute; top: 20px; left: 20px; background: red; color: white; padding: 10px; font-weight: bold;">
-                重なっています！
-            </div>
-        </div>
-        """
-        st.markdown(test_html, unsafe_allow_html=True)
+
+        if not df.empty:
+            # 最新の10件を取得
+            latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
+            
+            for idx, row in latest_10.iterrows():
+                # データの準備
+                img_url = str(row.get('filename', '')).strip()
+                if not img_url.startswith('http'):
+                    continue
+
+                fish_info = f"{row.get('魚種', '不明')} {row.get('サイズ', '---')}cm"
+                date_place = f"📅 {row.get('date')} {str(row.get('time'))[:5]} / 📍 {row.get('場所', '---')}"
+                
+                # 潮汐・風などの詳細
+                tide_detail = f"🌊 {row.get('潮汐', '---')} ({row.get('潮回り', '---')})"
+                wind_detail = f"🍃 {row.get('風速', '---')}m/s ({row.get('風向', '---')})"
+
+                # --- 成功した「テスト用」と同じ構造 ---
+                log_html = f"""
+                <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+                    <img src="{img_url}" style="width: 100%; display: block;">
+                    
+                    <div style="position: absolute; top: 15px; left: 15px; z-index: 10;">
+                        <div style="background: rgba(220, 20, 60, 0.9); color: white; padding: 6px 16px; border-radius: 20px; font-weight: bold; font-size: 1rem;">
+                            {fish_info}
+                        </div>
+                    </div>
+
+                    <div style="position: absolute; bottom: 0; left: 0; right: 0; z-index: 5; background: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 70%, transparent 100%); color: white; padding: 30px 15px 15px 15px;">
+                        <div style="font-size: 0.85rem; font-weight: bold; margin-bottom: 5px;">
+                            {date_place}
+                        </div>
+                        <div style="display: flex; gap: 15px; font-size: 0.75rem; opacity: 0.9;">
+                            <span>{tide_detail}</span>
+                            <span>{wind_detail}</span>
+                        </div>
+                    </div>
+                </div>
+                """
+                # ★ 成功の決め手！
+                st.markdown(log_html, unsafe_allow_html=True)
+        else:
+            st.write("データがありません。")
 
 
 
