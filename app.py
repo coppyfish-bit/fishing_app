@@ -319,56 +319,43 @@ with tab1:
     final_fish_name = manual_fish_name if manual_fish_name else selected_fish
 
     # ==========================================
-    # 📏 全長入力：直感的な直接入力スタイル
+    # 📏 全長入力：未入力（プレースホルダー）形式
     # ==========================================
     
-    # 1. 魚種に基づいた初期値設定（シンプルに）
-    is_suzuki = final_fish_name in ["スズキ", "ヒラスズキ"]
-    default_val = 60.0 if is_suzuki else 0.0
-
-    # 2. セッションの初期化（ここがズレると使いにくい）
-    if 'len_val' not in st.session_state:
-        st.session_state['len_val'] = default_val
-
-    # 魚種が変わったらパッと数字を切り替える
-    if st.session_state.get('last_fish') != final_fish_name:
-        st.session_state['len_val'] = default_val
-        st.session_state['last_fish'] = final_fish_name
-
-    # 3. デザイン：数字を巨大化させ、入力欄を使いやすく
+    # 1. デザイン：入力欄を巨大化し、視認性を最大にする
     st.markdown("""
         <style>
-        /* 入力欄の数字を巨大にする */
-        input[type="number"] {
-            font-size: 50px !important;
-            height: 80px !important;
+        /* 入力欄のデザインをカスタマイズ */
+        div[data-testid="stNumberInput"] input {
+            font-size: 45px !important;
+            height: 70px !important;
             font-weight: bold !important;
             color: #FF4B4B !important;
             text-align: center !important;
         }
-        /* ラベルの文字も大きく */
+        /* ラベル（タイトル）の調整 */
         div[data-testid="stNumberInput"] label p {
-            font-size: 20px !important;
-            font-weight: bold !important;
+            font-size: 18px !important;
+            color: #ffffff !important;
         }
         </style>
     """, unsafe_allow_html=True)
 
-    # 4. メイン入力：スライダーでもボタンでもなく、直接打つ！
-    # スマホならタップした瞬間に「数字キーボード」が立ち上がります
+    # 2. メイン入力：初期値を空(None)にしてプレースホルダーを表示
+    # スマホでタップするとすぐにテンキーが立ち上がります
     val = st.number_input(
-        "全長を入力 (cm)", 
+        "全長 (cm)", 
         min_value=0.0, 
         max_value=300.0, 
-        value=float(st.session_state['len_val']),
+        value=None,  # ここをNoneにすることで初期値を空にします
+        placeholder="ここをタップして入力",
         step=0.1, 
         format="%.1f",
-        key="final_len_input"
+        key="final_len_input_blank"
     )
 
-    # 入力値を確定
-    final_length = val
-    st.session_state['len_val'] = val
+    # 3. 値が入力されていない場合の処理（保存時にエラーにならないよう0.0を代入）
+    final_length = val if val is not None else 0.0
     # --- 6. その他入力項目 ---
     st.markdown("---")
     st.markdown("**ルアー・仕掛け**")
@@ -736,6 +723,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
