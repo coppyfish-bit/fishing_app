@@ -556,7 +556,7 @@ if st.button("🚀 この内容で保存する"):
                 if uploaded_file is not None:
                     with st.spinner('📸 画像をアップロード中...'):
                         upload_result = cloudinary.uploader.upload(
-                            uploaded_file,
+                            ,
                             folder="fishing_app"
                         )
                         drive_url = upload_result.get("secure_url")
@@ -710,6 +710,69 @@ if st.button("🚀 この内容で保存する"):
                         }])
           
            # --- ここから上書き貼り付け ---
+        # 注意: この if の左端（インデント）を、上の入力パーツ（st.text_input等）と揃えてください
+        if st.button("🚀 この内容で保存する"):
+            # 1. 画像のアップロード
+            drive_url = ""
+            try:
+                if uploaded_file is not None:
+                    with st.spinner('📸 画像をアップロード中...'):
+                        upload_result = cloudinary.uploader.upload(
+                            uploaded_file,
+                            folder="fishing_app"
+                        )
+                        drive_url = upload_result.get("secure_url")
+                else:
+                    drive_url = "https://via.placeholder.com/400x300.png?text=No+Image"
+            except Exception as e:
+                st.error(f"❌ 画像アップロード失敗: {e}")
+                st.stop()
+
+            # 2. データの解析と保存
+            with st.spinner('📊 データを解析して保存中...'):
+                try:
+                    # フォームの変数（date_in, time_in等）から日時作成
+                    target_dt = datetime.combine(date_in, time_in)
+                    
+                    # 各種データの取得
+                    t_name = get_tide_name(target_dt)
+                    t_info = get_tide_details(lat_in, lon_in, target_dt, final_place_name)
+                    temp, wind_s, wind_d, prec = get_weather_data(lat_in, lon_in, target_dt)
+
+                    # 保存用データ作成
+                    save_data = {
+                        "filename": drive_url,
+                        "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
+                        "date": date_in.strftime('%Y-%m-%d'),
+                        "time": time_in.strftime('%H:%M'),
+                        "lat": lat_in, "lon": lon_in,
+                        "気温": temp, "風速": wind_s, "風向": get_wind_direction_label(wind_d), "降水量": prec,
+                        "潮位_cm": t_info.get("潮位_cm"),
+                        "月齢": get_moon_age(target_dt),
+                        "潮名": t_name,
+                        "次の満潮まで_分": t_info.get("次の満潮まで_分", ""),
+                        "次の干潮まで_分": t_info.get("次の干潮まで_分", ""),
+                        "直前の満潮_時刻": t_info.get("直前の満潮_時刻"),
+                        "直前の干潮_時刻": t_info.get("直前の干潮_時刻"),
+                        "潮位フェーズ": t_info.get("潮位フェーズ"),
+                        "場所": final_place_name,
+                        "魚種": final_fish_name,
+                        "全長_cm": length_in, 
+                        "ルアー": lure_in, 
+                        "備考": memo_in,
+                        "group_id": final_group_id, 
+                        "観測所": t_info.get("観測所", "不明"),
+                        "釣り人": angler
+                    }
+
+                    # 列順を定義
+                    cols = ["filename", "datetime", "date", "time", "lat", "lon", "気温", "風速", "風向", "降水量", "潮位_cm", "月齢", "潮名", "次の満潮まで_分", "次の干潮まで_分", "直前の満潮_時刻", "直前の干潮_時刻", "潮位フェーズ", "場所", "魚種", "全長_cm", "ルアー", "備考", "group_id", "観測所", "釣り人"]
+                    new_row_df = pd.DataFrame([save_data])[cols]
+                    
+                    # スプレッドシート更新
+                    if "df" not in st.session_state:
+                        st.session_state.df = conn.read(spreadsheet=url)
+                  # --- ここから上書き貼り付け ---
         # 注意: この if の左端（インデント）を、上の入力パーツ（st.text_input等）と揃えてください
         if st.button("🚀 この内容で保存する"):
             # 1. 画像のアップロード
@@ -970,6 +1033,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
