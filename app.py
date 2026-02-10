@@ -259,6 +259,33 @@ with tab1:
         st.error(f"スプレッドシート接続エラー: {e}")
         st.stop()
 
+    # --- 「写真を選択」ボタンのデザイン変更 ---
+    st.markdown("""
+        <style>
+        /* ファイルアップローダー全体の枠組み */
+        div[data-testid="stFileUploader"] {
+            border: 2px dashed #007BFF; /* 枠線を青の点線に */
+            border-radius: 10px;
+            padding: 10px;
+        }
+        /* 「Browse files（ファイルを参照）」ボタン自体の色 */
+        div[data-testid="stFileUploader"] section button {
+            background-color: #007BFF !important; /* 青色 */
+            color: white !important;
+            border-radius: 5px !important;
+            border: none !important;
+            padding: 10px 20px !important;
+        }
+        /* ファイル選択後のテキスト色などの微調整 */
+        div[data-testid="stFileUploader"] section {
+            background-color: #f0f8ff; /* 薄い水色の背景 */
+            border-radius: 8px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # 写真選択ウィジェット
+    uploaded_file = st.file_uploader("写真を選択", type=['jpg', 'jpeg', 'png'], key="fish_photo_uploader")
     # --- 2. ファイルアップロードとEXIF解析 ---
     uploaded_file = st.file_uploader("📸 写真を選択", type=['jpg', 'jpeg'], key="main_uploader")
     auto_lat, auto_lon, default_dt = 32.5, 130.0, datetime.now()
@@ -749,6 +776,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
