@@ -719,55 +719,39 @@ with tab2:
 with tab3:
         st.subheader("📸 釣果フォトギャラリー")
         
-        # 列名の定義（実際のシート名に合わせてください）
-        F_COL, S_COL, P_COL = '魚種', 'サイズ', '場所'
-        T_COL, PH_COL = '潮汐', '潮回り'
-        W_S_COL, W_D_COL = '風速', '風向'
-        L_COL, R_COL = 'ルアー', '降水量'
-
         if not df.empty:
             latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
             
             for idx, row in latest_10.iterrows():
-                # データの抽出
                 img_url = str(row.get('filename', '')).strip()
                 if not img_url.startswith('http'):
                     continue
 
-                fish = f"{row.get(F_COL, '不明')} {row.get(S_COL, '---')}cm"
-                info_top = f"📅 {row.get('date')} {str(row.get('time'))[:5]} / 📍 {row.get(P_COL)}"
-                tide = f"🌊 {row.get(T_COL)} ({row.get(PH_COL)})"
-                wind = f"🍃 {row.get(W_S_COL)}m/s ({row.get(W_D_COL)})"
+                fish = f"{row.get('魚種', '不明')} {row.get('サイズ', '---')}cm"
                 
-                # --- 強制オーバーレイHTML構造 ---
-                # outer div に position:relative を指定し、中の要素を absolute で配置します
+                # HTMLを組み立てる
                 overlay_html = f"""
-                <div style="position: relative; width: 100%; max-width: 500px; margin: auto; margin-bottom: 30px; border-radius: 15px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+                <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 30px;">
+                    <img src="{img_url}" style="width: 100%; display: block;">
                     
-                    <img src="{img_url}" style="width: 100%; display: block; object-fit: cover;">
-
-                    <div style="position: absolute; top: 15px; left: 15px; z-index: 10;">
-                        <span style="background: rgba(220, 20, 60, 0.9); color: white; padding: 6px 15px; border-radius: 20px; font-weight: bold; font-size: 1rem; white-space: nowrap;">
+                    <div style="position: absolute; top: 15px; left: 15px;">
+                        <span style="background: rgba(220, 20, 60, 0.9); color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold;">
                             {fish}
                         </span>
                     </div>
 
-                    <div style="position: absolute; bottom: 0; left: 0; right: 0; z-index: 5; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 60%, transparent 100%); color: white; padding: 25px 15px 15px 15px;">
-                        <div style="font-size: 0.85rem; margin-bottom: 8px; font-weight: bold;">
-                            {info_top}
-                        </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 0.75rem;">
-                            <div style="background: rgba(255,255,255,0.1); padding: 4px; border-radius: 4px;">{tide}</div>
-                            <div style="background: rgba(255,255,255,0.1); padding: 4px; border-radius: 4px;">{wind}</div>
+                    <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); color: white; padding: 20px 15px;">
+                        <div style="font-size: 0.9rem;">
+                            📅 {row.get('date')} / 📍 {row.get('場所')}
                         </div>
                     </div>
-
                 </div>
                 """
-                # 第2引数の unsafe_allow_html=True を忘れずに！
+                # ★ここが重要：unsafe_allow_html=True を追加
                 st.markdown(overlay_html, unsafe_allow_html=True)
         else:
             st.write("データがありません。")
+
 
 
 
