@@ -719,49 +719,86 @@ with tab2:
 with tab3:
         st.subheader("📸 釣果フォトギャラリー")
 
+        # 表示件数を選択できるように追加
+        display_count = st.slider("表示件数を選択", 5, 50, 10)
+
         if not df.empty:
-            # 最新10件を取得
-            try:
-                latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
-            except:
-                latest_10 = df.head(10) # ソートで失敗する場合の予備
+            # 選択された件数を取得
+            latest_data = df.sort_values(by=['date', 'time'], ascending=False).head(display_count)
             
-            for idx, row in latest_10.iterrows():
-                # --- [重要] エラーが起きやすい場所を個別にガード ---
+            for idx, row in latest_data.iterrows():
                 try:
+                    # --- 1. データの安全な取得 ---
                     img_url = str(row.get('filename', '')).strip()
                     if not img_url.startswith('http'):
                         continue
 
-                    # データを1つずつ安全に取得（列名が違っても止まらないようにする）
                     f_name = str(row.get('魚種', '不明'))
                     f_size = str(row.get('サイズ', '---'))
                     f_place = str(row.get('場所', '---'))
                     f_date = str(row.get('date', '---'))
                     f_time = str(row.get('time', ''))[:5]
+                    
+                    # 詳細情報の整理（アイコン付き）
+                    tide_info = f"🌊 {row.get('潮汐', '---')} ({row.get('潮回り', '---')})"
+                    wind_info = f"🍃 {row.get('風速', '---')}m/s ({row.get('風向', '---')})"
+                    lure_info = f"🎣 {row.get('ルアー', '---')}"
+                    rain_info = f"☔ {row.get('降水量', '---')}mm"
 
-                    # HTML用のテキスト作成
-                    fish_text = f"{f_name} {f_size}cm"
-                    info_text = f"📅 {f_date} {f_time} / 📍 {f_place}"
+                    # --- 2. 写真オーバーレイの表示 ---
+                    overlay_html = f"""
+                    <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-top: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+                        <img src="{img_url}" style="width: 100%; display: block;">
+                        
+                        <div style="position: absolute; top: 15px; left: 15px;">
+                            <div style="background: rgba(220, 20, 60, 0.9); color: white; padding: 6px 16px; border-radius: 20px; font-weight: bold; font-size: 1rem;">
+                                {f_name} {f_size}cm
+                            </div>
+                        </div>
+
+                        <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.7) 60%, transparent 100%); color: white; padding: 30px 15px 15px 15px;">
+                            <div style="font-size: 0.85rem; font-weight: bold; margin-bottom: 8px;">
+                                📅 {f_date} {f_time} / 📍 {f_place}
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 0.75rem; background: rgba(255,255,255,0.15); padding: 8px; border-radius: 10px; backdrop-filter: blur(4px);">
+                                <div>{tide_info}</div>
+                                <div>{wind_info}</div>
+                                <div>{rain_info}</div>
+                                <div>{lure_info}</div>
+                            </div>
+                        </div>
+                    </div>
+                    """
+                    st.markdown(overlay_html, unsafe_allow_html=True)
+
+                    # --- 3. その時のタイドグラフを表示 ---
+                    # date型の変換と潮位取得
+                    try:
+                        target_date = pd.to_datetime(f_date).date()
+                        # ここで get_tide_data 関数（以前作成したもの）を呼び出す
+                        tide_df = get_tide_data(target_date) # 以前の関数名に合わせてください
+                        
+                        if not tide_df.empty:
+                            fig = go.Figure()
+                            # 潮位曲線
+                            fig.add_trace(go.Scatter(x=tide_df['time'], y=tide_df['level'], mode='lines', line=dict(color='#00BFFF', width=3), fill='tozeroy'))
+                            # 釣れた時間のライン
+                            fig.add_vline(x=f_time, line_width=2, line_dash="dash", line_color="red")
+                            
+                            fig.update_layout(
+                                height=150, margin=dict(l=20, r=20, t=10, b=10),
+                                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                                xaxis=dict(showgrid=False, color="white"), yaxis=dict(showgrid=False, color="white")
+                            )
+                            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                    except Exception as tide_err:
+                        # グラフでエラーが出ても写真は出し続ける
+                        pass
+                        
+                    st.markdown("---") # 区切り線
+
                 except Exception as e:
-                    # どこかで失敗したらその行は飛ばす
                     continue
-
-                # --- 成功した「テストコード」と全く同じ構造 ---
-                final_html = f"""
-                <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
-                    <img src="{img_url}" style="width: 100%; display: block;">
-                    <div style="position: absolute; top: 15px; left: 15px; background: rgba(220, 20, 60, 0.9); color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold;">
-                        {fish_text}
-                    </div>
-                    <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, black, transparent); color: white; padding: 20px 15px;">
-                        <div style="font-size: 0.85rem; font-weight: bold;">{info_text}</div>
-                    </div>
-                </div>
-                """
-                
-                # 表示実行
-                st.markdown(final_html, unsafe_allow_html=True)
         else:
             st.write("データがありません。")
 
