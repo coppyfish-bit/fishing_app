@@ -24,18 +24,30 @@ import numpy as np
 
 def display_tide_graph(lat, lon, date_str, hit_time_str):
     try:
-        # 通信せず、数学的に潮汐をシミュレーションする
-        st.caption("🌊 日本沿岸 潮汐シミュレーター（計算値）")
+        # 1. ヒット時刻を数値化（デフォルトは正午）
+        if hit_time_str and str(hit_time_str) != 'nan':
+            try:
+                h, m = map(int, str(hit_time_str).split(':')[:2])
+                hit_h = h + m/60
+            except:
+                hit_h = 12.0
+        else:
+            hit_h = 12.0
+
+        # 2. 表示範囲（★の前後6時間 = 合計12時間）を計算
+        start_h = hit_h - 6
+        end_h = hit_h + 6
         
-        # 1. 24時間の時間軸を作成
-        hours = np.linspace(0, 24, 48) # 30分刻み
+        # 3. グラフ用の時間軸（48地点）を作成
+        hours = np.linspace(start_h, end_h, 48)
         
-        # 2. 潮汐カーブの計算（月齢や地域特性を模したサイン波）
-        # 日本近海は約12時間周期なので、そのリズムで波を作る
+        # 4. 潮汐シミュレーション（周期 12.42時間）
         tide_curve = 100 * np.sin(2 * np.pi * (hours - 6) / 12.42) + 150
         
-        # 3. グラフ描画
+        # 5. グラフ描画
         fig = go.Figure()
+        
+        # 潮位の波
         fig.add_trace(go.Scatter(
             x=hours, y=tide_curve,
             mode='lines',
@@ -44,33 +56,41 @@ def display_tide_graph(lat, lon, date_str, hit_time_str):
             hovertemplate='%{x:.1f}時: %{y:.1f}cm<extra></extra>'
         ))
 
-        # HIT時刻に印をつける
-        if hit_time_str and str(hit_time_str) != 'nan':
-            try:
-                # "23:43:26" から時間を数値化
-                h, m = map(int, str(hit_time_str).split(':')[:2])
-                hit_h = h + m/60
-                hit_y = 100 * np.sin(2 * np.pi * (hit_h - 6) / 12.42) + 150
-                
-                fig.add_trace(go.Scatter(
-                    x=[hit_h], y=[hit_y],
-                    mode='markers',
-                    marker=dict(color='red', size=15, symbol='star'),
-                    name="HIT!"
-                ))
-            except: pass
+        # ★ヒット地点（必ず真ん中にくる）
+        hit_y = 100 * np.sin(2 * np.pi * (hit_h - 6) / 12.42) + 150
+        fig.add_trace(go.Scatter(
+            x=[hit_h], y=[hit_y],
+            mode='markers+text',
+            text=["HIT!"],
+            textposition="top center",
+            marker=dict(color='red', size=18, symbol='star'),
+            name="HIT!"
+        ))
 
+        # 6. レイアウト設定
         fig.update_layout(
-            height=200, 
-            margin=dict(l=0,r=0,t=10,b=0),
-            xaxis=dict(title="時間", tickvals=[0, 6, 12, 18, 24]),
-            yaxis=dict(title="潮位(cm)", visible=False),
-            showlegend=False
+            height=250, 
+            margin=dict(l=10, r=10, t=30, b=10),
+            xaxis=dict(
+                title="時間 (前後6時間表示)",
+                tickvals=np.arange(np.floor(start_h), np.ceil(end_h) + 1, 2), # 2時間刻み
+                gridcolor='lightgray'
+            ),
+            yaxis=dict(visible=False),
+            showlegend=False,
+            title=dict(
+                text=f"📌 {date_str} {hit_time_str[:5]} 前後の潮汐",
+                font=dict(size=14)
+            )
         )
+        
+        # 縦線（ヒット時刻を強調）
+        fig.add_vline(x=hit_h, line_dash="dash", line_color="red", opacity=0.5)
+
         st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
-        st.error(f"シミュレーション失敗: {e}")
+        st.error(f"グラフ作成エラー: {e}")
         
 def upload_to_drive(uploaded_file):
     # Secretsから設定を読み込み（関数を呼ぶたびに確実に設定）
@@ -831,6 +851,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
