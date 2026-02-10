@@ -323,53 +323,86 @@ with tab1:
     final_fish_name = manual_fish_name if manual_fish_name else selected_fish
 
     # ==========================================
-    # 📏 全長クイックタップ・ロジック
+    # 📏 全長クイックタップ（スマホ最適化版）
     # ==========================================
-    # 魚種に基づいたデフォルト値の設定
+    
+    # 1. ロジック：魚種連動の初期値設定
     is_suzuki_family = final_fish_name in ["スズキ", "ヒラスズキ"]
     default_len = 60.0 if is_suzuki_family else 0.0
 
-    # セッション状態の管理
     if 'len_val' not in st.session_state:
         st.session_state['len_val'] = default_len
 
-    if 'prev_fish' not in st.session_state:
-        st.session_state['prev_fish'] = final_fish_name
-
-    # 魚種が変更されたら数値をリセット（スズキ系なら60、他は0）
-    if st.session_state['prev_fish'] != final_fish_name:
+    # 魚種が変わったらリセット
+    if st.session_state.get('prev_fish_type') != final_fish_name:
         st.session_state['len_val'] = default_len
-        st.session_state['prev_fish'] = final_fish_name
+        st.session_state['prev_fish_type'] = final_fish_name
 
-    # --- 巨大な数字表示 ---
-    st.markdown(f"""
-        <div style="text-align: center; margin-top: 20px;">
-            <span style="font-size: 100px; color: #FF4B4B; font-weight: 900; font-family: 'Arial Black', sans-serif; line-height: 1;">
-                {st.session_state.len_val:.1f}
-            </span>
-            <span style="font-size: 24px; color: #FF4B4B; font-weight: 900;"> cm</span>
-        </div>
-        """, unsafe_allow_html=True)
+    # 2. デザイン：ボタンを横に並べ、巨大化させるCSS
+    st.markdown("""
+        <style>
+        /* ボタンを横に3つずつ並べる設定 */
+        div[data-testid="column"] {
+            flex: 1 1 30% !important;
+            min-width: 30% !important;
+        }
+        /* ボタン自体のデザイン：大きく、押しやすく */
+        .stButton > button {
+            width: 100% !important;
+            height: 60px !important;
+            font-size: 20px !important;
+            font-weight: bold !important;
+            border-radius: 10px !important;
+            margin-bottom: 5px !important;
+        }
+        /* 数字の表示を少し控えめに（ボタンの邪魔をしないサイズ） */
+        .big-number {
+            font-size: 60px !important;
+            color: #FF4B4B;
+            font-weight: 900;
+            text-align: center;
+            margin-bottom: 0px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-    # --- クイックタップボタン ---
-    st.write("") 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    with c1:
-        if st.button("ー10", key="m10"): st.session_state.len_val -= 10.0
-    with c2:
-        if st.button("ー5", key="m5"): st.session_state.len_val -= 5.0
-    with c3:
-        if st.button("ー1", key="m1"): st.session_state.len_val -= 1.0
-    with c4:
-        if st.button("＋1", key="p1"): st.session_state.len_val += 1.0
-    with c5:
-        if st.button("＋5", key="p5"): st.session_state.len_val += 5.0
-    with c6:
-        if st.button("＋10", key="p10"): st.session_state.len_val += 10.0
+    # 3. 表示：現在の数値
+    st.markdown(f'<p class="big-number">{st.session_state.len_val:.1f} <span style="font-size:20px;">cm</span></p>', unsafe_allow_html=True)
 
-    # 手動での微調整用
+    # 4. 操作：ボタン配置（2段構成で横並びを維持）
+    # 上段：マイナスボタン
+    col_m1, col_m2, col_m3 = st.columns(3)
+    with col_m1:
+        if st.button("ー10", key="btn_m10"):
+            st.session_state.len_val -= 10.0
+            st.rerun()
+    with col_m2:
+        if st.button("ー5", key="btn_m5"):
+            st.session_state.len_val -= 5.0
+            st.rerun()
+    with col_m3:
+        if st.button("ー1", key="btn_m1"):
+            st.session_state.len_val -= 1.0
+            st.rerun()
+
+    # 下段：プラスボタン
+    col_p1, col_p2, col_p3 = st.columns(3)
+    with col_p1:
+        if st.button("＋1", key="btn_p1"):
+            st.session_state.len_val += 1.0
+            st.rerun()
+    with col_p2:
+        if st.button("＋5", key="btn_p5"):
+            st.session_state.len_val += 5.0
+            st.rerun()
+    with col_p3:
+        if st.button("＋10", key="btn_p3"):
+            st.session_state.len_val += 10.0
+            st.rerun()
+
+    # 5. 微調整用入力欄
     num_input = st.number_input(
-        "手動で微調整 (cm)", 
+        "手動入力 / 微調整 (cm)", 
         min_value=0.0, max_value=300.0, 
         value=float(st.session_state['len_val']),
         step=0.1, format="%.1f", key="manual_num_input"
@@ -755,6 +788,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
