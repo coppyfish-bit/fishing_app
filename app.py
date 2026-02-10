@@ -29,55 +29,39 @@ def fetch_api_data(url):
     return response.json()
 
 def display_tide_graph(lat, lon, date_str, hit_time_str):
-    # 作成されたURLを画面に出して、クリックして確認できるようにする
-    url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={date_str}&end_date={date_str}"
-    
-    st.write(f"🔗 [APIを直接開く]({url})") # ←これをクリックしてエラーが出るか確認
-    
     try:
-        response = requests.get(url, timeout=5.0)
-        if response.status_code != 200:
-            st.error(f"❌ APIエラー: {response.status_code}")
-            st.json(response.json()) # APIが返してきた具体的なエラー理由を表示
-            return
-            
-        data = response.json()
-        # (以下、グラフ描画コード...)
+        clean_date = str(date_str).split(' ')[0].strip().replace('/', '-')
         
-        # 以降、データがある前提で処理
-        if "hourly" not in data:
-            st.error("❌ データ形式が正しくありません")
+        # 🌊 修正ポイント：tide_height がダメな場所でも通りやすい「別エンドポイント」を試す
+        # marine ではなく、通常の forecast または archive エンドポイントで tide_height を呼ぶ
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={clean_date}&end_date={clean_date}&timezone=Asia%2FTokyo"
+        
+        # デバッグ用：念のためURLを表示（あとで消してOK）
+        # st.write(f"URL: {url}")
+
+        response = requests.get(url, timeout=5.0)
+        
+        if response.status_code != 200:
+            st.warning(f"⚠️ {clean_date} の潮汐を取得できませんでした。")
             return
 
-        times = pd.to_datetime(data['hourly']['time'])
-        heights = data['hourly']['tide_height']
-        tide_df = pd.DataFrame({'time': times, 'height': heights})
-
+        data = response.json()
+        
         # グラフ描画
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=tide_df['time'], y=tide_df['height'], 
-            fill='tozeroy', line=dict(color='#007BFF', width=3),
-            name="潮位"
-        ))
-
-        # ヒット時刻のマーカー
-        if hit_time_str and str(hit_time_str) != 'nan':
-            try:
-                hit_dt = pd.to_datetime(f"{clean_date} {str(hit_time_str)[:5]}")
-                idx = (tide_df['time'] - hit_dt).abs().idxmin()
-                fig.add_trace(go.Scatter(
-                    x=[hit_dt], y=[tide_df.loc[idx, 'height']], 
-                    mode='markers', marker=dict(color='red', size=15, symbol='star'),
-                    name="HIT!"
-                ))
-            except: pass
-
-        fig.update_layout(height=200, margin=dict(l=0,r=0,t=0,b=0), showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
+        if "hourly" in data and "tide_height" in data["hourly"]:
+            times = pd.to_datetime(data['hourly']['time'])
+            heights = data['hourly']['tide_height']
+            
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=times, y=heights, fill='tozeroy', line=dict(color='#007BFF')))
+            fig.update_layout(height=200, margin=dict(l=0,r=0,t=0,b=0))
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.error("この地点では潮汐データが提供されていません。")
 
     except Exception as e:
-        st.error(f"❌ 予期せぬエラー: {e}")
+        st.error(f"エラー: {e}")
+        
 def upload_to_drive(uploaded_file):
     # Secretsから設定を読み込み（関数を呼ぶたびに確実に設定）
     import cloudinary.uploader # 追加
@@ -837,6 +821,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
