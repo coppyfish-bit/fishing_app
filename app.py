@@ -803,16 +803,17 @@ with tab3:
                         st.caption(f"🎣 {row[LURE_COL]}")
 
                 # --- 動的タイドグラフ（詳細タブの中に配置） ---
-                with st.expander("📊 この時のタイドグラフを表示"):
-                    # 緯度経度（データにない場合はデフォルト値を設定）
-                    lat = row.get('lat', 33.5) 
-                    lon = row.get('lon', 129.8)
-                    date_str = str(row.get('date'))
-                    time_str = str(row.get('time', '12:00'))
-                    
-                    # API関数を呼び出し（以前作成した関数 display_tide_graph がある前提）
-                    display_tide_graph(lat, lon, date_str, time_str)
-
+                with st.expander("📊 タイドグラフを確認する"):
+                # --- 天草周辺の海上に座標を固定 ---
+                fixed_lat = 32.40  # 天草西側の海上付近
+                fixed_lon = 130.10 
+                
+                # 日付と時刻の掃除
+                clean_date = str(row.get('date')).split(' ')[0].strip().replace('/', '-')
+                clean_time = str(row.get('time', '12:00'))[:5]
+    
+    # 固定した座標で実行
+    display_tide_graph(fixed_lat, fixed_lon, clean_date, clean_time)
         # --- 2. 11件目以降のリスト表示 ---
         if len(df_gallery) > 10:
             st.write("---")
@@ -852,6 +853,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
