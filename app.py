@@ -379,13 +379,7 @@ length_in = st.number_input(
 
 # 最終的な保存用の値
 final_length = st.session_state['len_val']
-    # --- 6. 詳細情報の入力 ---
-    with st.expander("日時・座標の微調整"):
-        date_in = st.date_input("日付", default_dt.date())
-        time_in = st.time_input("時刻", default_dt.time())
-        lat_in = st.number_input("緯度", value=auto_lat, format="%.6f")
-        lon_in = st.number_input("経度", value=auto_lon, format="%.6f")
-
+    
     st.markdown("**ルアー・仕掛け**")
     lure_sel = st.text_input("ルアー名（例：カゲロウ125MD数字、英字は半角でお願いします。コピペ用 50s 55 60f 60s 60ES 70f 70s 70ES 73 80f 80s 82s 87 88 95f 95ss 100f 100s 100ss 110f 110s 111f 120f 120s 124f 125f 125ss 130f 130s 140f 140s 150f 150s 156MD 160f 160s 165f 170f 170J 180f 190f 190ss)")
     lure_extra = st.text_input("詳細・カラー (任意)")
@@ -752,6 +746,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
