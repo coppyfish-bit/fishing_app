@@ -708,13 +708,7 @@ if st.button("🚀 この内容で保存する"):
                             "latitude": lat_in, 
                             "longitude": lon_in
                         }])
-                        if "m_df" not in st.session_state:
-                            st.session_state.m_df = conn.read(spreadsheet=url, worksheet="place_master")
-                            
-                        updated_m = pd.concat([st.session_state.m_df, new_m], ignore_index=True)
-                        conn.update(spreadsheet=url, worksheet="place_master", data=updated_m)
-
-                    st.success(f"🎉 {final_place_name} での釣果を保存しました！")
+          
            # --- ここから上書き貼り付け ---
         # 注意: この if の左端（インデント）を、上の入力パーツ（st.text_input等）と揃えてください
         if st.button("🚀 この内容で保存する"):
@@ -976,6 +970,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
