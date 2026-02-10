@@ -618,6 +618,18 @@ with tab2:
                     img_url = str(row.get('filename', '')).strip()
                     if img_url.startswith('http'):
                         st.image(img_url, use_container_width=True)
+                        # タブ3のループ内、st.image(img_url...) のすぐ下あたりに追加
+                        # 仮の場所データ（釣り場の緯度経度があればそれを使う）
+                        test_lat = 33.5  # 例：長崎周辺
+                        test_lon = 129.8
+                        
+                        # グラフ表示関数の実行
+                        display_tide_graph(
+                            lat=test_lat, 
+                            lon=test_lon, 
+                            date_str=row.get('date', '2024-01-01'), # スプレッドシートの日付
+                            hit_time_str=row.get('時刻', '12:00')   # スプレッドシートの時刻
+                        )
                     else:
                         st.caption("📷 画像なし")
                     
@@ -819,6 +831,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
