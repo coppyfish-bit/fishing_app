@@ -824,12 +824,15 @@ with tab3:
                         st.write(f"🍃 風速: {w_spd}m/s")
                         st.write(f"🧭 風向: {w_dir}")
                        # --- 🎣 ルアー表示（インデント修正版） ---
+                  # --- 🎣 ルアー表示 ---
                     lure_val = row.get(LURE_COL)
                     if pd.notna(lure_val) and str(lure_val).strip().lower() != 'nan' and str(lure_val).strip() != '':
                         st.write(f"🎣 ルアー: {lure_val}")
                     else:
                         st.write(f"🎣 ルアー: ---")
-                    i# --- ☔ 降水量表示（スタイルを統一） ---
+
+                    # --- ☔ 降水量表示 ---
+                    # ここにあった「st.write(idx)」などは削除！
                     rain_val = row.get(RAIN_COL)
                     if pd.notna(rain_val) and str(rain_val).strip().lower() != 'nan' and str(rain_val).strip() != '':
                         st.write(f"☔ 降水量: {rain_val}mm")
@@ -886,6 +889,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
