@@ -783,7 +783,6 @@ with tab3:
         st.write("### 🆕 最新の釣果（10件）")
         latest_10 = df_gallery.head(10)
         
-
 # --- ループ開始 ---
 for idx, row in latest_10.iterrows():
     # 1. データの整理
@@ -792,8 +791,15 @@ for idx, row in latest_10.iterrows():
     place = row.get(PLACE_COL, '---')
     date_str = str(row.get('date', '---'))
     time_str = str(row.get('time', ''))[:5]
-    tide_info = f"{row.get(TIDE_NAME_COL, '---')} ({row.get(PHASE_COL, '---')}) / {row.get(TIDE_CM_COL, '---')}cm"
     
+    # 潮位の「％」を計算（簡易的な潮位バー用）
+    try:
+        tide_cm = float(row.get(TIDE_CM_COL, 0))
+        # 0cm〜400cmを想定して幅を計算
+        tide_percent = min(max((tide_cm / 400) * 100, 5), 95)
+    except:
+        tide_percent = 50
+
     # nanの処理
     def clean_nan(val, unit=""):
         v = str(val).strip().lower()
@@ -803,7 +809,7 @@ for idx, row in latest_10.iterrows():
     rain_display = clean_nan(row.get(RAIN_COL), "mm")
     wind_display = f"{clean_nan(row.get(WIND_SPD_COL), 'm/s')} ({row.get(WIND_DIR_COL, '---')})"
 
-    # 月齢計算
+    # 月齢
     try:
         d = pd.to_datetime(row.get('date'))
         moon_age = round(((d - pd.Timestamp("2026-01-19")).days % 29.53), 1)
@@ -813,51 +819,37 @@ for idx, row in latest_10.iterrows():
     img_url = str(row.get('filename', '')).strip()
 
     if img_url.startswith('http'):
-        # --- 2. グラフを画像化して埋め込む準備 ---
-        fig = go.Figure()
-        h_val = int(time_str[:2]) if ':' in time_str else 12
-        hours = np.linspace(h_val-6, h_val+6, 40)
-        tide_curve = 100 * np.sin(2 * np.pi * (hours - 6) / 12.42) + 150
-        fig.add_trace(go.Scatter(x=hours, y=tide_curve, fill='tozeroy', line=dict(color='white', width=2)))
-        fig.add_vline(x=h_val, line_dash="dash", line_color="#FF3232")
-        fig.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-            margin=dict(l=0,r=0,t=0,b=0), height=60, width=300,
-            xaxis=dict(visible=False), yaxis=dict(visible=False), showlegend=False
-        )
-        # グラフをBase64文字列に変換
-        img_bytes = fig.to_image(format="png", scale=2)
-        encoded_graph = base64.b64encode(img_bytes).decode()
-
-        # --- 3. HTMLで重ね合わせを実現 ---
         st.markdown(f"""
-            <div style="position: relative; border-radius: 15px; overflow: hidden; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+            <div style="position: relative; border-radius: 15px; overflow: hidden; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); font-family: sans-serif;">
                 <img src="{img_url}" style="width: 100%; display: block;">
                 
                 <div style="position: absolute; top: 12px; left: 12px;">
-                    <span style="background: rgba(255,50,50,0.85); color: white; padding: 5px 12px; border-radius: 20px; font-weight: bold; font-size: 1rem; box-shadow: 2px 2px 5px rgba(0,0,0,0.3);">
+                    <span style="background: rgba(255,50,50,0.9); color: white; padding: 5px 12px; border-radius: 20px; font-weight: bold; font-size: 1rem;">
                         {fish_name} {fish_size}cm
                     </span>
                 </div>
 
                 <div style="position: absolute; bottom: 0; left: 0; right: 0; 
-                            background: linear-gradient(transparent, rgba(0,0,0,0.9) 35%); 
+                            background: linear-gradient(transparent, rgba(0,0,0,0.95) 40%); 
                             color: white; padding: 15px;">
                     
-                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 8px; opacity: 0.9;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 10px; opacity: 0.9;">
                         <span>📅 {date_str} {time_str}</span>
                         <span>📍 {place}</span>
                     </div>
 
-                    <div style="margin-bottom: 8px; opacity: 0.8;">
-                        <img src="data:image/png;base64,{encoded_graph}" style="width: 100%; height: auto; max-height: 50px;">
+                    <div style="height: 4px; width: 100%; background: rgba(255,255,255,0.2); border-radius: 2px; margin-bottom: 12px; position: relative;">
+                        <div style="position: absolute; left: 0; top: 0; height: 100%; width: {tide_percent}%; background: #007BFF; border-radius: 2px;"></div>
+                        <div style="position: absolute; left: {tide_percent}%; top: -4px; width: 12px; height: 12px; background: white; border-radius: 50%; transform: translateX(-50%); box-shadow: 0 0 5px #007BFF;"></div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 0.75rem; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
-                        <div>🌊 {tide_info}</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.75rem; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px;">
+                        <div>🌊 {row.get(TIDE_NAME_COL, '---')} ({row.get(PHASE_COL, '---')})</div>
+                        <div>📏 潮位: {row.get(TIDE_CM_COL, '---')}cm</div>
                         <div>🌙 月齢: {moon_age}</div>
                         <div>🍃 {wind_display}</div>
-                        <div>☔ {rain_display} / 🎣 {lure_display}</div>
+                        <div>☔ {rain_display}</div>
+                        <div>🎣 {lure_display}</div>
                     </div>
                 </div>
             </div>
