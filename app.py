@@ -319,60 +319,56 @@ with tab1:
     final_fish_name = manual_fish_name if manual_fish_name else selected_fish
 
     # ==========================================
-    # 📏 全長入力：縦型コントローラー
+    # 📏 全長入力：直感的な直接入力スタイル
     # ==========================================
-    is_suzuki_family = final_fish_name in ["スズキ", "ヒラスズキ"]
-    default_len = 60.0 if is_suzuki_family else 0.0
+    
+    # 1. 魚種に基づいた初期値設定（シンプルに）
+    is_suzuki = final_fish_name in ["スズキ", "ヒラスズキ"]
+    default_val = 60.0 if is_suzuki else 0.0
 
+    # 2. セッションの初期化（ここがズレると使いにくい）
     if 'len_val' not in st.session_state:
-        st.session_state['len_val'] = default_len
+        st.session_state['len_val'] = default_val
 
-    if st.session_state.get('prev_fish_type') != final_fish_name:
-        st.session_state['len_val'] = default_len
-        st.session_state['prev_fish_type'] = final_fish_name
+    # 魚種が変わったらパッと数字を切り替える
+    if st.session_state.get('last_fish') != final_fish_name:
+        st.session_state['len_val'] = default_val
+        st.session_state['last_fish'] = final_fish_name
 
-    # 巨大な数値表示
-    st.markdown(f"""
-        <div style="text-align: center; margin: 10px 0;">
-            <p style="font-size: 80px; color: #FF4B4B; font-weight: 900; line-height: 1; margin: 0;">
-                {st.session_state.len_val:.1f}<span style="font-size:30px;">cm</span>
-            </p>
-        </div>
+    # 3. デザイン：数字を巨大化させ、入力欄を使いやすく
+    st.markdown("""
+        <style>
+        /* 入力欄の数字を巨大にする */
+        input[type="number"] {
+            font-size: 50px !important;
+            height: 80px !important;
+            font-weight: bold !important;
+            color: #FF4B4B !important;
+            text-align: center !important;
+        }
+        /* ラベルの文字も大きく */
+        div[data-testid="stNumberInput"] label p {
+            font-size: 20px !important;
+            font-weight: bold !important;
+        }
+        </style>
     """, unsafe_allow_html=True)
 
-    # 操作ボタン（2個ずつ確実に並べる）
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("ー 10", key="b_m10", use_container_width=True):
-            st.session_state.len_val -= 10.0
-            st.rerun()
-    with c2:
-        if st.button("＋ 10", key="b_p10", use_container_width=True):
-            st.session_state.len_val += 10.0
-            st.rerun()
+    # 4. メイン入力：スライダーでもボタンでもなく、直接打つ！
+    # スマホならタップした瞬間に「数字キーボード」が立ち上がります
+    val = st.number_input(
+        "全長を入力 (cm)", 
+        min_value=0.0, 
+        max_value=300.0, 
+        value=float(st.session_state['len_val']),
+        step=0.1, 
+        format="%.1f",
+        key="final_len_input"
+    )
 
-    c3, c4 = st.columns(2)
-    with c3:
-        if st.button("ー 1", key="b_m1", use_container_width=True):
-            st.session_state.len_val -= 1.0
-            st.rerun()
-    with c4:
-        if st.button("＋ 1", key="b_p1", use_container_width=True):
-            st.session_state.len_val += 1.0
-            st.rerun()
-
-    c5, c6 = st.columns(2)
-    with c5:
-        if st.button("ー 0.1", key="b_m01", use_container_width=True):
-            st.session_state.len_val -= 0.1
-            st.rerun()
-    with c6:
-        if st.button("＋ 0.1", key="b_p01", use_container_width=True):
-            st.session_state.len_val += 0.1
-            st.rerun()
-
-    final_length = round(st.session_state['len_val'], 1)
-
+    # 入力値を確定
+    final_length = val
+    st.session_state['len_val'] = val
     # --- 6. その他入力項目 ---
     st.markdown("---")
     st.markdown("**ルアー・仕掛け**")
@@ -740,6 +736,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
