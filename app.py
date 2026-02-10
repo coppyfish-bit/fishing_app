@@ -486,7 +486,7 @@ with tab1:
 # タブ2: 釣果の修正・削除
 # ==========================================
 with tab2:
-    st.subheader("📸 釣果修正・削除")
+    st.subheader("📸 釣果履歴（直近5件は自動展開）")
 
     # API制限対策：手動リロードボタン
     if st.button("🔄 最新の履歴に更新", key="reload_history"):
@@ -501,16 +501,15 @@ with tab2:
     if df is None or df.empty:
         st.info("履歴がまだありません。")
     else:
-        # データを逆順（新しい順）にする
-        target_df = df.iloc[::-1]
+        # 【重要】削除時のインデックスのズレを防ぐため、コピーを作成
+        target_df = df.copy()
+        # 表示用に新しい順（インデックスも保持）にする
+        display_df = target_df.iloc[::-1]
         
-        for i, (index, row) in enumerate(target_df.iterrows()):
-            # 最初から開いておくかどうか（直近5件なら True）
+        for i, (original_index, row) in enumerate(display_df.iterrows()):
             is_expanded = True if i < 5 else False
             
-            # --- 履歴表示のメイン処理 ---
             try:
-                # 日付、魚種、場所が空の場合の対策
                 d_val = row.get('date', '不明')
                 f_val = row.get('魚種', '不明')
                 p_val = row.get('場所', '不明')
@@ -550,10 +549,11 @@ with tab2:
 
                     new_memo = st.text_area("備考を修正", value=str(row.get('備考', '')), key=f"edit_memo_{index}")
 
-                    # --- ボタンエリア ---
+                  # --- ボタンエリア ---
                     col_btn1, col_btn2 = st.columns(2)
                     with col_btn1:
-                        if st.button("🆙 修正を保存", key=f"update_btn_{index}"):
+                        if st.button("🆙 修正を保存", key=f"update_btn_{original_index}"):
+                            # 修正処理（original_index を使うことで正確な行を更新）
                             # 元の DataFrame(df) の該当行を書き換え
                             df.at[index, '魚種'] = new_fish
                             df.at[index, '場所'] = new_place
@@ -568,16 +568,27 @@ with tab2:
                             conn.update(spreadsheet=url, data=df)
                             st.success("修正しました！")
                             st.cache_data.clear()
+                            if 'df' in st.session_state: del st.session_state.df # キャッシュ破棄
                             st.rerun()
                     
                     with col_btn2:
-                        if st.button("🗑️ 削除する", key=f"del_btn_{index}", type="primary"):
-                            # 該当行を削除
-                            df = df.drop(index)
-                            conn.update(spreadsheet=url, data=df)
-                            st.success("削除完了しました")
-                            st.cache_data.clear()
-                            st.rerun()
+                        # 【重要】削除ボタンの処理を強化
+                        if st.button("🗑️ 削除する", key=f"del_btn_{original_index}", type="primary"):
+                            with st.spinner('🗑️ 削除中...'):
+                                # 1. セッション内の最新のDFを再取得（他での更新を反映させるため）
+                                current_df = st.session_state.df.copy()
+                                # 2. 正確なインデックスで削除
+                                updated_df = current_df.drop(original_index)
+                                # 3. スプレッドシートに反映
+                                conn.update(spreadsheet=url, data=updated_df)
+                                # 4. キャッシュとセッションを完全にクリア
+                                st.cache_data.clear()
+                                if 'df' in st.session_state:
+                                    del st.session_state.df
+                                
+                                st.success("削除完了しました")
+                                # 5. 画面を強制リロード
+                                st.rerun()
 
             except Exception as e:
                 st.error(f"データの表示中にエラーが発生しました: {e}")
@@ -713,6 +724,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
