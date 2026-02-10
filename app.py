@@ -373,9 +373,31 @@ with tab1:
     memo_in = st.text_area("", placeholder="ヒットパターンなど", label_visibility="collapsed", key="memo_final")
 
 
-   # --- 7. 保存ボタン ---
+   # --- 7. 保存ボタンのデザイン（青色に変更） ---
+    st.markdown("""
+        <style>
+        /* 保存ボタン（Primaryボタン）の色を青に変更 */
+        div.stButton > button[kind="primary"] {
+            background-color: #007BFF !important; /* 鮮やかな青 */
+            color: white !important;
+            border: none !important;
+            height: 60px !important;
+            font-size: 20px !important;
+            font-weight: bold !important;
+            border-radius: 10px !important;
+            transition: 0.3s;
+        }
+        /* ホバー時（指で触れた時）の色調整 */
+        div.stButton > button[kind="primary"]:hover {
+            background-color: #0056b3 !important;
+            border-color: #0056b3 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     st.write("")
-    submit = st.button("釣果を記録する", type="primary", use_container_width=True, key="main_submit_btn")
+    # type="primary" を指定することで、上記の青色CSSが適用されます
+    submit = st.button("釣果を記録する", type="primary", use_container_width=True, key="blue_submit_btn")
 
     # --- 8. 保存処理実行 ---
     if submit:
@@ -727,6 +749,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
