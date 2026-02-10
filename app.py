@@ -724,78 +724,45 @@ with tab2:
 with tab3:
     st.subheader("🎣 釣果フォトギャラリー")
 
-    # データがあるか確認
     if not df.empty:
-        # 最新の10件を取得
+        # 最新10件
         latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
 
         for idx, row in latest_10.iterrows():
-            # --- 1. データの整理 ---
-            fish_name = row.get(FISH_COL, '不明')
-            fish_size = row.get(SIZE_COL, '---')
-            place = row.get(PLACE_COL, '---')
+            # データの準備
+            fish_name = str(row.get(FISH_COL, '不明'))
+            fish_size = str(row.get(SIZE_COL, '---'))
+            place = str(row.get(PLACE_COL, '---'))
             date_str = str(row.get('date', '---'))
             time_str = str(row.get('time', ''))[:5]
             
-            # nanのクリーニング用関数
-            def clean_text(val, unit=""):
-                v = str(val).strip().lower()
-                if v == 'nan' or v == '' or v == 'none':
-                    return "---"
-                return f"{val}{unit}"
-
-            tide_text = f"{row.get(TIDE_NAME_COL, '---')} ({row.get(PHASE_COL, '---')})"
-            tide_cm = clean_text(row.get(TIDE_CM_COL), "cm")
-            lure = clean_text(row.get(LURE_COL))
-            rain = clean_text(row.get(RAIN_COL), "mm")
-            wind = f"{clean_text(row.get(WIND_SPD_COL), 'm/s')} ({row.get(WIND_DIR_COL, '---')})"
-
-            # 月齢計算
-            try:
-                d = pd.to_datetime(row.get('date'))
-                # 2026年1月19日の新月を基準
-                moon_age = round(((d - pd.Timestamp("2026-01-19")).days % 29.53), 1)
-                if moon_age < 0: moon_age += 29.53
-            except:
-                moon_age = "---"
-
+            # 画像URL
             img_url = str(row.get('filename', '')).strip()
 
-            # --- 2. HTMLで重ね合わせを実現 ---
             if img_url.startswith('http'):
-                st.markdown(f"""
-                    <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 30px; box-shadow: 0 10px 20px rgba(0,0,0,0.3); background-color: #333;">
-                        <img src="{img_url}" style="width: 100%; display: block; min-height: 200px; object-fit: cover;">
-                        
-                        <div style="position: absolute; top: 15px; left: 15px;">
-                            <div style="background: rgba(220, 20, 60, 0.9); color: white; padding: 6px 16px; border-radius: 25px; font-weight: bold; font-size: 1.1rem; box-shadow: 2px 2px 8px rgba(0,0,0,0.5);">
-                                {fish_name} {fish_size}cm
-                            </div>
-                        </div>
-
-                        <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.7) 60%, transparent 100%); color: white; padding: 25px 15px 15px 15px;">
-                            
-                            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 10px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 5px;">
-                                <span>📅 {date_str} {time_str}</span>
-                                <span>📍 {place}</span>
-                            </div>
-
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.8rem;">
-                                <div style="background: rgba(255,255,255,0.1); padding: 5px 8px; border-radius: 5px;">🌊 {tide_text}</div>
-                                <div style="background: rgba(255,255,255,0.1); padding: 5px 8px; border-radius: 5px;">📏 {tide_cm}</div>
-                                <div style="background: rgba(255,255,255,0.1); padding: 5px 8px; border-radius: 5px;">🌙 月齢: {moon_age}</div>
-                                <div style="background: rgba(255,255,255,0.1); padding: 5px 8px; border-radius: 5px;">🍃 {wind}</div>
-                                <div style="background: rgba(255,255,255,0.1); padding: 5px 8px; border-radius: 5px;">☔ {rain}</div>
-                                <div style="background: rgba(255,255,255,0.1); padding: 5px 8px; border-radius: 5px;">🎣 {lure}</div>
-                            </div>
+                # HTMLを組み立てる（エラー回避のためシンプルに）
+                html_content = f"""
+                <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 30px; background-color: #222;">
+                    <img src="{img_url}" style="width: 100%; display: block;">
+                    
+                    <div style="position: absolute; top: 15px; left: 15px;">
+                        <div style="background: rgba(220, 20, 60, 0.9); color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold;">
+                            {fish_name} {fish_size}cm
                         </div>
                     </div>
-                """, unsafe_allow_html=True)
+
+                    <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,1), transparent); color: white; padding: 20px 15px;">
+                        <div style="font-size: 0.9rem; font-weight: bold;">
+                            📅 {date_str} {time_str} / 📍 {place}
+                        </div>
+                    </div>
+                </div>
+                """
+                st.markdown(html_content, unsafe_allow_html=True)
             else:
-                # 画像がない場合
-                st.info(f"💡 写真なし: {fish_name} ({fish_size}cm) / 📅 {date_str}")
+                st.info(f"💡 写真なし: {fish_name}")
     else:
-        st.write("データがありません。")
+        st.write("データがありません")
 
 
 
