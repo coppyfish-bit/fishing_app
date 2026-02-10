@@ -734,7 +734,7 @@ with tab3:
                 info_text = f"📅 {row.get('date')} {str(row.get('time'))[:5]} / 📍 {row.get('場所', '---')}"
                 
                 # 追加の詳細情報
-                tide_name = f"🌊 {row.get('潮汐','--')}({row.get('潮回り','--')})"
+                tide_name = f"🌊 {row.get('潮位','--')}({row.get('潮位フェーズ','--')})"
                 wind_info = f"🍃 {row.get('風向','--')} {row.get('風速','--')}m/s"
                 lure_info = f"🎣 {row.get('ルアー','--')}"
                 rain_info = f"☔ {row.get('降水量','--')}mm"
@@ -778,6 +778,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("表示できるデータがありません。")
+
 
 
 
