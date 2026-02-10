@@ -322,46 +322,48 @@ with tab1:
 
     final_fish_name = manual_fish_name if manual_fish_name else selected_fish
 
+   # ==========================================
+    # 📏 全長クイックタップ（スマホ横並び強制版）
     # ==========================================
-    # 📏 全長クイックタップ（スマホ最適化版）
-    # ==========================================
-    
-    # 1. ロジック：魚種連動の初期値設定
+
+    # 1. ロジック：初期値と魚種連動
     is_suzuki_family = final_fish_name in ["スズキ", "ヒラスズキ"]
     default_len = 60.0 if is_suzuki_family else 0.0
 
     if 'len_val' not in st.session_state:
         st.session_state['len_val'] = default_len
 
-    # 魚種が変わったらリセット
     if st.session_state.get('prev_fish_type') != final_fish_name:
         st.session_state['len_val'] = default_len
         st.session_state['prev_fish_type'] = final_fish_name
 
-    # 2. デザイン：ボタンを横に並べ、巨大化させるCSS
+    # 2. 強力なCSS：スマホでも強制的に横並び＆ボタン巨大化
     st.markdown("""
         <style>
-        /* ボタンを横に3つずつ並べる設定 */
-        div[data-testid="column"] {
-            flex: 1 1 30% !important;
-            min-width: 30% !important;
+        /* カラムの縦並びを禁止し、横に並べる */
+        [data-testid="column"] {
+            width: calc(33.33% - 8px) !important;
+            flex: 1 1 calc(33.33% - 8px) !important;
+            min-width: calc(33.33% - 8px) !important;
         }
-        /* ボタン自体のデザイン：大きく、押しやすく */
+        /* ボタンのデザイン */
         .stButton > button {
             width: 100% !important;
-            height: 60px !important;
-            font-size: 20px !important;
-            font-weight: bold !important;
-            border-radius: 10px !important;
-            margin-bottom: 5px !important;
+            height: 70px !important; /* ボタンの高さをさらにアップ */
+            font-size: 22px !important;
+            font-weight: 900 !important;
+            background-color: #262730 !important;
+            color: white !important;
+            border: 2px solid #FF4B4B !important;
+            border-radius: 12px !important;
         }
-        /* 数字の表示を少し控えめに（ボタンの邪魔をしないサイズ） */
+        /* 数字の表示サイズ */
         .big-number {
-            font-size: 60px !important;
+            font-size: 80px !important;
             color: #FF4B4B;
             font-weight: 900;
             text-align: center;
-            margin-bottom: 0px;
+            margin: 10px 0;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -369,38 +371,38 @@ with tab1:
     # 3. 表示：現在の数値
     st.markdown(f'<p class="big-number">{st.session_state.len_val:.1f} <span style="font-size:20px;">cm</span></p>', unsafe_allow_html=True)
 
-    # 4. 操作：ボタン配置（2段構成で横並びを維持）
-    # 上段：マイナスボタン
+    # 4. ボタン配置（3つずつ2段に分けることで1つ1つを大きくします）
+    # --- 上段：マイナス系 ---
     col_m1, col_m2, col_m3 = st.columns(3)
     with col_m1:
-        if st.button("ー10", key="btn_m10"):
+        if st.button("ー10", key="m10_btn"):
             st.session_state.len_val -= 10.0
             st.rerun()
     with col_m2:
-        if st.button("ー5", key="btn_m5"):
+        if st.button("ー5", key="m5_btn"):
             st.session_state.len_val -= 5.0
             st.rerun()
     with col_m3:
-        if st.button("ー1", key="btn_m1"):
+        if st.button("ー1", key="m1_btn"):
             st.session_state.len_val -= 1.0
             st.rerun()
 
-    # 下段：プラスボタン
+    # --- 下段：プラス系 ---
     col_p1, col_p2, col_p3 = st.columns(3)
     with col_p1:
-        if st.button("＋1", key="btn_p1"):
+        if st.button("＋1", key="p1_btn"):
             st.session_state.len_val += 1.0
             st.rerun()
     with col_p2:
-        if st.button("＋5", key="btn_p5"):
+        if st.button("＋5", key="p5_btn"):
             st.session_state.len_val += 5.0
             st.rerun()
     with col_p3:
-        if st.button("＋10", key="btn_p3"):
+        if st.button("＋10", key="p10_btn"):
             st.session_state.len_val += 10.0
             st.rerun()
 
-    # 5. 微調整用入力欄
+    # 5. 微調整用
     num_input = st.number_input(
         "手動入力 / 微調整 (cm)", 
         min_value=0.0, max_value=300.0, 
@@ -788,6 +790,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
