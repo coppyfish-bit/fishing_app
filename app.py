@@ -259,18 +259,21 @@ with tab1:
         st.error(f"スプレッドシート接続エラー: {e}")
         st.stop()
 
-# --- 1. デザイン設定（これは1回書くだけでOK） ---
-st.markdown("""
-    <style>
-    div[data-testid="stFileUploader"] section button {
-        background-color: #007BFF !important;
-        color: white !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# --- 📸 写真アップロード設定 ---
+    # デザイン（青色ボタン）
+    st.markdown("""
+        <style>
+        div[data-testid="stFileUploader"] section button {
+            background-color: #007BFF !important;
+            color: white !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-    # 写真選択ウィジェット
+    # 写真選択ボタン本体（ここが 273行目付近）
+    # ※周りのコードと左端を揃えて貼り付けてください
     uploaded_file = st.file_uploader("写真を選択", type=['jpg', 'jpeg', 'png'], key="fish_photo_uploader")
+    
     # --- 2. ファイルアップロードとEXIF解析 ---
     uploaded_file = st.file_uploader("📸 写真を選択", type=['jpg', 'jpeg'], key="main_uploader")
     auto_lat, auto_lon, default_dt = 32.5, 130.0, datetime.now()
@@ -761,6 +764,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
