@@ -283,7 +283,7 @@ with tab1:
 
     st.markdown("### 📍 釣り場")
     if detected_name:
-        st.success(f"✅ **{detected_name}** (付近の写真です)")
+        st.toast(f"✅ **{detected_name}** (付近の写真です)")
         final_place_name = detected_name
         final_group_id = detected_id
     else:
@@ -729,6 +729,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
