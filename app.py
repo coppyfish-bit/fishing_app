@@ -375,7 +375,7 @@ with tab1:
     st.markdown("---")
     st.markdown("**ルアー・仕掛け**")
     lure_sel = st.text_input("ルアー名  コピペ用 50s 55 60f 60s 60ES 70f 70s 70ES 73 80f 80s 82s 87 88 95f 95ss 100f 100s 100ss 110f 110s 111f 120f 120s 124f 125f 125ss 130f 130s 140f 140s 150f 150s 156MD 160f 160s 165f 170f 170J 180f 190f 190ss")
-, placeholder="例：カゲロウ125MD ←数字、英字は半角でお願いします", key="lure_name_final")
+    placeholder="例：カゲロウ125MD ←数字、英字は半角でお願いします", key="lure_name_final")
     lure_extra = st.text_input("詳細・カラー (任意)", key="lure_color_final")
     lure_in = lure_sel + (f" ({lure_extra})" if lure_extra else "")
 
@@ -761,6 +761,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
