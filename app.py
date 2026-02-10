@@ -730,7 +730,7 @@ with tab3:
                 if not img.startswith('http'): continue
                 
                 # 基本情報
-                fish_text = f"{row.get('魚種', '不明')} {row.get('サイズ', '---')}cm"
+                fish_text = f"{row.get('魚種', '不明')} {row.get('全長_cm', '---')}cm"
                 info_text = f"📅 {row.get('date')} {str(row.get('time'))[:5]} / 📍 {row.get('場所', '---')}"
                 
                 # 追加の詳細情報
@@ -781,6 +781,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("表示できるデータがありません。")
+
 
 
 
