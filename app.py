@@ -311,29 +311,28 @@ with tab1:
         final_fish_name = selected_fish
 
 # --- 4. 魚種登録 ---
-st.subheader("🐟 魚種")
-# リストに「ヒラスズキ」を追加（選択しやすく上の方に配置しました）
-fish_options = ["スズキ", "ヒラスズキ", "ターポン", "タチウオ", "コチ", "ヒラメ","カサゴ", "クロダイ", "キビレ","キジハタ","マダイ","その他（手入力）"]
-selected_fish = st.selectbox("魚種を選択", fish_options)
-manual_fish_name = st.text_input("魚種名（手入力）", placeholder="例：アカハタなど")
+    st.subheader("🐟 魚種")
+    fish_options = ["スズキ", "ヒラスズキ", "ターポン", "タチウオ", "コチ", "ヒラメ","カサゴ", "クロダイ", "キビレ","キジハタ","マダイ","その他（手入力）"]
+    selected_fish = st.selectbox("魚種を選択", fish_options)
+    manual_fish_name = st.text_input("魚種名（手入力）", placeholder="例：アカハタなど")
 
-final_fish_name = manual_fish_name if manual_fish_name else selected_fish
+    final_fish_name = manual_fish_name if manual_fish_name else selected_fish
 
-# ==========================================
+    # ==========================================
     # 📏 全長クイックタップ・ロジック
     # ==========================================
-    # 1. デフォルト値の設定
+    # 魚種に基づいたデフォルト値の設定
     is_suzuki_family = final_fish_name in ["スズキ", "ヒラスズキ"]
     default_len = 60.0 if is_suzuki_family else 0.0
 
-    # 2. セッション状態の管理
+    # セッション状態の管理
     if 'len_val' not in st.session_state:
         st.session_state['len_val'] = default_len
 
     if 'prev_fish' not in st.session_state:
         st.session_state['prev_fish'] = final_fish_name
 
-    # 魚種が変わったらリセット
+    # 魚種が変更されたら数値をリセット（スズキ系なら60、他は0）
     if st.session_state['prev_fish'] != final_fish_name:
         st.session_state['len_val'] = default_len
         st.session_state['prev_fish'] = final_fish_name
@@ -364,7 +363,7 @@ final_fish_name = manual_fish_name if manual_fish_name else selected_fish
     with c6:
         if st.button("＋10", key="p10"): st.session_state.len_val += 10.0
 
-    # 数値入力
+    # 手動での微調整用
     num_input = st.number_input(
         "手動で微調整 (cm)", 
         min_value=0.0, max_value=300.0, 
@@ -377,6 +376,17 @@ final_fish_name = manual_fish_name if manual_fish_name else selected_fish
         st.rerun()
 
     final_length = st.session_state['len_val']
+
+    # --- 6. その他入力項目 ---
+    st.markdown("**ルアー・仕掛け**")
+    lure_sel = st.text_input("ルアー名（例：カゲロウ125MD）", placeholder="英数字は半角推奨")
+    lure_extra = st.text_input("詳細・カラー (任意)")
+    lure_in = lure_sel + (f" ({lure_extra})" if lure_extra else "")
+
+    angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"])
+
+    st.markdown("**メモ**")
+    memo_in = st.text_area("", placeholder="ヒットパターンなど", label_visibility="collapsed", key="memo_main")
 
     # --- 6. その他入力項目 ---
     st.markdown("**ルアー・仕掛け**")
@@ -741,6 +751,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
