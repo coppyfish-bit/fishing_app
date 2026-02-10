@@ -853,10 +853,11 @@ with tab3:
                     p_clean_date = str(selected_row.get('date')).split(' ')[0].strip().replace('/', '-')
                     p_clean_time = str(selected_row.get('time', '12:00'))[:5]
                     
-                    display_tide_graph(32.40, 130.10, p_clean_date, p_clean_time)
+                    display_tide_graph(32.40, 130.10, "2026-02-10", clean_time)
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
