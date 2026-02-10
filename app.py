@@ -16,48 +16,46 @@ import requests
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
+import requests
+import pandas as pd
+import plotly.graph_objects as go
 
-def display_tide_graph(lat, lon, date_str, hit_time_str):
+# キャッシュを有効化（1時間は同じリクエストを再送しない）
+@st.cache_data(ttl=3600)
+def fetch_tide_data_safe(lat, lon, date_str):
+    url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={date_str}&end_date={date_str}"
     try:
-        # 1. まず渡されたデータが正しいか画面に出す
-        st.write(f"🔍 診断中: 日付='{date_str}', 緯度={lat}, 経度={lon}")
+        response = requests.get(url, timeout=3.0) # タイムアウトを短く設定
+        if response.status_code == 200:
+            return response.json()
+    except:
+        return None
+    return None
 
-        # 2. URLを作って表示
-        url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=tide_height&start_date={date_str}&end_date={date_str}"
-        st.code(url, language="markdown")
+def display_tide_graph_fast(lat, lon, date_str, hit_time_str):
+    data = fetch_tide_data_safe(lat, lon, date_str)
+    if not data or "hourly" not in data:
+        st.caption("🌊 潮汐データを取得できませんでした（座標が陸地か通信エラー）")
+        return
 
-        # 3. 通信実行
-        response = requests.get(url, timeout=5.0)
-        
-        if response.status_code != 200:
-            st.error(f"❌ APIがエラーを返しました (コード: {response.status_code})")
-            st.json(response.json()) # エラー理由を表示
-            return
+    # グラフ描画処理
+    times = pd.to_datetime(data['hourly']['time'])
+    heights = data['hourly']['tide_height']
+    tide_df = pd.DataFrame({'time': times, 'height': heights})
 
-        data = response.json()
-        
-        # 4. データの中身チェック
-        if "hourly" not in data:
-            st.error("❌ データ構造が異常です")
-            st.write(data)
-            return
-
-        # 5. グラフ描画（ここでもしコケても原因が出るようにする）
-        times = pd.to_datetime(data['hourly']['time'])
-        heights = data['hourly']['tide_height']
-        tide_df = pd.DataFrame({'time': times, 'height': heights})
-
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=tide_df['time'], y=tide_df['height'], fill='tozeroy'))
-        st.plotly_chart(fig, use_container_width=True)
-        st.success("✅ グラフ描画成功")
-
-    except Exception as e:
-        # 💡 ここで「なぜダメなのか」を画面に詳しく出す
-        st.error(f"❌ 実行エラーが発生しました:\n{str(e)}")
-        import traceback
-        st.code(traceback.format_exc()) # プログラムのどこで死んだか表示
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=tide_df['time'], y=tide_df['height'], mode='lines', fill='tozeroy', line=dict(color='#007BFF')))
     
+    # HITマーク
+    if hit_time_str and hit_time_str != 'None':
+        try:
+            hit_datetime = pd.to_datetime(f"{date_str} {hit_time_str[:5]}")
+            idx = (tide_df['time'] - hit_datetime).abs().idxmin()
+            fig.add_trace(go.Scatter(x=[hit_datetime], y=[tide_df.loc[idx, 'height']], mode='markers', marker=dict(color='red', size=12, symbol='star')))
+        except: pass
+
+    fig.update_layout(height=180, margin=dict(l=0, r=0, t=0, b=0), showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+    st.plotly_chart(fig, use_container_width=True)
     # (この下に既存のグラフ描画コードを続ける)
 
 # --- 🌊 APIから潮位を取得してグラフ化する関数 ---
@@ -872,6 +870,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
