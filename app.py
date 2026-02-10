@@ -311,7 +311,7 @@ with tab1:
         final_fish_name = selected_fish
 
 # ==========================================
-    # 📏 全長連動ロジック（つまみ連動・巨大数字）
+    # 📏 全長連動ロジック（バー ＋ つまみ連動巨大数字）
     # ==========================================
     if 'len_val' not in st.session_state:
         st.session_state['len_val'] = 0.0
@@ -325,48 +325,58 @@ with tab1:
     # --- デザイン（CSS） ---
     st.markdown(f"""
         <style>
-        /* 1. バー（レール）のデザイン */
-        .stSlider [data-baseweb="slider"] {{
-            height: 12px !important;
-            background-color: #E6E9EF !important;
-            border-radius: 6px !important;
-            margin-top: 80px !important; /* 数字を表示するスペースを確保 */
+        /* 1. 全体の余白調整（数字を表示する上部スペースを確保） */
+        [data-testid="stSlider"] {{
+            padding-top: 100px !important;
+            padding-bottom: 20px !important;
         }}
 
-        /* 2. つまみ（ノブ）のデザイン */
+        /* 2. バー（レール）のデザイン：極限までシンプルに */
+        .stSlider [data-baseweb="slider"] {{
+            height: 10px !important;
+            background-color: #E6E9EF !important;
+            border-radius: 5px !important;
+            border: none !important;
+            background-image: none !important; /* メジャーの線を完全に削除 */
+        }}
+
+        /* 3. つまみ（ノブ）のデザイン：赤く大きく押しやすく */
         .stSlider [role="slider"] {{
             background-color: #FF4B4B !important;
-            width: 28px !important;
-            height: 28px !important;
+            width: 32px !important;
+            height: 32px !important;
             border: 3px solid #FFFFFF !important;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2) !important;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
         }}
 
-        /* 3. つまみの上に数字を強制表示 */
+        /* 4. 【本命】つまみの真上に巨大な数字を表示 */
+        /* つまみの位置に追従して表示されます */
         .stSlider [role="slider"]::before {{
-            content: "{st.session_state.len_val}"; /* セッション状態の数値を表示 */
+            content: "{st.session_state.len_val} cm"; 
             position: absolute;
-            top: -65px; /* つまみからの距離 */
+            top: -85px; /* つまみからの垂直距離（数字の大きさによって調整） */
             left: 50%;
             transform: translateX(-50%);
             color: #FF4B4B;
-            font-size: 50px; /* 数字の大きさ */
+            font-size: 65px; /* 数字の大きさ：ここを調整してください */
             font-weight: 900;
             font-family: 'Arial Black', sans-serif;
             white-space: nowrap;
+            text-shadow: 2px 2px 0px rgba(255,255,255,0.8);
         }}
         
-        /* 4. 不要な表示（既存の小さな数字など）を消す */
+        /* 5. 不要な目盛り、ラベル、最小/最大値をすべて非表示 */
         [data-testid="stSliderTickBar"], 
-        .stSlider [data-baseweb="typo"] {{
+        .stSlider [data-baseweb="typo"],
+        [data-testid="stSliderTickBar"] + div {{
             display: none !important;
         }}
         </style>
         """, unsafe_allow_html=True)
 
-    # A: スライダー本体
+    # A: スライダー本体（表示はバーのみ）
     st.slider(
-        "hidden_label", 0.0, 120.0, 
+        "len_slider_final", 0.0, 120.0, 
         key="slider_in", 
         value=st.session_state['len_val'],
         step=0.5, 
@@ -374,9 +384,9 @@ with tab1:
         label_visibility="collapsed"
     )
 
-    # B: 手動入力欄（数値入力は残しておくと便利です）
+    # B: 手動入力欄（数値の最終確認・全角半角自動変換用）
     st.number_input(
-        "手動入力 (cm)", 
+        "手動入力 / 微調整 (cm)", 
         min_value=0.0, 
         max_value=300.0, 
         key="num_in",
@@ -387,7 +397,6 @@ with tab1:
     )
 
     final_length = st.session_state['len_val']
-
     # --- 6. その他入力項目 ---
     st.markdown("**ルアー・仕掛け**")
     lure_sel = st.text_input("ルアー名（例：カゲロウ125MD）", placeholder="英数字は半角でお願いします")
@@ -751,6 +760,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
