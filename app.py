@@ -722,31 +722,32 @@ with tab2:
         st.error(f"タブ2でエラーが発生しました: {e}")
         
    with tab3:
-            st.subheader("🎣 釣果フォトギャラリー")
+               st.subheader("🎣 釣果フォトギャラリー")
         
-            # データの存在チェック
-            if not df.empty:
-            # 最新の10件を取得
-            latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
-            
-            for idx, row in latest_10.iterrows():
-                with st.container(border=True):
-                    # --- データの準備 ---
-                    fish_name = row.get(FISH_COL, "不明")
-                    fish_size = row.get(SIZE_COL, "---")
-                    
-                    # --- 表示 ---
-                    st.write(f"### {fish_name} ({fish_size}cm)")
-                    
-                    img_url = str(row.get('filename', '')).strip()
-                    if img_url.startswith('http'):
-                        st.image(img_url, use_container_width=True)
-                    else:
-                        st.info("📷 画像なし")
-                    
-                    st.write(f"📅 {row.get('date')} | 📍 {row.get(PLACE_COL)}")
-        else:
-            st.info("データがありません")
+                # データの存在チェック
+                if not df.empty:
+                # 最新の10件を取得
+                latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
+                
+                for idx, row in latest_10.iterrows():
+                    with st.container(border=True):
+                        # --- データの準備 ---
+                        fish_name = row.get(FISH_COL, "不明")
+                        fish_size = row.get(SIZE_COL, "---")
+                        
+                        # --- 表示 ---
+                        st.write(f"### {fish_name} ({fish_size}cm)")
+                        
+                        img_url = str(row.get('filename', '')).strip()
+                        if img_url.startswith('http'):
+                            st.image(img_url, use_container_width=True)
+                        else:
+                            st.info("📷 画像なし")
+                        
+                        st.write(f"📅 {row.get('date')} | 📍 {row.get(PLACE_COL)}")
+            else:
+                st.info("データがありません")
+
 
 
 
