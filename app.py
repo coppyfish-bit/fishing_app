@@ -745,11 +745,14 @@ with tab3:
                     lon=row.get('longitude', 135.0), 
                     date_str=f_date, 
                     hit_time_str=f_time
+                    tide_val=row.get('潮位_cm', 150),       
+                    tide_phase=row.get('潮位フェーズ', '---')
                 )
                 
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
