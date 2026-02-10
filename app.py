@@ -371,9 +371,9 @@ with tab1:
     memo_in = st.text_area("", placeholder="ヒットパターンなど", label_visibility="collapsed", key="memo_main")
 
     st.markdown("---")
-    submit = st.button("🚀 釣果を保存する", use_container_width=True, type="primary")
+    submit = st.button("🚀 釣果をする", use_container_width=True, type="primary")
 
-   # --- 7. 保存処理 ---
+   # --- 7. 処理 ---
     if submit:
         if not final_place_name:
             st.error("⚠️ 釣り場名を入力してください。")
@@ -475,11 +475,15 @@ with tab1:
                     st.success(f"🎉 {final_place_name} での釣果を保存しました！")
                     st.balloons()
                     
-                    # キャッシュをクリアして再起動
+                    # キャッシュをクリア
                     st.cache_data.clear()
-                    if "df" in st.session_state: del st.session_state.df
+                    if "df" in st.session_state: 
+                        del st.session_state.df
+                    
+                    # 【重要】少し待ってから画面をリロードしてメッセージを消す
+                    import time
+                    time.sleep(2) 
                     st.rerun()
-
                 except Exception as e:
                     st.error(f"❌ 保存エラーが発生しました: {e}")
 # ==========================================
@@ -725,6 +729,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
