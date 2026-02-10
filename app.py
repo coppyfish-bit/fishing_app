@@ -718,39 +718,18 @@ with tab2:
         
 with tab3:
         st.subheader("📸 釣果フォトギャラリー")
-        
-        if not df.empty:
-            latest_10 = df.sort_values(by=['date', 'time'], ascending=False).head(10)
-            
-            for idx, row in latest_10.iterrows():
-                img_url = str(row.get('filename', '')).strip()
-                if not img_url.startswith('http'):
-                    continue
+        # テスト用の強制オーバーレイ
+        test_url = "https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg"
+        test_html = f"""
+        <div style="position: relative; width: 100%;">
+            <img src="{test_url}" style="width: 100%; border-radius: 10px;">
+            <div style="position: absolute; top: 20px; left: 20px; background: red; color: white; padding: 10px; font-weight: bold;">
+                重なっています！
+            </div>
+        </div>
+        """
+        st.markdown(test_html, unsafe_allow_html=True)
 
-                fish = f"{row.get('魚種', '不明')} {row.get('サイズ', '---')}cm"
-                
-                # HTMLを組み立てる
-                overlay_html = f"""
-                <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 30px;">
-                    <img src="{img_url}" style="width: 100%; display: block;">
-                    
-                    <div style="position: absolute; top: 15px; left: 15px;">
-                        <span style="background: rgba(220, 20, 60, 0.9); color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold;">
-                            {fish}
-                        </span>
-                    </div>
-
-                    <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); color: white; padding: 20px 15px;">
-                        <div style="font-size: 0.9rem;">
-                            📅 {row.get('date')} / 📍 {row.get('場所')}
-                        </div>
-                    </div>
-                </div>
-                """
-                # ★ここが重要：unsafe_allow_html=True を追加
-                st.markdown(overlay_html, unsafe_allow_html=True)
-        else:
-            st.write("データがありません。")
 
 
 
