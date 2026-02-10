@@ -717,49 +717,14 @@ with tab2:
         st.error(f"タブ2でエラーが発生しました: {e}")
         
 with tab3:
-        st.subheader("📸 釣果フォトギャラリー")
-        
-        # データの存在確認
-        if not df.empty:
-            # 最新10件を取得
-            latest_data = df.sort_values(by=['date', 'time'], ascending=False).head(10)
+        st.subheader("📸 ギャラリー")
+        for idx, row in df.head(5).iterrows():
+            img = str(row.get('filename', ''))
+            fish = f"{row.get('魚種', '不明')} {row.get('サイズ', '')}cm"
             
-            for idx, row in latest_data.iterrows():
-                # 1. データの安全な文字列化（ここでHTMLを壊す原因を排除）
-                img_url = str(row.get('filename', '')).strip()
-                if not img_url.startswith('http'):
-                    continue
+            # 💡 変数を使わず、1行にまとめた最短のHTML
+            st.markdown(f'<div style="position:relative"><img src="{img}" style="width:100%"><div style="position:absolute;top:10px;left:10px;background:red;color:white;padding:5px">{fish}</div></div>', unsafe_allow_html=True)
 
-                fish = f"{row.get('魚種', '不明')} {row.get('サイズ', '---')}cm"
-                date_p = f"📅 {row.get('date')} {str(row.get('time'))[:5]}"
-                place_p = f"📍 {row.get('場所', '---')}"
-                
-                # 2. HTMLの組み立て（変数を埋め込むだけのシンプルな構造）
-                # position: relative の中に absolute を入れるテスト成功時の構造を完全再現
-                html_code = f"""
-                <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
-                    <img src="{img_url}" style="width: 100%; display: block;">
-                    
-                    <div style="position: absolute; top: 12px; left: 12px; z-index: 999;">
-                        <div style="background: #dc143c; color: white; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 14px;">
-                            {fish}
-                        </div>
-                    </div>
-
-                    <div style="position: absolute; bottom: 0; left: 0; right: 0; z-index: 998; background: linear-gradient(transparent, rgba(0,0,0,0.85)); color: white; padding: 20px 12px 10px 12px;">
-                        <div style="font-size: 13px; font-weight: bold; margin-bottom: 2px;">{date_p}</div>
-                        <div style="font-size: 12px; opacity: 0.9;">{place_p}</div>
-                    </div>
-                </div>
-                """
-                
-                # 3. 実行（unsafe_allow_htmlを絶対忘れない）
-                st.markdown(html_code, unsafe_allow_html=True)
-                
-                # --- タイドグラフは重なりが成功してから、この下に追加しましょう ---
-                
-        else:
-            st.write("データが表示できません。")
 
 
 
