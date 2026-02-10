@@ -723,7 +723,7 @@ with tab2:
         st.error(f"タブ2でエラーが発生しました: {e}")
 
 # ==========================================
-# タブ3: ギャラリー（動的タイドグラフ搭載版）
+# タブ3: ギャラリー（天草固定・高速版）
 # ==========================================
 with tab3:
     st.subheader("🖼️ 釣果フォトギャラリー")
@@ -777,7 +777,7 @@ with tab3:
         if tide_filter != "すべて":
             df_gallery = df_gallery[df_gallery[PHASE_COL].str.contains(tide_filter, na=False)]
 
-        # 最新順
+        # 最新順に並び替え
         df_gallery = df_gallery.iloc[::-1]
 
         # --- 1. 直近10件の表示 ---
@@ -802,18 +802,19 @@ with tab3:
                     if row.get(LURE_COL):
                         st.caption(f"🎣 {row[LURE_COL]}")
 
-                # --- 動的タイドグラフ（詳細タブの中に配置） ---
+                # --- 【修正ポイント】インデントを正してループ内に入れる ---
                 with st.expander("📊 タイドグラフを確認する"):
-                # --- 天草周辺の海上に座標を固定 ---
-                fixed_lat = 32.40  # 天草西側の海上付近
-                fixed_lon = 130.10 
-                
-                # 日付と時刻の掃除
-                clean_date = str(row.get('date')).split(' ')[0].strip().replace('/', '-')
-                clean_time = str(row.get('time', '12:00'))[:5]
-    
-    # 固定した座標で実行
-    display_tide_graph(fixed_lat, fixed_lon, clean_date, clean_time)
+                    # 天草周辺の海上に座標を固定（エラー回避）
+                    fixed_lat = 32.40  
+                    fixed_lon = 130.10 
+                    
+                    # 日付と時刻の掃除
+                    clean_date = str(row.get('date')).split(' ')[0].strip().replace('/', '-')
+                    clean_time = str(row.get('time', '12:00'))[:5]
+                    
+                    # グラフ表示関数の実行
+                    display_tide_graph(fixed_lat, fixed_lon, clean_date, clean_time)
+
         # --- 2. 11件目以降のリスト表示 ---
         if len(df_gallery) > 10:
             st.write("---")
@@ -841,15 +842,13 @@ with tab3:
                         st.write(f"🎣 **ルアー:** {selected_row.get(LURE_COL, '---')}")
                         st.write(f"💬 **備考:** {selected_row.get('備考', '---')}")
 
-                    # 過去ログ用タイドグラフ
+                    # 過去ログ用タイドグラフ（こちらも座標固定）
                     st.write("---")
                     st.caption("🌊 当時のタイドグラフ")
-                    display_tide_graph(
-                        selected_row.get('lat', 33.5), 
-                        selected_row.get('lon', 129.8), 
-                        str(selected_row.get('date')), 
-                        str(selected_row.get('time', '12:00'))
-                    )
+                    p_clean_date = str(selected_row.get('date')).split(' ')[0].strip().replace('/', '-')
+                    p_clean_time = str(selected_row.get('time', '12:00'))[:5]
+                    
+                    display_tide_graph(32.40, 130.10, p_clean_date, p_clean_time)
 
     else:
         st.info("履歴がまだありません。")
