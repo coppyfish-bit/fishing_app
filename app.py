@@ -310,91 +310,80 @@ with tab1:
     else:
         final_fish_name = selected_fish
 
+# --- 4. 魚種登録 ---
+st.subheader("🐟 魚種")
+# リストに「ヒラスズキ」を追加（選択しやすく上の方に配置しました）
+fish_options = ["スズキ", "ヒラスズキ", "ターポン", "タチウオ", "コチ", "ヒラメ","カサゴ", "クロダイ", "キビレ","キジハタ","マダイ","その他（手入力）"]
+selected_fish = st.selectbox("魚種を選択", fish_options)
+manual_fish_name = st.text_input("魚種名（手入力）", placeholder="例：アカハタなど")
+
+final_fish_name = manual_fish_name if manual_fish_name else selected_fish
+
 # ==========================================
-    # 📏 全長連動ロジック（リアルタイム巨大表示）
-    # ==========================================
-    if 'len_val' not in st.session_state:
-        st.session_state['len_val'] = 0.0
+# 📏 全長クイックタップ・ロジック
+# ==========================================
 
-    # デザイン設定（CSS）
-    # 画像の白い部分（背景）を排除し、バーとつまみを強調します
-    st.markdown(f"""
-        <style>
-        /* 1. 全体の背景をスッキリさせる */
-        [data-testid="stSlider"] {{
-            padding-top: 120px !important; /* 数字のための巨大な余白 */
-        }}
+# 1. デフォルト値の設定（スズキ or ヒラスズキなら60, それ以外は0）
+is_suzuki_family = final_fish_name in ["スズキ", "ヒラスズキ"]
+default_len = 60.0 if is_suzuki_family else 0.0
 
-        /* 2. バー（レール）のデザイン：細くシンプルに */
-        .stSlider [data-baseweb="slider"] {{
-            height: 6px !important;
-            background: #444 !important; /* 暗めのグレーバー */
-            border: none !important;
-        }}
+# 2. セッション状態の初期化
+if 'len_val' not in st.session_state:
+    st.session_state['len_val'] = default_len
 
-        /* 3. つまみ（ノブ）のデザイン：赤く大きく */
-        .stSlider [role="slider"] {{
-            background-color: #FF4B4B !important;
-            width: 35px !important;
-            height: 35px !important;
-            border: 2px solid #FFF !important;
-            box-shadow: 0 0 10px rgba(255, 75, 75, 0.5) !important;
-        }}
+# 魚種が切り替わった時に自動で初期値（60 or 0）にする処理
+if 'prev_fish' not in st.session_state:
+    st.session_state['prev_fish'] = final_fish_name
 
-        /* 4. つまみの上に巨大な数字を表示（リアルタイム同期用） */
-        .stSlider [role="slider"]::before {{
-            content: "{st.session_state.len_val} cm";
-            position: absolute;
-            top: -100px; /* つまみの真上 */
-            left: 50%;
-            transform: translateX(-50%);
-            color: #FF4B4B;
-            font-size: 80px; /* ★ここでお好みの大きさに調整（さらに大きくしました） */
-            font-weight: 900;
-            font-family: 'Arial Black', sans-serif;
-            white-space: nowrap;
-        }}
+if st.session_state['prev_fish'] != final_fish_name:
+    st.session_state['len_val'] = default_len
+    st.session_state['prev_fish'] = final_fish_name
 
-        /* 不要な要素の徹底削除 */
-        [data-testid="stSliderTickBar"], 
-        .stSlider [data-baseweb="typo"] {{
-            display: none !important;
-        }}
-        </style>
-        """, unsafe_allow_html=True)
+# --- 巨大な数字表示 ---
+st.markdown(f"""
+    <div style="text-align: center; margin-top: 20px;">
+        <span style="font-size: 100px; color: #FF4B4B; font-weight: 900; font-family: 'Arial Black', sans-serif; line-height: 1;">
+            {st.session_state.len_val:.1f}
+        </span>
+        <span style="font-size: 24px; color: #FF4B4B; font-weight: 900;"> cm</span>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # A: スライダー本体
-    # label_visibilityを工夫し、不要なテキストを消します
-    length_in = st.slider(
-        "Length Selector", 0.0, 120.0, 
-        key="len_slider_main", 
-        value=st.session_state['len_val'],
-        step=0.5,
-        label_visibility="collapsed"
-    )
+# --- クイックタップボタンの配置 ---
+st.write("") 
+col1, col2, col3, col4, col5, col6 = st.columns(6)
 
-    # 【重要】スライダーの値をセッションに即時反映させる
-    if length_in != st.session_state['len_val']:
-        st.session_state['len_val'] = length_in
-        st.rerun() # これを入れることで、動かした瞬間に上の巨大数字が書き換わります
+with col1:
+    if st.button("ー10", key="minus_10"): st.session_state.len_val -= 10.0
+with col2:
+    if st.button("ー5", key="minus_5"): st.session_state.len_val -= 5.0
+with col3:
+    if st.button("ー1", key="minus_1"): st.session_state.len_val -= 1.0
+with col4:
+    if st.button("＋1", key="plus_1"): st.session_state.len_val += 1.0
+with col5:
+    if st.button("＋5", key="plus_5"): st.session_state.len_val += 5.0
+with col6:
+    if st.button("＋10", key="plus_10"): st.session_state.len_val += 10.0
 
-    # B: 手動入力欄（自動半角）
-    num_input = st.number_input(
-        "手動入力 (cm)", 
-        min_value=0.0, 
-        max_value=300.0, 
-        value=st.session_state['len_val'],
-        step=0.1, 
-        format="%.1f",
-        key="manual_num_input"
-    )
-    
-    # 手動入力側が変更された場合も同期
-    if num_input != st.session_state['len_val']:
-        st.session_state['len_val'] = num_input
-        st.rerun()
+# 微調整用の数値入力
+num_input = st.number_input(
+    "手動で微調整 (cm)", 
+    min_value=0.0, 
+    max_value=300.0, 
+    value=float(st.session_state['len_val']),
+    step=0.1, 
+    format="%.1f",
+    key="manual_num_input"
+)
 
-    final_length = st.session_state['len_val']
+# 数値入力欄が直接操作された場合
+if num_input != st.session_state['len_val']:
+    st.session_state['len_val'] = num_input
+    st.rerun()
+
+final_length = st.session_state['len_val']
+
     # --- 6. その他入力項目 ---
     st.markdown("**ルアー・仕掛け**")
     lure_sel = st.text_input("ルアー名（例：カゲロウ125MD）", placeholder="英数字は半角でお願いします")
@@ -758,6 +747,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
