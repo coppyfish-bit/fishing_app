@@ -719,7 +719,6 @@ with tab2:
 with tab3:
         st.subheader("📸 釣果フォトギャラリー")
         
-        # 表示件数の設定
         display_count = st.slider("表示件数", 5, 50, 10)
         
         if not df.empty:
@@ -730,33 +729,30 @@ with tab3:
                 img = str(row.get('filename', '')).strip()
                 if not img.startswith('http'): continue
                 
-                fish = f"{row.get('魚種', '不明')} {row.get('サイズ', '---')}cm"
-                info = f"📅 {row.get('date')} {str(row.get('time'))[:5]} / 📍 {row.get('場所', '---')}"
-                details = f"🌊 {row.get('潮汐','--')}({row.get('潮回り','--')}) | 🍃 {row.get('風速','--')}m/s | 🎣 {row.get('ルアー','--')}"
+                fish_text = f"{row.get('魚種', '不明')} {row.get('サイズ', '---')}cm"
+                info_text = f"📅 {row.get('date')} {str(row.get('time'))[:5]} / 📍 {row.get('場所', '---')}"
+                detail_text = f"🌊 {row.get('潮汐','--')} | 🍃 {row.get('風速','--')}m/s | 🎣 {row.get('ルアー','--')}"
 
-                # 2. 成功した「最短コード」の構造でデザインを適用
-                # 💡 f-stringの中に直接HTMLを書き、最後に unsafe_allow_html=True を指定
-                st.markdown(f'''
-                <div style="position: relative; width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
-                    <img src="{img}" style="width: 100%; display: block;">
-                    
-                    <div style="position: absolute; top: 12px; left: 12px;">
-                        <div style="background: rgba(220, 20, 60, 0.9); color: white; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 14px;">
-                            {fish}
-                        </div>
-                    </div>
+                # 2. 【衝突回避型HTML】
+                # CSSの { } を使わず、すべて style="..." の中に詰め込んで衝突を防ぎます
+                html_block = (
+                    f'<div style="position:relative; width:100%; border-radius:15px; overflow:hidden; margin-bottom:10px; box-shadow:0 4px 10px rgba(0,0,0,0.3);">'
+                    f'<img src="{img}" style="width:100%; display:block;">'
+                    f'<div style="position:absolute; top:12px; left:12px; z-index:10; background:rgba(220,20,60,0.9); color:white; padding:4px 12px; border-radius:20px; font-weight:bold; font-size:14px;">'
+                    f'{fish_text}</div>'
+                    f'<div style="position:absolute; bottom:0; left:0; right:0; z-index:5; background:linear-gradient(transparent, rgba(0,0,0,0.9)); color:white; padding:20px 12px 10px 12px;">'
+                    f'<div style="font-size:13px; font-weight:bold; margin-bottom:4px;">{info_text}</div>'
+                    f'<div style="font-size:11px; opacity:0.9;">{detail_text}</div>'
+                    f'</div></div>'
+                )
 
-                    <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.85)); color: white; padding: 20px 12px 10px 12px;">
-                        <div style="font-size: 13px; font-weight: bold; margin-bottom: 4px;">{info}</div>
-                        <div style="font-size: 11px; opacity: 0.9;">{details}</div>
-                    </div>
-                </div>
-                ''', unsafe_allow_html=True)
+                # 3. 実行
+                st.markdown(html_block, unsafe_allow_html=True)
 
-                # 3. タイドグラフ（写真のすぐ下に表示）
+                # 4. タイドグラフ（写真のすぐ下に表示）
                 try:
                     t_date = pd.to_datetime(row.get('date')).date()
-                    t_df = get_tide_data(t_date) # お使いの関数名を確認してください
+                    t_df = get_tide_data(t_date) 
                     if not t_df.empty:
                         fig = go.Figure()
                         fig.add_trace(go.Scatter(x=t_df['time'], y=t_df['level'], fill='tozeroy', line_color='#00BFFF'))
@@ -769,7 +765,7 @@ with tab3:
                 
                 st.write("---")
         else:
-            st.info("釣果データが見つかりません。")
+            st.info("データが見つかりません。")
 
 
 
