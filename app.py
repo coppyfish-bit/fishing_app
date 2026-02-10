@@ -313,8 +313,8 @@ with tab1:
 # --- 4. 魚種登録 ---
     st.subheader("🐟 魚種")
     fish_options = ["スズキ", "ヒラスズキ", "ターポン", "タチウオ", "コチ", "ヒラメ","カサゴ", "クロダイ", "キビレ","キジハタ","マダイ","その他（手入力）"]
-    selected_fish = st.selectbox("魚種を選択", fish_options, key="fish_sel_unique")
-    manual_fish_name = st.text_input("魚種名（手入力）", placeholder="例：アカハタなど", key="fish_manual_unique")
+    selected_fish = st.selectbox("魚種を選択", fish_options, key="fish_sel_final")
+    manual_fish_name = st.text_input("魚種名（手入力）", placeholder="例：アカハタなど", key="fish_manual_final")
 
     final_fish_name = manual_fish_name if manual_fish_name else selected_fish
 
@@ -331,6 +331,7 @@ with tab1:
         st.session_state['len_val'] = default_len
         st.session_state['prev_fish_type'] = final_fish_name
 
+    # 巨大な数値表示
     st.markdown(f"""
         <div style="text-align: center; margin: 10px 0;">
             <p style="font-size: 80px; color: #FF4B4B; font-weight: 900; line-height: 1; margin: 0;">
@@ -339,36 +340,34 @@ with tab1:
         </div>
     """, unsafe_allow_html=True)
 
-    # 10cm単位
+    # 操作ボタン（2個ずつ確実に並べる）
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("ー 10", key="btn_m10_unique", use_container_width=True):
+        if st.button("ー 10", key="b_m10", use_container_width=True):
             st.session_state.len_val -= 10.0
             st.rerun()
     with c2:
-        if st.button("＋ 10", key="btn_p10_unique", use_container_width=True):
+        if st.button("＋ 10", key="b_p10", use_container_width=True):
             st.session_state.len_val += 10.0
             st.rerun()
 
-    # 1cm単位
     c3, c4 = st.columns(2)
     with c3:
-        if st.button("ー 1", key="btn_m1_unique", use_container_width=True):
+        if st.button("ー 1", key="b_m1", use_container_width=True):
             st.session_state.len_val -= 1.0
             st.rerun()
     with c4:
-        if st.button("＋ 1", key="btn_p1_unique", use_container_width=True):
+        if st.button("＋ 1", key="b_p1", use_container_width=True):
             st.session_state.len_val += 1.0
             st.rerun()
 
-    # 0.1cm単位
     c5, c6 = st.columns(2)
     with c5:
-        if st.button("ー 0.1", key="btn_m01_unique", use_container_width=True):
+        if st.button("ー 0.1", key="b_m01", use_container_width=True):
             st.session_state.len_val -= 0.1
             st.rerun()
     with c6:
-        if st.button("＋ 0.1", key="btn_p01_unique", use_container_width=True):
+        if st.button("＋ 0.1", key="b_p01", use_container_width=True):
             st.session_state.len_val += 0.1
             st.rerun()
 
@@ -377,19 +376,24 @@ with tab1:
     # --- 6. その他入力項目 ---
     st.markdown("---")
     st.markdown("**ルアー・仕掛け**")
-    # ここに一意の key を追加
-    lure_sel = st.text_input("ルアー名", placeholder="例：カゲロウ125MD", key="lure_name_unique")
-    lure_extra = st.text_input("詳細・カラー (任意)", key="lure_color_unique")
+    lure_sel = st.text_input("ルアー名", placeholder="例：カゲロウ125MD", key="lure_name_final")
+    lure_extra = st.text_input("詳細・カラー (任意)", key="lure_color_final")
     lure_in = lure_sel + (f" ({lure_extra})" if lure_extra else "")
 
-    angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"], key="angler_sel_unique")
+    angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"], key="angler_final")
 
     st.markdown("**メモ**")
-    memo_in = st.text_area("", placeholder="ヒットパターンなど", label_visibility="collapsed", key="memo_area_unique")
+    memo_in = st.text_area("", placeholder="ヒットパターンなど", label_visibility="collapsed", key="memo_final")
 
-    # --- 7. 保存処理 ---
+
+   # --- 7. 保存ボタン ---
+    st.write("")
+    submit = st.button("釣果を記録する", type="primary", use_container_width=True, key="main_submit_btn")
+
+    # --- 8. 保存処理実行 ---
     if submit:
-        if not final_place_name:
+        # 必須入力チェック（final_place_nameが定義されていることを確認してください）
+        if 'final_place_name' not in locals() or not final_place_name:
             st.error("⚠️ 釣り場名を入力してください。")
         else:
             drive_url = "" 
@@ -736,6 +740,7 @@ with tab3:
 
     else:
         st.info("履歴がまだありません。")
+
 
 
 
