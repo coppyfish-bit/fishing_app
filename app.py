@@ -154,14 +154,10 @@ def get_decimal_from_dms(dms, ref):
     return -res if ref in ['S', 'W'] else round(res, 6)
 
 def get_weather_data(lat, lon, dt):
-    """
-    Open-Meteoから気象データを取得。
-    アーカイブ(過去)とフォアキャスト(直近)を考慮。
-    """
     try:
-        # 取得したい日付が今日より前か後かでURLを切り替え
+        # 当日以降はforecast、過去はarchiveを使用
         is_past = dt.date() < datetime.now().date()
-        base_url = "https://archive-api.open-meteo.com/v1/archive" if is_past else "https://api.open-meteo.com/v1/forecast"
+        url = "https://archive-api.open-meteo.com/v1/archive" if is_past else "https://api.open-meteo.com/v1/forecast"
         
         params = {
             "latitude": lat,
@@ -171,24 +167,17 @@ def get_weather_data(lat, lon, dt):
             "hourly": "temperature_2m,windspeed_10m,winddirection_10m,precipitation",
             "timezone": "Asia/Tokyo"
         }
-        
-        res = requests.get(base_url, params=params, timeout=10).json()
-        
-        if 'hourly' not in res:
-            return None, None, None, None
-            
-        h = res['hourly']
-        # 指定時刻(dt.hour)に最も近いインデックスを取得
+        res = requests.get(url, params=params, timeout=10).json()
+        h = res.get('hourly', {})
         idx = dt.hour
         
-        temp = h['temperature_2m'][idx]
-        wind_s = h['windspeed_10m'][idx]
-        wind_d = h['winddirection_10m'][idx]
-        prec = h['precipitation'][idx]
-        
-        return temp, wind_s, wind_d, prec
-    except Exception as e:
-        st.error(f"気象データ取得エラー: {e}")
+        return (
+            h.get('temperature_2m', [None]*24)[idx],
+            h.get('windspeed_10m', [None]*24)[idx],
+            h.get('winddirection_10m', [None]*24)[idx],
+            h.get('precipitation', [None]*24)[idx]
+        )
+    except:
         return None, None, None, None
 
 def get_tide_details(lat, lon, dt, place_name=""):
@@ -798,6 +787,7 @@ with tab3:
             st.write("---")
     else:
         st.info("釣果データがありません。")
+
 
 
 
