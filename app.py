@@ -436,9 +436,13 @@ with tab1:
         drive_url = "https://via.placeholder.com/400x300.png?text=No+Image"
         
         # 1. 画像がある時だけアップロードを試みる
+        # 1. 画像がある時だけアップロードを試みる
         if uploaded_file is not None:
             try:
                 with st.spinner('📸 画像をアップロード中...'):
+                    # --- 【重要】ここを追加：読み取り位置を先頭にリセット ---
+                    uploaded_file.seek(0) 
+                    
                     # Cloudinaryへのアップロード
                     res = cloudinary.uploader.upload(
                         uploaded_file, 
@@ -703,6 +707,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
