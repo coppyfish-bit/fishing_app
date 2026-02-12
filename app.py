@@ -607,25 +607,32 @@ with tab2:
                 expander_label = f"📌 {d_val} | {f_val} | {s_val}cm"
                 
                 with st.expander(expander_label, expanded=is_expanded):
-                    # --- 1. 画像表示 ---
-                    img_url = str(row.get('filename', '')).strip()
-                    if img_url.startswith('http'):
-                        st.image(img_url, use_container_width=True)
-                        # タブ3のループ内、st.image(img_url...) のすぐ下あたりに追加
-                        # 仮の場所データ（釣り場の緯度経度があればそれを使う）
-                        test_lat = 33.5  # 例：長崎周辺
-                        test_lon = 129.8
-                        
-                        # グラフ表示関数の実行
-                        display_tide_graph(
-                            lat=test_lat, 
-                            lon=test_lon, 
-                            date_str=row.get('date', '2024-01-01'), # スプレッドシートの日付
-                            hit_time_str=row.get('時刻', '12:00')   # スプレッドシートの時刻
-                        )
-                    else:
-                        st.caption("📷 画像なし")
+                    # --- 1. 画像とグラフ表示 ---
+                img_url = str(row.get('filename', '')).strip()
+                if img_url.startswith('http'):
+                    st.image(img_url, use_container_width=True)
                     
+                    # シートに保存されている値を優先的に取得
+                    current_lat = row.get('lat', 32.5)
+                    current_lon = row.get('lon', 130.0)
+                    current_tide = row.get('潮位_cm', 0)
+                    current_phase = row.get('潮位フェーズ', '不明')
+                    # カラム名が 'time' か '時刻' か不明なため両方対応
+                    current_time = row.get('time', row.get('時刻', '12:00'))
+                    current_date = row.get('date', '2026-01-01')
+                
+                    # グラフ表示関数の実行（保存されたデータをそのまま表示に使う）
+                    display_tide_graph(
+                        lat=current_lat, 
+                        lon=current_lon, 
+                        date_str=str(current_date), 
+                        hit_time_str=str(current_time),
+                        tide_val=current_tide,   # シートから取得
+                        tide_phase=current_phase  # シートから取得
+                    )
+                else:
+                    st.caption("📷 画像なし")
+    
                     # --- 2. 修正用入力フォーム（項目を4つに厳選） ---
                     new_size = st.number_input(
                         "📏 サイズ (cm)", 
@@ -744,6 +751,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
