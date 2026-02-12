@@ -439,70 +439,105 @@ with tab1:
         </style>
     """, unsafe_allow_html=True)
 
-    if st.button("🚀 釣果を記録する", type="primary", use_container_width=True):
+# ボタンが押された時の処理
+    if st.button("🚀 釣果を記録する", type="primary", use_container_width=True, key="blue_submit_btn"):
         drive_url = "https://via.placeholder.com/400x300.png?text=No+Image"
         
+        # 1. 画像がある時だけアップロードを試みる
         if uploaded_file is not None:
-        try:
-            with st.spinner('📸 画像をアップロード中...'):
-                    # --- ここは一段（スペース4つ）下げて書く ---
-                response = cloudinary.uploader.upload(
-                uploaded_file,
-                folder = "fishing_app",
-                transformation = [
-                {'width': 800, 'crop': "limit"},
-                {'quality': "auto", 'fetch_format': "auto"}
+            try:
+                with st.spinner('📸 画像をアップロード中...'):
+                    # Cloudinaryへのアップロード
+                    res = cloudinary.uploader.upload(
+                        uploaded_file, 
+                        folder="fishing_app",
+                        transformation=[
+                            {'width': 800, 'crop': "limit"},
+                            {'quality': "auto", 'fetch_format': "auto"}
                         ]
                     )
-                    drive_url = response['secure_url'] # URLを取得
+                    drive_url = res.get("secure_url")
             except Exception as e:
-                st.error(f"❌ アップロード失敗: {e}")
+                st.error(f"❌ 画像アップロード失敗: {e}")
                 st.stop()
-        
-        # 2. データの保存
-    with st.spinner('📊 データを保存中...'):
-        try:
-                # 【重要】Exifから取得した final_lat, final_lon をここで使う！
+            
+        # 2. データの保存（ここもボタンの中なのでインデントを揃える）
+        with st.spinner('📊 データを保存中...'):
+            try:
+                # 日時を確定
                 target_dt = datetime.combine(date_in, time_in)
-                                
-                                # 潮汐・天気の取得関数に Exifの座標を渡す
-                t_name = get_tide_name(target_dt)
-                t_info = get_tide_details(final_lat, final_lon, target_dt, final_place_name)
-                temp, wind_s, wind_d, prec = get_weather_data(final_lat, final_lon, target_dt)
                 
+                # 緯度・経度の最終決定（手動選択があればそれを優先、なければExif/デフォルト）
+                if manual_sel != "-- 自動判定・新規入力 --" and not m_df.empty:
+                    place_info = m_df[m_df['place_name'] == manual_sel].iloc[0]
+                    lat_val = place_info['latitude']
+                    lon_val = place_info['longitude']
+                else:
+                    lat_val = final_lat
+                    lon_val = final_lon
+
+                # 潮汐・天気データの取得
+                t_name = get_tide_name(target_dt)
+                t_info = get_tide_details(lat_val, lon_val, target_dt, final_place_name)
+                temp, wind_s, wind_d, prec = get_weather_data(lat_val, lon_val, target_dt)
+
+                # 保存用データセット
                 save_data = {
                     "filename": drive_url, 
                     "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
                     "date": date_in.strftime('%Y-%m-%d'), 
                     "time": time_in.strftime('%H:%M'),
-                    "lat": lat_val, "lon": lon_val, "気温": temp, "風速": wind_s, 
-                    "風向": get_wind_direction_label(wind_d), "降水量": prec,
-                    "潮位_cm": t_info.get("潮位_cm"), "月齢": get_moon_age(target_dt), "潮名": t_name,
-                    "潮位フェーズ": t_info.get("潮位フェーズ"), "場所": final_place_name, 
-                    "魚種": final_fish_name, "全長_cm": final_length if final_length else 0.0, # 変数名を統一
-                    "ルアー": lure_in, "備考": memo_in, "group_id": final_group_id, 
+                    "lat": lat_val, 
+                    "lon": lon_val, 
+                    "気温": temp, 
+                    "風速": wind_s, 
+                    "風向": get_wind_direction_label(wind_d), 
+                    "降水量": prec,
+                    "潮位_cm": t_info.get("潮位_cm"), 
+                    "月齢": get_moon_age(target_dt), 
+                    "潮名": t_name,
+                    "潮位フェーズ": t_info.get("潮位フェーズ"), 
+                    "場所": final_place_name, 
+                    "魚種": final_fish_name, 
+                    "全長_cm": final_length if final_length else 0.0,
+                    "ルアー": lure_in, 
+                    "備考": memo_in, 
+                    "group_id": final_group_id, 
+                    "観測所": t_info.get("観測所", "不明"), 
                     "釣り人": angler
                 }
 
-                # 保存実行
-                new_row_df = pd.DataFrame([save_data])
-                updated_df = pd.concat([conn.read(spreadsheet=url), new_row_df], ignore_index=True)
+                # スプレッドシートへの書き込み
+                cols = ["filename", "datetime", "date", "time", "lat", "lon", "気温", "風速", "風向", "降水量", "潮位_cm", "月齢", "潮名", "潮位フェーズ", "場所", "魚種", "全長_cm", "ルアー", "備考", "group_id", "観測所", "釣り人"]
+                new_row_df = pd.DataFrame([save_data])[cols]
+                
+                # 既存データの読み込みと結合
+                current_df = conn.read(spreadsheet=url, ttl=0)
+                updated_df = pd.concat([current_df, new_row_df], ignore_index=True)
                 conn.update(spreadsheet=url, data=updated_df)
                 
-                # 新規地点ならマスタも更新
+                # 新規地点なら場所マスターも更新
                 if is_new_place:
-                    new_m = pd.DataFrame([{"group_id": final_group_id, "place_name": final_place_name, "latitude": lat_val, "longitude": lon_val}])
-                    m_master = conn.read(spreadsheet=url, worksheet="place_master")
-                    updated_m = pd.concat([m_master, new_m], ignore_index=True)
+                    new_m = pd.DataFrame([{
+                        "group_id": final_group_id, 
+                        "place_name": final_place_name, 
+                        "latitude": lat_val, 
+                        "longitude": lon_val
+                    }])
+                    current_m = conn.read(spreadsheet=url, worksheet="place_master", ttl=0)
+                    updated_m = pd.concat([current_m, new_m], ignore_index=True)
                     conn.update(spreadsheet=url, worksheet="place_master", data=updated_m)
 
                 st.success("🎉 釣果を保存しました！")
                 st.balloons()
+                
+                # キャッシュクリアと再読み込み
+                st.cache_data.clear()
                 time.sleep(2)
                 st.rerun()
+
             except Exception as e:
                 st.error(f"❌ 保存エラー: {e}")
-        # --- ここまで貼り付け ---
 # タブ2: 釣果の修正・削除)
 # ==========================================
 with tab2:
@@ -676,6 +711,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
