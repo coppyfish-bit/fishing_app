@@ -73,7 +73,7 @@ def display_tide_graph(lat, lon, date_str, hit_time_str, tide_val, tide_phase):
         
 # --- 【重要】ここ（ボタンの外）に配置します ---
 try:
-    cloudinary.config(
+        cloudinary.config(
         cloud_name = st.secrets["cloudinary"]["cloud_name"],
         api_key = st.secrets["cloudinary"]["api_key"],
         api_secret = st.secrets["cloudinary"]["api_secret"],
@@ -81,19 +81,19 @@ try:
     )
 except Exception as e:
     st.error("Cloudinaryの設定が読み込めません。Secretsを確認してください。")
-    # Cloudinaryへアップロード
-    response = cloudinary.uploader.upload(
-        uploaded_file,
-        folder = "fishing_app",
-        transformation = [
-            {'width': 800, 'crop': "limit"},
-            {'quality': "auto", 'fetch_format': "auto"}
-        ]
-    )
-    return response['secure_url']
-    
-    # 保存された画像のURLを返す（スプレッドシートにはこの短いURLが書かれます）
-    return response['secure_url']
+        # Cloudinaryへアップロード
+        response = cloudinary.uploader.upload(
+            uploaded_file,
+            folder = "fishing_app",
+            transformation = [
+                {'width': 800, 'crop': "limit"},
+                {'quality': "auto", 'fetch_format': "auto"}
+            ]
+        )
+        return response['secure_url']
+        
+        # 保存された画像のURLを返す（スプレッドシートにはこの短いURLが書かれます）
+        return response['secure_url']
     
 def get_moon_age(dt):
     base_new_moon = datetime(2023, 1, 22, 5, 53)
@@ -664,6 +664,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
