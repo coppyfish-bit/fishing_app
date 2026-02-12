@@ -71,29 +71,16 @@ def display_tide_graph(lat, lon, date_str, hit_time_str, tide_val, tide_phase):
     except Exception as e:
         st.error(f"グラフ作成エラー: {e}")
         
-# --- 【重要】ここ（ボタンの外）に配置します ---
+
 try:
-        cloudinary.config(
+    cloudinary.config(
         cloud_name = st.secrets["cloudinary"]["cloud_name"],
         api_key = st.secrets["cloudinary"]["api_key"],
         api_secret = st.secrets["cloudinary"]["api_secret"],
         secure = True
     )
 except Exception as e:
-    st.error("Cloudinaryの設定が読み込めません。Secretsを確認してください。")
-        # Cloudinaryへアップロード
-        response = cloudinary.uploader.upload(
-            uploaded_file,
-            folder = "fishing_app",
-            transformation = [
-                {'width': 800, 'crop': "limit"},
-                {'quality': "auto", 'fetch_format': "auto"}
-            ]
-        )
-        return response['secure_url']
-        
-        # 保存された画像のURLを返す（スプレッドシートにはこの短いURLが書かれます）
-        return response['secure_url']
+    st.error("Cloudinaryの設定が読み込めません。")
     
 def get_moon_age(dt):
     base_new_moon = datetime(2023, 1, 22, 5, 53)
@@ -435,14 +422,21 @@ with tab1:
     if st.button("🚀 釣果を記録する", type="primary", use_container_width=True):
         drive_url = "https://via.placeholder.com/400x300.png?text=No+Image"
         
-        # 1. 画像アップロード
         if uploaded_file is not None:
             try:
                 with st.spinner('📸 画像をアップロード中...'):
-                    res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
-                    drive_url = res.get("secure_url")
+                    # --- ここは一段（スペース4つ）下げて書く ---
+                    response = cloudinary.uploader.upload(
+                        uploaded_file,
+                        folder = "fishing_app",
+                        transformation = [
+                            {'width': 800, 'crop': "limit"},
+                            {'quality': "auto", 'fetch_format': "auto"}
+                        ]
+                    )
+                    drive_url = response['secure_url'] # URLを取得
             except Exception as e:
-                st.error(f"❌ 画像アップロード失敗: {e}")
+                st.error(f"❌ アップロード失敗: {e}")
                 st.stop()
         
         # 2. データの保存
@@ -664,6 +658,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
