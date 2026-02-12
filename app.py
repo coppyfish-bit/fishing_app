@@ -443,15 +443,15 @@ with tab1:
         drive_url = "https://via.placeholder.com/400x300.png?text=No+Image"
         
         if uploaded_file is not None:
-            try:
-                with st.spinner('📸 画像をアップロード中...'):
+        try:
+            with st.spinner('📸 画像をアップロード中...'):
                     # --- ここは一段（スペース4つ）下げて書く ---
-                    response = cloudinary.uploader.upload(
-                        uploaded_file,
-                        folder = "fishing_app",
-                        transformation = [
-                            {'width': 800, 'crop': "limit"},
-                            {'quality': "auto", 'fetch_format': "auto"}
+                response = cloudinary.uploader.upload(
+                uploaded_file,
+                folder = "fishing_app",
+                transformation = [
+                {'width': 800, 'crop': "limit"},
+                {'quality': "auto", 'fetch_format': "auto"}
                         ]
                     )
                     drive_url = response['secure_url'] # URLを取得
@@ -460,16 +460,16 @@ with tab1:
                 st.stop()
         
         # 2. データの保存
-       with st.spinner('📊 データを保存中...'):
-            try:
+    with st.spinner('📊 データを保存中...'):
+        try:
                 # 【重要】Exifから取得した final_lat, final_lon をここで使う！
                 target_dt = datetime.combine(date_in, time_in)
-                
-                # 潮汐・天気の取得関数に Exifの座標を渡す
+                                
+                                # 潮汐・天気の取得関数に Exifの座標を渡す
                 t_name = get_tide_name(target_dt)
                 t_info = get_tide_details(final_lat, final_lon, target_dt, final_place_name)
                 temp, wind_s, wind_d, prec = get_weather_data(final_lat, final_lon, target_dt)
-
+                
                 save_data = {
                     "filename": drive_url, 
                     "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
@@ -676,6 +676,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
