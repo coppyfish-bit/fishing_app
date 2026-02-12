@@ -71,15 +71,16 @@ def display_tide_graph(lat, lon, date_str, hit_time_str, tide_val, tide_phase):
     except Exception as e:
         st.error(f"グラフ作成エラー: {e}")
         
-def upload_to_drive(uploaded_file):
-    # Secretsから設定を読み込み（関数を呼ぶたびに確実に設定）
+# --- 【重要】ここ（ボタンの外）に配置します ---
+try:
     cloudinary.config(
-    cloud_name = st.secrets["cloudinary"]["cloud_name"],
-    api_key = st.secrets["cloudinary"]["api_key"],
-    api_secret = st.secrets["cloudinary"]["api_secret"],
-    secure = True
-)
-    
+        cloud_name = st.secrets["cloudinary"]["cloud_name"],
+        api_key = st.secrets["cloudinary"]["api_key"],
+        api_secret = st.secrets["cloudinary"]["api_secret"],
+        secure = True
+    )
+except Exception as e:
+    st.error("Cloudinaryの設定が読み込めません。Secretsを確認してください。")
     # Cloudinaryへアップロード
     response = cloudinary.uploader.upload(
         uploaded_file,
@@ -663,6 +664,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
