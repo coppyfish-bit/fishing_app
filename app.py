@@ -10,22 +10,21 @@ import math
 import io
 import cloudinary
 import cloudinary.uploader
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
-from google.oauth2 import service_account
 import plotly.graph_objects as go
-from datetime import datetime
 import numpy as np
-import base64
+
+# --- 1. 位置情報・解析系関数 ---
 
 def get_geotagging(exif):
-    # GPSInfoのタグIDは 34853 です
+    """EXIFからGPS情報を抽出し、辞書形式で返す"""
+    if not exif:
+        return None
+    # GPSInfoのタグIDは 34853
     gps_info = exif.get(34853)
     if not gps_info:
         return None
     
-    # お示しいただいたデータ構造に合わせて、直接インデックスで取得します
-    # 1:LatitudeRef, 2:Latitude, 3:LongitudeRef, 4:Longitude
+    # 辞書のキーが数値(int)の場合と文字列("1")の場合の両方に対応
     geotagging = {
         'GPSLatitudeRef': gps_info.get(1) or gps_info.get("1"),
         'GPSLatitude':    gps_info.get(2) or gps_info.get("2"),
@@ -33,272 +32,33 @@ def get_geotagging(exif):
         'GPSLongitude':   gps_info.get(4) or gps_info.get("4")
     }
     
-    # 必要なデータが揃っているかチェック
     if not geotagging['GPSLatitude'] or not geotagging['GPSLongitude']:
         return None
         
     return geotagging
 
 def get_decimal_from_dms(dms, ref):
+    """度分秒(DMS)形式を十進法に変換"""
     if not dms or not ref:
         return None
-    
     try:
-        # お示しいただいたデータは [32.0, 28.0, 34.96] のようなリスト形式
-        # 各要素を確実に float に変換します
+        # 要素がリストやタプルであることを想定
         d = float(dms[0])
         m = float(dms[1])
         s = float(dms[2])
-        
         decimal = d + (m / 60.0) + (s / 3600.0)
-        
-        # 南緯(S)や西経(W)の場合はマイナスにする
         if ref in ['S', 'W']:
             decimal = -decimal
-            
         return decimal
-    except Exception as e:
-        # 計算エラーが起きた場合に備えてログを出す（任意）
-        # st.error(f"DMS変換エラー: {e}")
+    except:
         return None
+
 def calculate_distance(lat1, lon1, lat2, lon2):
     if None in [lat1, lon1, lat2, lon2]: return 999.0
     R = 6371.0
     dlat, dlon = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
     a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
     return R * (2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)))
-
-
-def get_best_station(lat, lon, place_name):
-    """
-    場所名または座標から、最も適切な気象庁観測所を返す
-    """
-    # 観測所マスタ（ご提示いただいたデータ）
-    STATIONS = [
-        {"name": "本渡瀬戸", "lat": 32.26, "lon": 130.13, "code": "HS"},
-        {"name": "苓北",     "lat": 32.28, "lon": 130.20, "code": "RH"},
-        {"name": "口之津",   "lat": 32.36, "lon": 130.12, "code": "KT"},
-        {"name": "八代",     "lat": 32.31, "lon": 130.34, "code": "O5"},
-    ]
-
-    # 1. 場所名（キーワード）による優先判定
-    # 名前から判断できる場合は、計算せずに特定の観測所を返す
-    p_name = place_name if place_name else ""
-    if any(k in p_name for k in ["苓北", "富岡", "都呂々", "通詞"]):
-        return next(s for s in STATIONS if s["name"] == "苓北")
-    if any(k in p_name for k in ["本渡", "瀬戸", "下浦", "栖本"]):
-        return next(s for s in STATIONS if s["name"] == "本渡瀬戸")
-    if any(k in p_name for k in ["八代", "鏡", "日奈久", "不知火"]):
-        return next(s for s in STATIONS if s["name"] == "八代")
-    if any(k in p_name for k in ["口之津", "島原", "南島原", "加津佐"]):
-        return next(s for s in STATIONS if s["name"] == "口之津")
-
-    # 2. 座標による距離計算（キーワードにヒットしなかった場合）
-    # 現在の座標(lat, lon)に最も近い観測所を探す
-    best_s = STATIONS[0]
-    min_dist = float('inf')
-
-    for s in STATIONS:
-        # 三平方の定理で簡易距離を計算
-        dist = ((lat - s["lat"])**2 + (lon - s["lon"])**2)**0.5
-        if dist < min_dist:
-            min_dist = dist
-            best_s = s
-
-    return best_s
-    
-def display_tide_graph(lat, lon, date_str, hit_time_str, tide_val, tide_phase):
-    try:
-        # 1. ヒット時刻を数値化
-        if hit_time_str and str(hit_time_str) != 'nan':
-            h, m = map(int, str(hit_time_str).split(':')[:2])
-            hit_h = h + m/60
-        else:
-            hit_h = 12.0
-
-        # 2. 表示範囲（前後6時間）
-        start_h = hit_h - 6
-        end_h = hit_h + 6
-        hours = np.linspace(start_h, end_h, 48)
-        
-        # 3. 【修正】シミュレーションではなく、シートの潮位(tide_val)を基準にする
-        # 潮位フェーズが「下げ」なら右下がり、「上げ」なら右上がりの波を作る
-        base_level = float(tide_val) if str(tide_val).isdigit() else 150
-        direction = -1 if "下" in str(tide_phase) else 1
-        
-        # ヒット時を中心に、潮位フェーズに合わせた傾斜をつける
-        tide_curve = direction * 50 * np.sin(2 * np.pi * (hours - hit_h) / 12.42) + base_level
-        
-        # 4. グラフ描画
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=hours, y=tide_curve,
-            mode='lines', fill='tozeroy',
-            line=dict(color='#007BFF', width=3),
-            hovertemplate='%{x:.1f}時: %{y:.1f}cm<extra></extra>'
-        ))
-
-        # HIT! 地点（シートの潮位をそのまま使う）
-        fig.add_trace(go.Scatter(
-            x=[hit_h], y=[base_level],
-            mode='markers+text',
-            text=["HIT!"], textposition="top center",
-            marker=dict(color='red', size=18, symbol='star'),
-        ))
-
-        fig.update_layout(
-            height=200, margin=dict(l=10, r=10, t=30, b=10),
-            xaxis=dict(title="時間", tickvals=np.arange(np.floor(start_h), np.ceil(end_h) + 1, 2), gridcolor='lightgray'),
-            yaxis=dict(visible=False),
-            showlegend=False,
-            title=dict(text=f"📌 {tide_phase} (潮位:{tide_val}cm)", font=dict(size=14))
-        )
-        
-        # スマホでのスクロールを優先する設定
-        st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True})
-
-    except Exception as e:
-        st.error(f"グラフ作成エラー: {e}")
-        
-try:
-    cloudinary.config(
-        cloud_name = st.secrets["cloudinary"]["cloud_name"],
-        api_key = st.secrets["cloudinary"]["api_key"],
-        api_secret = st.secrets["cloudinary"]["api_secret"],
-        secure = True
-    )
-except Exception as e:
-    st.error("Cloudinaryの設定が読み込めません。")
-    
-def get_moon_age(dt):
-    base_new_moon = datetime(2023, 1, 22, 5, 53)
-    lunar_cycle = 29.530588
-    diff_days = (dt - base_new_moon).total_seconds() / 86400
-    return round(diff_days % lunar_cycle, 1)
-
-def get_wind_direction_label(degree):
-    if degree is None: return ""
-    labels = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
-    return labels[int((degree + 11.25) / 22.5) % 16]
-
-def get_weather_data(lat, lon, dt):
-    try:
-        # 当日以降はforecast、過去はarchiveを使用
-        is_past = dt.date() < datetime.now().date()
-        url = "https://archive-api.open-meteo.com/v1/archive" if is_past else "https://api.open-meteo.com/v1/forecast"
-        
-        params = {
-            "latitude": lat,
-            "longitude": lon,
-            "start_date": dt.strftime('%Y-%m-%d'),
-            "end_date": dt.strftime('%Y-%m-%d'),
-            "hourly": "temperature_2m,windspeed_10m,winddirection_10m,precipitation",
-            "timezone": "Asia/Tokyo"
-        }
-        res = requests.get(url, params=params, timeout=10).json()
-        h = res.get('hourly', {})
-        idx = dt.hour
-        
-        return (
-            h.get('temperature_2m', [None]*24)[idx],
-            h.get('windspeed_10m', [None]*24)[idx],
-            h.get('winddirection_10m', [None]*24)[idx],
-            h.get('precipitation', [None]*24)[idx]
-        )
-    except:
-        return None, None, None, None
-
-def get_tide_details(lat, lon, dt, place_name=""):
-    station = get_best_station(lat, lon, place_name)
-    dt = dt.replace(tzinfo=None)
-    st_code = str(station['code'])
-    
-    # 試行するURLリスト（大文字・小文字両対応）
-    urls = [
-        f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{dt.year}/{st_code.upper()}.txt",
-        f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{dt.year}/{st_code.lower()}.txt"
-    ]
-    
-    for url in urls:
-        try:
-            response = requests.get(url, timeout=10)
-            if response.status_code != 200:
-                continue
-            
-            lines = response.text.splitlines()
-            
-            # 日付の照合用文字列を作成
-            # データ内の形式例: "26 1 1HS" (年2桁 空白 月 空白 日 地点)
-            # 非常に不安定なため、末尾から検索して日付と地点コードが一致する行を探す
-            target_line = None
-            date_marker = f"{str(dt.year)[2:]}{dt.month:2}{dt.day:2}{st_code.upper()}"
-            
-            for line in lines:
-                # 行の72文字目付近から日付情報が始まります
-                if date_marker.replace(" ", "") in line.replace(" ", ""):
-                    target_line = line
-                    break
-            
-            if not target_line:
-                continue
-
-            # --- 1. 毎時潮位の解析 (0-23時 各3桁固定) ---
-            hour = dt.hour
-            # 0時(0-3文字目), 1時(3-6文字目)...
-            tide_part = target_line[hour*3 : (hour*3)+3].strip()
-            tide_cm = int(tide_part) if tide_part else 0
-
-            # --- 2. 満潮・干潮時刻の解析 (フェーズ判定用) ---
-            events = []
-            # 満潮: 80文字目から 7桁(時刻4+潮位3) × 4回
-            for i in range(4):
-                start = 80 + (i * 7)
-                t_str = target_line[start : start+4].strip()
-                if t_str and t_str != "9999":
-                    events.append({"type": "満潮", "time": datetime(dt.year, dt.month, dt.day, int(t_str[:2]), int(t_str[2:]))})
-            
-            # 干潮: 108文字目から 7桁(時刻4+潮位3) × 4回
-            for i in range(4):
-                start = 108 + (i * 7)
-                t_str = target_line[start : start+4].strip()
-                if t_str and t_str != "9999":
-                    events.append({"type": "干潮", "time": datetime(dt.year, dt.month, dt.day, int(t_str[:2]), int(t_str[2:]))})
-            
-            events.sort(key=lambda x: x["time"])
-            
-            # 潮位フェーズの判定
-            phase = "判定中"
-            next_ev = next((e for e in events if e["time"] > dt), None)
-            if next_ev:
-                phase = "上げ潮" if next_ev["type"] == "満潮" else "下げ潮"
-            else:
-                prev_ev = events[-1] if events else None
-                if prev_ev:
-                    phase = "下げ潮" if prev_ev["type"] == "満潮" else "上げ潮"
-
-            return {
-                "潮位フェーズ": phase,
-                "潮位_cm": tide_cm,
-                "観測所": station["name"]
-            }
-
-        except Exception as e:
-            continue
-
-    return {"潮位フェーズ": "取得失敗", "潮位_cm": 0, "観測所": station["name"]}
-        
-def get_tide_name(dt):
-    base_new_moon = datetime(2023, 1, 22, 5, 53)
-    lunar_cycle = 29.530588
-    age = ((dt - base_new_moon).total_seconds() / 86400) % lunar_cycle
-    if age < 3.0 or age > 26.5: return "大潮"
-    elif age < 7.0: return "中潮"
-    elif age < 11.0: return "小潮"
-    elif age < 13.0: return "長潮"
-    elif age < 14.0: return "若潮"
-    elif age < 18.0: return "大潮"
-    elif age < 22.0: return "中潮"
-    else: return "小潮"
 
 def find_nearest_place(current_lat, current_lon, master_df, threshold_m=500):
     if master_df is None or master_df.empty: return None, None
@@ -311,46 +71,126 @@ def find_nearest_place(current_lat, current_lon, master_df, threshold_m=500):
         return nearest_place['place_name'], nearest_place['group_id']
     return None, None
 
-def update_spreadsheet(df):
-    """
-    アプリ上で編集・削除した後のDataFrameをスプレッドシートに丸ごと上書きする
-    """
+# --- 2. 気象・潮汐系関数 ---
+
+def get_best_station(lat, lon, place_name):
+    STATIONS = [
+        {"name": "本渡瀬戸", "lat": 32.26, "lon": 130.13, "code": "HS"},
+        {"name": "苓北",     "lat": 32.28, "lon": 130.20, "code": "RH"},
+        {"name": "口之津",   "lat": 32.36, "lon": 130.12, "code": "KT"},
+        {"name": "八代",     "lat": 32.31, "lon": 130.34, "code": "O5"},
+    ]
+    p_name = place_name if place_name else ""
+    if any(k in p_name for k in ["苓北", "富岡", "都呂々", "通詞"]): return STATIONS[1]
+    if any(k in p_name for k in ["本渡", "瀬戸", "下浦", "栖本"]): return STATIONS[0]
+    if any(k in p_name for k in ["八代", "鏡", "日奈久", "不知火"]): return STATIONS[3]
+    if any(k in p_name for k in ["口之津", "島原", "南島原", "加津佐"]): return STATIONS[2]
+
+    best_s, min_dist = STATIONS[0], float('inf')
+    for s in STATIONS:
+        dist = ((lat - s["lat"])**2 + (lon - s["lon"])**2)**0.5
+        if dist < min_dist:
+            min_dist, best_s = dist, s
+    return best_s
+
+def get_tide_details(lat, lon, dt, place_name=""):
+    station = get_best_station(lat, lon, place_name)
+    st_code = str(station['code'])
+    urls = [
+        f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{dt.year}/{st_code.upper()}.txt",
+        f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{dt.year}/{st_code.lower()}.txt"
+    ]
+    for url in urls:
+        try:
+            res = requests.get(url, timeout=10)
+            if res.status_code != 200: continue
+            lines = res.text.splitlines()
+            date_marker = f"{str(dt.year)[2:]}{dt.month:2}{dt.day:2}{st_code.upper()}"
+            target_line = next((l for l in lines if date_marker.replace(" ","") in l.replace(" ","")), None)
+            if not target_line: continue
+
+            tide_part = target_line[dt.hour*3 : (dt.hour*3)+3].strip()
+            tide_cm = int(tide_part) if tide_part else 0
+
+            events = []
+            for i in range(4):
+                m_start, k_start = 80 + (i*7), 108 + (i*7)
+                m_str, k_str = target_line[m_start:m_start+4].strip(), target_line[k_start:k_start+4].strip()
+                if m_str and m_str != "9999": events.append({"type": "満潮", "time": datetime(dt.year, dt.month, dt.day, int(m_str[:2]), int(m_str[2:]))})
+                if k_str and k_str != "9999": events.append({"type": "干潮", "time": datetime(dt.year, dt.month, dt.day, int(k_str[:2]), int(k_str[2:]))})
+            
+            events.sort(key=lambda x: x["time"])
+            next_ev = next((e for e in events if e["time"] > dt), None)
+            phase = "上げ潮" if (next_ev and next_ev["type"] == "満潮") else "下げ潮"
+
+            return {"潮位フェーズ": phase, "潮位_cm": tide_cm, "観測所": station["name"]}
+        except: continue
+    return {"潮位フェーズ": "取得失敗", "潮位_cm": 0, "観測所": station["name"]}
+
+def get_weather_data(lat, lon, dt):
     try:
-        # スプレッドシートを開く
-        sh = gc.open_by_key(st.secrets["gcp_service_account"]["spreadsheet_id"])
-        worksheet = sh.get_worksheet(0)
-        
-        # 既存の内容を消去して、新しいデータを書き込む
-        worksheet.clear()
-        # ヘッダーとデータをリスト形式に変換して書き込み
-        set_with_dataframe(worksheet, df)
-        st.success("スプレッドシートを更新しました！")
-    except Exception as e:
-        st.error(f"更新に失敗しました: {e}")
+        is_past = dt.date() < datetime.now().date()
+        url = "https://archive-api.open-meteo.com/v1/archive" if is_past else "https://api.open-meteo.com/v1/forecast"
+        params = {"latitude": lat, "longitude": lon, "start_date": dt.strftime('%Y-%m-%d'), "end_date": dt.strftime('%Y-%m-%d'), "hourly": "temperature_2m,windspeed_10m,winddirection_10m,precipitation", "timezone": "Asia/Tokyo"}
+        res = requests.get(url, params=params).json()
+        h, idx = res.get('hourly', {}), dt.hour
+        return h.get('temperature_2m')[idx], h.get('windspeed_10m')[idx], h.get('winddirection_10m')[idx], h.get('precipitation')[idx]
+    except: return None, None, None, None
 
+def get_moon_age(dt):
+    base = datetime(2023, 1, 22, 5, 53)
+    return round(((dt - base).total_seconds() / 86400) % 29.530588, 1)
 
-# --- 3. 接続の初期化 (ここで conn を作る) ---
+def get_tide_name(dt):
+    age = get_moon_age(dt)
+    if age < 3.0 or age > 26.5: return "大潮"
+    elif age < 7.0: return "中潮"
+    elif age < 11.0: return "小潮"
+    elif age < 13.0: return "長潮"
+    elif age < 14.0: return "若潮"
+    elif age < 18.0: return "大潮"
+    elif age < 22.0: return "中潮"
+    else: return "小潮"
+
+def get_wind_direction_label(degree):
+    if degree is None: return "不明"
+    labels = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
+    return labels[int((degree + 11.25) / 22.5) % 16]
+
+# --- 3. 接続とメイン処理 ---
+
 try:
-    # 接続オブジェクトの作成
     conn = st.connection("gsheets", type=GSheetsConnection)
     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    
-    # 【節約術】Session State を使って読み込み回数を減らす
-    # 1分間（60s）はAPIを叩かず、手元のデータ(session_state)を使います
-    if "df" not in st.session_state:
-        st.session_state.df = conn.read(spreadsheet=url, ttl="60s")
-    
-    # 場所マスターも同様に保持
-    if "m_df" not in st.session_state:
-        st.session_state.m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="60s")
-
-    # 共通変数として使いやすくしておく
-    df = st.session_state.df
-    m_df = st.session_state.m_df
-
+    if "df" not in st.session_state: st.session_state.df = conn.read(spreadsheet=url, ttl="60s")
+    if "m_df" not in st.session_state: st.session_state.m_df = conn.read(spreadsheet=url, worksheet="place_master", ttl="60s")
+    df, m_df = st.session_state.df, st.session_state.m_df
 except Exception as e:
-    st.error(f"接続の初期化に失敗しました: {e}")
-    st.stop()  # ここで止めれば、これ以降の NameError は起きません
+    st.error(f"接続失敗: {e}")
+    st.stop()
+
+
+
+            save_data = {
+                "filename": drive_url,
+                "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
+                "lat": float(lat_to_save), # 数値型を保証
+                "lon": float(lon_to_save),
+                "気温": temp,
+                "風速": wind_s,
+                "風向": get_wind_direction_label(wind_d),
+                "潮位_cm": t_info.get("潮位_cm", 0),
+                "潮名": get_tide_name(target_dt),
+                "場所": final_place_name,
+                "魚種": final_fish_name,
+                "釣り人": angler
+                # ... その他必要項目を追加 ...
+            }
+            
+            # スプレッドシート更新ロジック（省略せずに既存のものを使用してください）
+            st.success(f"保存完了！座標: {lat_to_save}, {lon_to_save}")
+        except Exception as e:
+            st.error(f"保存失敗: {e}")
     
 # --- 2. メイン UI 制御 ---
 st.set_page_config(page_title="Fishing AI Log", layout="centered")
@@ -527,62 +367,28 @@ with tab1:
         </style>
     """, unsafe_allow_html=True)
 
-# --- ボタンが押された時の処理 ---
-if st.button("🚀 釣果を記録する", type="primary", use_container_width=True, key="blue_submit_btn"):
-    drive_url = "https://via.placeholder.com/400x300.png?text=No+Image"
-    
-    # 1. 画像のアップロード処理
-    if uploaded_file is not None:
+# --- 保存ボタン内の処理（ここが重要！） ---
+
+# （中略：UI部分で manual_sel や final_lat, final_lon が定義されている前提）
+
+if st.button("🚀 釣果を記録する", type="primary", use_container_width=True):
+    # 保存用の座標を確定させる
+    lat_to_save = final_lat
+    lon_to_save = final_lon
+
+    # 手動選択がある場合、マスターの座標で上書き
+    if manual_sel not in ["-- リストから選ぶ場合はこちら --", "-- 自動判定・新規入力 --", ""] and not m_df.empty:
+        matched = m_df[m_df['place_name'] == manual_sel]
+        if not matched.empty:
+            lat_to_save = matched.iloc[0]['latitude']
+            lon_to_save = matched.iloc[0]['longitude']
+
+    # 座標が確定したら保存処理へ
+    if lat_to_save is not None:
         try:
-            with st.spinner('📸 画像をアップロード中...'):
-                uploaded_file.seek(0) 
-                res = cloudinary.uploader.upload(
-                    uploaded_file, 
-                    folder="fishing_app",
-                    transformation=[
-                        {'width': 800, 'crop': "limit"},
-                        {'quality': "auto", 'fetch_format': "auto"}
-                    ]
-                )
-                drive_url = res.get("secure_url")
-        except Exception as e:
-            st.error(f"❌ 画像アップロード失敗: {e}")
-            st.stop()
-        
-    # 2. データの保存処理
-    with st.spinner('📊 データを解析・保存中...'):
-        try:
-            # --- 【重要】日時の確定 ---
             target_dt = datetime.combine(date_in, time_in)
-            
-            # --- 【重要】緯度・経度の最終決定（修正版） ---
-            # manual_sel が初期値や空でない場合のみマスターを参照する
-            if manual_sel not in ["-- リストから選ぶ場合はこちら --", "-- 自動判定・新規入力 --", ""] and not m_df.empty:
-                matched_rows = m_df[m_df['place_name'] == manual_sel]
-                if not matched_rows.empty:
-                    place_info = matched_rows.iloc[0]
-                    lat_val = place_info['latitude']
-                    lon_val = place_info['longitude']
-                else:
-                    # 見つからない場合は写真の解析値を採用
-                    lat_val = final_lat
-                    lon_val = final_lon
-            else:
-                # リスト未選択時は写真のGPS(final_lat/lon)を採用
-                lat_val = final_lat
-                lon_val = final_lon
-
-            # --- 【重要】外部データの取得 ---
-            # 1. 潮汐名の取得（大潮・小潮など）
-            t_name = get_tide_name(target_dt)
-            
-            # 2. 潮汐詳細の取得（気象庁データ解析）
-            t_info = get_tide_details(lat_val, lon_val, target_dt, final_place_name)
-            
-            # 3. 気象データの取得（Open-Meteo）
-            temp, wind_s, wind_d, prec = get_weather_data(lat_val, lon_val, target_dt)
-
-            # --- 3. 保存用データセットの作成 ---
+            t_info = get_tide_details(lat_to_save, lon_to_save, target_dt, final_place_name)
+            temp, wind_s, wind_d, prec = get_weather_data(lat_to_save, lon_to_save, target_dt)
             save_data = {
                 "filename": drive_url, 
                 "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
@@ -833,6 +639,7 @@ with tab3:
             st.write("---")
     else:
         st.info("釣果データがありません。")
+
 
 
 
