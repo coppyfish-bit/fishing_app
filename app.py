@@ -138,15 +138,35 @@ def get_wind_direction_label(degree):
     return labels[int((degree + 11.25) / 22.5) % 16]
 
 def get_geotagging(exif):
-    if not exif: return None
+    if not exif:
+        return None
+    
     geotagging = {}
-    for tag, value in exif.items():
-        decoded = TAGS.get(tag, tag)
-        if decoded == "GPSInfo":
-            for t in value:
-                sub_decoded = GPSTAGS.get(t, t)
-                geotagging[sub_decoded] = value[t]
+    for (idx, tag) in TAGS.items():
+        if tag == 'GPSInfo':
+            # GPSInfoの中身もID(数値)なのでGPSTAGSを使って変換
+            for (key, val) in GPSTAGS.items():
+                if key in exif[idx]:
+                    geotagging[val] = exif[idx][key]
     return geotagging
+
+def get_decimal_from_dms(dms, ref):
+    if not dms or not ref:
+        return None
+    
+    # PillowのRational型をfloatに変換しながら計算
+    # dmsは通常 (度, 分, 秒) のタプル
+    d = float(dms[0])
+    m = float(dms[1])
+    s = float(dms[2])
+    
+    decimal = d + (m / 60.0) + (s / 3600.0)
+    
+    # 南緯(S)や西経(W)の場合はマイナスにする
+    if ref in ['S', 'W']:
+        decimal = -decimal
+        
+    return decimal
 
 def get_decimal_from_dms(dms, ref):
     if not dms: return None
@@ -787,6 +807,7 @@ with tab3:
             st.write("---")
     else:
         st.info("釣果データがありません。")
+
 
 
 
