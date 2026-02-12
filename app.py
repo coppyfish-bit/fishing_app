@@ -333,45 +333,39 @@ with tab1:
                 try: default_dt = datetime.strptime(dt_str, '%Y:%m:%d %H:%M:%S')
                 except: pass
 
-   # --- 3. 場所の判定と入力（スマート統合型） ---
+    # --- 3. 場所の判定と入力（修正版） ---
     detected_name, detected_id = find_nearest_place(auto_lat, auto_lon, m_df)
     
     st.markdown("### 📍 釣り場")
 
-    # A: まず、登録済みリストから選べるようにする（常に表示）
+    # A: 登録済みリスト（初期値を「選択なし」にする）
     place_to_id = dict(zip(m_df['place_name'], m_df['group_id'])) if not m_df.empty else {}
     manual_sel = st.selectbox(
-        "登録済み地点から選ぶ", 
-        ["-- 自動判定・新規入力 --"] + list(place_to_id.keys()),
-        key="place_manual_select_v3"
+        "過去の登録地点から選ぶ", 
+        ["-- リストから選ぶ場合はこちら --"] + list(place_to_id.keys()),
+        key="place_manual_select_v4"
     )
 
-    # B: 最終的な名前を決定する入力欄
-    if manual_sel != "-- 自動判定・新規入力 --":
-        # リストから選んだらその名前を固定表示
-        final_place_name = st.text_input("釣り場名（修正不可）", value=manual_sel, disabled=True)
+    # B: 入力・表示欄
+    if manual_sel != "-- リストから選ぶ場合はこちら --":
+        final_place_name = manual_sel
         final_group_id = place_to_id[manual_sel]
         is_new_place = False
+        st.info(f"✅ 過去の地点を選択中: {final_place_name}")
     else:
-        # リストから選んでいない場合：自動判定の名前を入れるか、空欄にする
-        default_name = detected_name if detected_name else ""
-        final_place_name = st.text_input(
-            "釣り場名（自動判定または新規入力）", 
-            value=default_name,
-            placeholder="判定できない場合はここに入力してください",
-            key="place_name_input_final"
-        )
+        # 自動判定された名前があれば表示、なければ空欄
+        default_val = detected_name if detected_name else ""
+        final_place_name = st.text_input("釣り場名（修正・新規入力可）", value=default_val)
         
-        # 自動判定と一致していればそのID、そうでなければ新規ID
-        if final_place_name == detected_name:
+        if detected_name and final_place_name == detected_name:
             final_group_id = detected_id
             is_new_place = False
-            st.caption("✅ 写真の位置情報から自動判定しました")
+            st.success(f"📌 GPSから「{detected_name}」と判定しました")
         else:
             final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 1
             is_new_place = True
             if final_place_name:
-                st.caption("🆕 新しい場所として登録されます")
+                st.warning(f"🆕 「{final_place_name}」を新規登録します")
 # --- 4. 魚種登録（重複を削除し、1つに統合） ---
     st.subheader("🐟 魚種")
     fish_options = ["ボウズ","スズキ", "ヒラスズキ", "ターポン", "タチウオ", "コチ", "ヒラメ","カサゴ", "クロダイ", "キビレ","キジハタ","マダイ","その他（手入力）"]
@@ -675,6 +669,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
