@@ -681,25 +681,26 @@ with tab2:
                                     if 'df' in st.session_state: del st.session_state.df
                                     st.rerun()
         
-                            with col_btn2:
-                                # 削除ボタン。誤操作防止のため type="secondary"（または指定なし）が推奨ですが、統一のため記述
-                                if st.button("🗑️ 削除する", key=f"del_btn_{original_index}", use_container_width=True):
-                                    with st.spinner('🗑️ 削除中...'):
-                                        try:
-                                            updated_df = df.drop(original_index)
-                                            conn.update(spreadsheet=url, data=updated_df)
-                                            st.cache_data.clear()
-                                            if 'df' in st.session_state: del st.session_state.df
-                                            st.success("削除しました")
-                                            st.rerun()
-                                        except Exception as e:
-                                            st.error(f"削除失敗: {e}")
-        
-                                        except Exception as e:
-                                        st.error(f"タブ2でエラーが発生しました: {e}")
-        
+with col_btn2:
+                        # 削除ボタン
+                        if st.button("🗑️ 削除する", key=f"del_btn_{original_index}", use_container_width=True):
+                            with st.spinner('🗑️ 削除中...'):
+                                try:
+                                    updated_df = df.drop(original_index)
+                                    conn.update(spreadsheet=url, data=updated_df)
+                                    st.cache_data.clear()
+                                    if 'df' in st.session_state: del st.session_state.df
+                                    st.success("削除しました")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"削除失敗: {e}")
+
+    except Exception as e:
+        st.error(f"タブ2でエラーが発生しました: {e}")
+
+# --- ここからタブ3 ---
 with tab3:
-        st.subheader("📸 釣果フォトギャラリー")
+    st.subheader("📸 釣果フォトギャラリー")
         display_count = st.slider("表示件数", 5, 50, 10)
         
         if not df.empty:
@@ -750,6 +751,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
