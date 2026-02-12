@@ -19,36 +19,48 @@ import numpy as np
 import base64
 
 def get_geotagging(exif):
-    if not exif:
+    # GPSInfoのタグIDは 34853 です
+    gps_info = exif.get(34853)
+    if not gps_info:
         return None
     
-    geotagging = {}
-    for (idx, tag) in TAGS.items():
-        if tag == 'GPSInfo':
-            # GPSInfoの中身もID(数値)なのでGPSTAGSを使って変換
-            for (key, val) in GPSTAGS.items():
-                if key in exif[idx]:
-                    geotagging[val] = exif[idx][key]
+    # お示しいただいたデータ構造に合わせて、直接インデックスで取得します
+    # 1:LatitudeRef, 2:Latitude, 3:LongitudeRef, 4:Longitude
+    geotagging = {
+        'GPSLatitudeRef': gps_info.get(1) or gps_info.get("1"),
+        'GPSLatitude':    gps_info.get(2) or gps_info.get("2"),
+        'GPSLongitudeRef': gps_info.get(3) or gps_info.get("3"),
+        'GPSLongitude':   gps_info.get(4) or gps_info.get("4")
+    }
+    
+    # 必要なデータが揃っているかチェック
+    if not geotagging['GPSLatitude'] or not geotagging['GPSLongitude']:
+        return None
+        
     return geotagging
 
 def get_decimal_from_dms(dms, ref):
     if not dms or not ref:
         return None
     
-    # PillowのRational型をfloatに変換しながら計算
-    # dmsは通常 (度, 分, 秒) のタプル
-    d = float(dms[0])
-    m = float(dms[1])
-    s = float(dms[2])
-    
-    decimal = d + (m / 60.0) + (s / 3600.0)
-    
-    # 南緯(S)や西経(W)の場合はマイナスにする
-    if ref in ['S', 'W']:
-        decimal = -decimal
+    try:
+        # お示しいただいたデータは [32.0, 28.0, 34.96] のようなリスト形式
+        # 各要素を確実に float に変換します
+        d = float(dms[0])
+        m = float(dms[1])
+        s = float(dms[2])
         
-    return decimal
-
+        decimal = d + (m / 60.0) + (s / 3600.0)
+        
+        # 南緯(S)や西経(W)の場合はマイナスにする
+        if ref in ['S', 'W']:
+            decimal = -decimal
+            
+        return decimal
+    except Exception as e:
+        # 計算エラーが起きた場合に備えてログを出す（任意）
+        # st.error(f"DMS変換エラー: {e}")
+        return None
 def calculate_distance(lat1, lon1, lat2, lon2):
     if None in [lat1, lon1, lat2, lon2]: return 999.0
     R = 6371.0
@@ -814,6 +826,7 @@ with tab3:
             st.write("---")
     else:
         st.info("釣果データがありません。")
+
 
 
 
