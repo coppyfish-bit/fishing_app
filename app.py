@@ -134,7 +134,6 @@ def get_weather_data(lat, lon, dt):
 
 def get_tide_details(lat, lon, dt, place_name=""):
     station = get_best_station(lat, lon, place_name)
-    # タイムゾーン情報の除去（比較エラー防止）
     dt = dt.replace(tzinfo=None)
     
     try:
@@ -144,26 +143,26 @@ def get_tide_details(lat, lon, dt, place_name=""):
         lines = response.text.splitlines()
         
         def parse_line(target_date):
-            # 気象庁形式: 月日は 72-75文字目付近にあるが、行の先頭付近で判定するのが確実
-            d_str = f"{target_date.month:>2}{target_date.day:>2}".replace(" ", "0")
-            # 行の72文字目から4文字が月日と一致するか確認
-            row = next((l for l in lines if len(l) > 75 and l[72:76] == d_str), None)
+            # フォーマット通り：73〜78カラム（Pythonインデックス 72:78）が年月日(YYMMDD)
+            # ※気象庁は年を下2桁で管理しているため修正
+            y_short = str(target_date.year)[2:]
+            d_str = f"{y_short}{target_date.month:02}{target_date.day:02}"
+            
+            row = next((l for l in lines if len(l) >= 78 and l[72:78] == d_str), None)
             if not row: return None, []
             
             evs = []
-            # 満潮(80-107), 干潮(108-135) を 7文字間隔で4回ずつ抽出
+            # 満潮：81〜108カラム（インデックス 80:108）
+            # 干潮：109〜136カラム（インデックス 108:136）
             for b_start, e_type in [(80, "満潮"), (108, "干潮")]:
                 for i in range(4):
                     base = b_start + (i * 7)
-                    if base + 7 > len(row): break
                     t_raw = row[base : base+4].strip()
                     h_raw = row[base+4 : base+7].strip()
                     if t_raw and t_raw != "9999":
-                        h = int(t_raw[:2])
-                        m = int(t_raw[2:])
-                        if h < 24: # 24時以降の変則データ除外
-                            ev_dt = datetime(target_date.year, target_date.month, target_date.day, h, m)
-                            evs.append({"type": e_type, "time": ev_dt, "tide": h_raw})
+                        ev_dt = datetime(target_date.year, target_date.month, target_date.day, 
+                                         int(t_raw[:2]), int(t_raw[2:]))
+                        evs.append({"type": e_type, "time": ev_dt, "tide": h_raw})
             return row, evs
 
         line_today, events_today = parse_line(dt)
@@ -172,11 +171,11 @@ def get_tide_details(lat, lon, dt, place_name=""):
         _, events_tomorrow = parse_line(dt + timedelta(days=1))
         all_events = sorted(events_today + events_tomorrow, key=lambda x: x["time"])
 
-        # 1時間ごとの潮位は 0時から3文字ずつ並ぶ（最初は9文字目から）
-        # 0時:9-11, 1時:12-14 ... というルール
-        pos = 9 + (dt.hour * 3)
+        # 毎時潮位：1〜72カラム（インデックス 0:72） 3桁×24時間
+        # 0時:0-3, 1時:3-6 ... 
+        pos = dt.hour * 3
         tide_val = line_today[pos : pos+3].strip()
-        current_hour_tide = int(tide_val) if tide_val.isdigit() else 0
+        current_hour_tide = int(tide_val) if tide_val.lstrip('-').isdigit() else 0
 
         next_high = next((e for e in all_events if e["type"] == "満潮" and e["time"] > dt), None)
         next_low = next((e for e in all_events if e["type"] == "干潮" and e["time"] > dt), None)
@@ -193,20 +192,16 @@ def get_tide_details(lat, lon, dt, place_name=""):
             "観測所": station["name"]
         }
 
-        # 潮位フェーズ（上げ/下げ 1〜9分）の計算
         if prev_ev and next_ev:
             direction = "下げ" if prev_ev["type"] == "満潮" else "上げ"
             diff_total = (next_ev["time"] - prev_ev["time"]).total_seconds()
             diff_now = (dt - prev_ev["time"]).total_seconds()
-            # 0〜100%を1〜9の「分」に変換
             progress = max(1, min(9, int(diff_now / diff_total * 10)))
             res["潮位フェーズ"] = f"{direction}{progress}分"
         
         return res
     except Exception as e:
-        # エラー時は150固定ではなく、エラー内容を表示させるとデバッグしやすい
-        return {"潮位フェーズ": f"計算エラー", "観測所": station["name"]}
-
+        return {"潮位フェーズ": "解析エラー", "観測所": station["name"]}
 def get_tide_name(dt):
     base_new_moon = datetime(2023, 1, 22, 5, 53)
     lunar_cycle = 29.530588
@@ -708,6 +703,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
