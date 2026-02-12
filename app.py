@@ -367,23 +367,17 @@ with tab1:
             final_group_id = place_to_id[manual_sel]
             is_new_place = False
 
-    # --- 4. 魚種登録 ---
+# --- 4. 魚種登録（重複を削除し、1つに統合） ---
     st.subheader("🐟 魚種")
-    fish_options = ["スズキ", "ヒラスズキ", "ターポン", "タチウオ", "コチ", "ヒラメ","カサゴ", "クロダイ", "キビレ","キジハタ","マダイ","その他（手入力）"]
-    selected_fish = st.selectbox("魚種を選択", fish_options)
-    manual_fish_name = st.text_input("魚種名（手入力）", placeholder="例：アカハタ、または魚種の補足など")
-
-    if manual_fish_name:
-        final_fish_name = manual_fish_name
-    else:
-        final_fish_name = selected_fish
-
-# --- 4. 魚種登録 ---
-    st.subheader("🐟 魚種")
-    fish_options = ["スズキ", "ヒラスズキ", "ターポン", "タチウオ", "コチ", "ヒラメ","カサゴ", "クロダイ", "キビレ","キジハタ","マダイ","その他（手入力）"]
+    fish_options = ["ボウズ","スズキ", "ヒラスズキ", "ターポン", "タチウオ", "コチ", "ヒラメ","カサゴ", "クロダイ", "キビレ","キジハタ","マダイ","その他（手入力）"]
+    
+    # 選択肢と手入力をスッキリ並べる
     selected_fish = st.selectbox("魚種を選択", fish_options, key="fish_sel_final")
-    manual_fish_name = st.text_input("魚種名（手入力）", placeholder="例：アカハタなど", key="fish_manual_final")
+    
+    # 「その他」を選んだ時や、補足したい時だけ入力する欄
+    manual_fish_name = st.text_input("魚種名（手入力・補足）", placeholder="例：アカハタ、またはサイズ補足など", key="fish_manual_final")
 
+    # 最終的な保存名を決定（手入力があればそちらを優先）
     final_fish_name = manual_fish_name if manual_fish_name else selected_fish
 
 # --- 5. 全長入力 ---
@@ -669,6 +663,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
