@@ -662,38 +662,7 @@ with tab2:
                                 key=f"edit_memo_{original_index}"
                             )
         
-                            # --- 3. ボタンエリア（修正と削除を横並びに） ---
-                            st.write("")
-                            col_btn1, col_btn2 = st.columns(2)
-                            
-                            with col_btn1:
-                                if st.button("🆙 修正保存", key=f"update_btn_{original_index}", type="primary", use_container_width=True):
-                                    # データ更新
-                                    df.at[original_index, '全長_cm'] = new_size
-                                    df.at[original_index, '釣り人'] = new_angler
-                                    df.at[original_index, 'ルアー'] = new_lure
-                                    df.at[original_index, '備考'] = new_memo
-                                    
-                                    # 保存実行（conn, url が定義されている前提）
-                                    conn.update(spreadsheet=url, data=df)
-                                    st.success("修正しました！")
-                                    st.cache_data.clear()
-                                    if 'df' in st.session_state: del st.session_state.df
-                                    st.rerun()
-        
-with col_btn2:
-                        # 削除ボタン
-                        if st.button("🗑️ 削除する", key=f"del_btn_{original_index}", use_container_width=True):
-                            with st.spinner('🗑️ 削除中...'):
-                                try:
-                                    updated_df = df.drop(original_index)
-                                    conn.update(spreadsheet=url, data=updated_df)
-                                    st.cache_data.clear()
-                                    if 'df' in st.session_state: del st.session_state.df
-                                    st.success("削除しました")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"削除失敗: {e}")
+col_btn1, col_btn2 = st.columns
 
     except Exception as e:
         st.error(f"タブ2でエラーが発生しました: {e}")
@@ -751,6 +720,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
