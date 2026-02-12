@@ -571,7 +571,7 @@ with tab1:
 
             except Exception as e:
                 st.error(f"❌ 保存エラー: {e}")
-# タブ2: 釣果の修正・削除)
+# タブ2: 釣果の修正・削除
 # ==========================================
 with tab2:
     st.subheader("📸 釣果履歴（直近5件展開）")
@@ -607,66 +607,101 @@ with tab2:
                 expander_label = f"📌 {d_val} | {f_val} | {s_val}cm"
                 
                 with st.expander(expander_label, expanded=is_expanded):
-                    # 1. 画像表示
-                        img_url = str(row.get('filename', '')).strip()
-                        if img_url.startswith('http'):
-                            st.image(img_url, use_container_width=True)
-                            
-                            # 座標や潮汐データの取得
-                            current_lat = row.get('lat', 32.5)
-                            current_lon = row.get('lon', 130.0)
-                            current_tide = row.get('潮位_cm', 0)
-                            current_phase = row.get('潮位フェーズ', '不明')
-                            current_time = row.get('time', row.get('時刻', '12:00'))
-                            current_date = row.get('date', '2026-01-01')
+                    # --- 1. 画像と潮汐グラフ表示 ---
+                    img_url = str(row.get('filename', '')).strip()
+                    if img_url.startswith('http'):
+                        st.image(img_url, use_container_width=True)
+                        
+                        # シートから潮汐データを取得してグラフ表示
+                        current_lat = row.get('lat', 32.5)
+                        current_lon = row.get('lon', 130.0)
+                        current_tide = row.get('潮位_cm', 0)
+                        current_phase = row.get('潮位フェーズ', '不明')
+                        current_time = row.get('time', row.get('時刻', '12:00'))
+                        current_date = row.get('date', '2026-01-01')
+                        
+                        display_tide_graph(
+                            lat=current_lat, 
+                            lon=current_lon, 
+                            date_str=str(current_date), 
+                            hit_time_str=str(current_time),
+                            tide_val=current_tide,
+                            tide_phase=current_phase
+                        )
+                    else:
+                        st.caption("📷 画像なし")
                     
-                            # グラフ表示（インデントに注意！）
-                            display_tide_graph(
-                                lat=current_lat, 
-                                lon=current_lon, 
-                                date_str=str(current_date), 
-                                hit_time_str=str(current_time),
-                                tide_val=current_tide,
-                                tide_phase=current_phase
-                            )
-                        else:
-                            st.caption("📷 画像なし")
-    
-                            # --- 2. 修正用入力フォーム（項目を4つに厳選） ---
-                            new_size = st.number_input(
-                                "📏 サイズ (cm)", 
-                                value=float(s_val), 
-                                step=0.1, 
-                                format="%.1f",
-                                key=f"edit_size_{original_index}"
-                            )
-        
-                            angler_list = ["長元", "川口", "山川"]
-                            current_angler = row.get('釣り人', '長元')
-                            new_angler = st.selectbox(
-                                "👤 釣り人", 
-                                angler_list, 
-                                index=angler_list.index(current_angler) if current_angler in angler_list else 0,
-                                key=f"edit_angler_{original_index}"
-                            )
-        
-                            new_lure = st.text_input(
-                                "🎣 ルアー", 
-                                value=str(row.get('ルアー', '')), 
-                                key=f"edit_lure_{original_index}"
-                            )
-        
-                            new_memo = st.text_area(
-                                "📝 備考", 
-                                value=str(row.get('備考', '')), 
-                                key=f"edit_memo_{original_index}"
-                            )
-        
-col_btn1, col_btn2 = st.columns
+                    # --- 2. 修正用入力フォーム ---
+                    # サイズ入力（数値変換エラー対策付き）
+                    try:
+                        f_s_val = float(s_val)
+                    except:
+                        f_s_val = 0.0
+
+                    new_size = st.number_input(
+                        "📏 サイズ (cm)", 
+                        value=f_s_val, 
+                        step=0.1, 
+                        format="%.1f",
+                        key=f"edit_size_{original_index}"
+                    )
+
+                    angler_list = ["長元", "川口", "山川"]
+                    current_angler = row.get('釣り人', '長元')
+                    new_angler = st.selectbox(
+                        "👤 釣り人", 
+                        angler_list, 
+                        index=angler_list.index(current_angler) if current_angler in angler_list else 0,
+                        key=f"edit_angler_{original_index}"
+                    )
+
+                    new_lure = st.text_input(
+                        "🎣 ルアー", 
+                        value=str(row.get('ルアー', '')), 
+                        key=f"edit_lure_{original_index}"
+                    )
+
+                    new_memo = st.text_area(
+                        "📝 備考", 
+                        value=str(row.get('備考', '')), 
+                        key=f"edit_memo_{original_index}"
+                    )
+
+                    # --- 3. ボタンエリア ---
+                    st.write("")
+                    col_btn1, col_btn2 = st.columns(2)
+                    
+                    with col_btn1:
+                        if st.button("🆙 修正保存", key=f"update_btn_{original_index}", type="primary", use_container_width=True):
+                            with st.spinner('修正中...'):
+                                try:
+                                    df.at[original_index, '全長_cm'] = new_size
+                                    df.at[original_index, '釣り人'] = new_angler
+                                    df.at[original_index, 'ルアー'] = new_lure
+                                    df.at[original_index, '備考'] = new_memo
+                                    conn.update(spreadsheet=url, data=df)
+                                    st.success("修正しました！")
+                                    st.cache_data.clear()
+                                    if 'df' in st.session_state: del st.session_state.df
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"修正失敗: {e}")
+
+                    with col_btn2:
+                        if st.button("🗑️ 削除する", key=f"del_btn_{original_index}", use_container_width=True):
+                            with st.spinner('削除中...'):
+                                try:
+                                    updated_df = df.drop(original_index)
+                                    conn.update(spreadsheet=url, data=updated_df)
+                                    st.success("削除しました")
+                                    st.cache_data.clear()
+                                    if 'df' in st.session_state: del st.session_state.df
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"削除失敗: {e}")
 
     except Exception as e:
         st.error(f"タブ2でエラーが発生しました: {e}")
-
 # --- ここからタブ3 ---
 with tab3:
     st.subheader("📸 釣果フォトギャラリー")
@@ -720,6 +755,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
