@@ -343,7 +343,7 @@ with tab1:
                 except: passpass
 
     # --- 3. 場所の判定と入力（修正版） ---
-    detected_name, detected_id = find_nearest_place(auto_lat, auto_lon, m_df)
+    detected_name, detected_id = find_nearest_place(final_lat, final_lon, m_df)
     
     st.markdown("### 📍 釣り場")
 
@@ -711,6 +711,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
