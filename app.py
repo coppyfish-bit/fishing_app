@@ -333,27 +333,41 @@ with tab1:
                 try: default_dt = datetime.strptime(dt_str, '%Y:%m:%d %H:%M:%S')
                 except: pass
 
-    # --- 3. 場所の判定と入力 ---
+   # --- 3. 場所の判定と入力（常に表示版） ---
     detected_name, detected_id = find_nearest_place(auto_lat, auto_lon, m_df)
     is_new_place = False
 
     st.markdown("### 📍 釣り場")
-    if detected_name:
+    
+    # 登録済み地点の選択肢を準備
+    place_to_id = dict(zip(m_df['place_name'], m_df['group_id'])) if not m_df.empty else {}
+    place_options = ["-- 500m以内の自動判定に従う --"] + list(place_to_id.keys())
+
+    # プルダウンを常に表示
+    manual_sel = st.selectbox(
+        "登録済み地点から選ぶ（修正が必要な場合）", 
+        place_options,
+        index=0,
+        key="place_manual_select_v2"
+    )
+
+    if manual_sel != "-- 500m以内の自動判定に従う --":
+        # 手動選択された場合
+        final_place_name = manual_sel
+        final_group_id = place_to_id[manual_sel]
+        is_new_place = False
+        st.info(f"✅ 手動選択：{final_place_name}")
+    elif detected_name:
+        # 自動判定された場合
         final_place_name = detected_name
         final_group_id = detected_id
+        st.success(f"📍 自動判定：{final_place_name}")
     else:
+        # 新規地点の場合
         st.warning("🆕 500m以内に登録地点がありません")
         final_place_name = st.text_input("新規釣り場名を入力", placeholder="例: 〇〇港 堤防")
         final_group_id = int(m_df["group_id"].max() + 1) if not m_df.empty else 1
         is_new_place = True
-
-    with st.expander("場所を手動で修正・選択"):
-        place_to_id = dict(zip(m_df['place_name'], m_df['group_id'])) if not m_df.empty else {}
-        manual_sel = st.selectbox("登録済み地点から選ぶ", ["-- 選択なし --"] + list(place_to_id.keys()))
-        if manual_sel != "-- 選択なし --":
-            final_place_name = manual_sel
-            final_group_id = place_to_id[manual_sel]
-            is_new_place = False
 
 # --- 4. 魚種登録（重複を削除し、1つに統合） ---
     st.subheader("🐟 魚種")
@@ -658,6 +672,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
