@@ -392,6 +392,17 @@ with tab1:
         img = Image.open(uploaded_file)
         exif = img._getexif()
         if exif:
+            # --- デバッグ用コードここから ---
+            st.write("🔍 EXIF解析ログ:")
+            st.write(f"- EXIFタグの総数: {len(exif)}")
+            # GPSInfoのタグIDは 34853 です
+            if 34853 in exif:
+                st.success("✅ 画像内にGPSタグ（34853）を発見しました！")
+                st.write("- GPSInfoの中身:", exif[34853])
+            else:
+                st.error("❌ この画像にはGPS情報が書き込まれていません。")
+            # --- デバッグ用コードここまで ---
+        if exif:
             geotags = get_geotagging(exif)
             if geotags:
                 # DMS形式から十進法へ変換
@@ -803,6 +814,7 @@ with tab3:
             st.write("---")
     else:
         st.info("釣果データがありません。")
+
 
 
 
