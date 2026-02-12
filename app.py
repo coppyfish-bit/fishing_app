@@ -386,146 +386,115 @@ with tab1:
 
     final_fish_name = manual_fish_name if manual_fish_name else selected_fish
 
-# ==========================================
-    # 📏 全長入力：見切れないプレースホルダー版
-    # ==========================================
-    
-    # デザイン調整：入力後の数字は大きく、プレースホルダーは収まるサイズに
+# --- 5. 全長入力 ---
     st.markdown("""
         <style>
-        /* 入力後の数字のデザイン */
         div[data-testid="stNumberInput"] input {
-            font-size: 40px !important; /* 少しだけ小さくして安定感を出す */
+            font-size: 40px !important;
             height: 70px !important;
             font-weight: bold !important;
             color: #FF4B4B !important;
             text-align: center !important;
         }
-        /* 入力前の説明文字（プレースホルダー）のサイズだけを小さく調整 */
         div[data-testid="stNumberInput"] input::placeholder {
-            font-size: 18px !important; 
-            font-weight: normal !important;
-            color: #888 !important;
-        }
-        /* ラベルの調整 */
-        div[data-testid="stNumberInput"] label p {
-            font-size: 16px !important;
+            font-size: 18px !important;
         }
         </style>
     """, unsafe_allow_html=True)
 
-    # メイン入力
-    val = st.number_input(
+    final_length = st.number_input(
         "全長 (cm)", 
-        min_value=0.0, 
-        max_value=300.0, 
-        value=None, 
+        min_value=0.0, max_value=300.0, value=None, 
         placeholder="ここをタップして入力",
-        step=0.1, 
-        format="%.1f",
-        key="final_len_input_fixed"
+        step=0.1, format="%.1f", key="final_len_input_fixed"
     )
 
-    # 保存用の値確定
-    final_length = val if val is not None else 0.0
     # --- 6. その他入力項目 ---
     st.markdown("---")
-    st.markdown("**ルアー・仕掛け**")
-    lure_sel = st.text_input("ルアー名  コピペ用 50s 55 60f 60s 60ES 70f 70s 70ES 73 80f 80s 82s 87 88 90f 90s 95f 95ss 100f 100s 100ss 110f 110s 111f 120f 120s 124f 125f 125ss 130f 130s 140f 140s 150f 150s 156MD 160f 160s 165f 170f 170J 180f 190f 190ss",placeholder="例：カゲロウ125MD ←数字、英字は半角でお願いします", key="lure_name_final")
+    lure_sel = st.text_input("ルアー名", placeholder="例：カゲロウ125MD", key="lure_name_final")
     lure_extra = st.text_input("詳細・カラー (任意)", key="lure_color_final")
     lure_in = lure_sel + (f" ({lure_extra})" if lure_extra else "")
 
     angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"], key="angler_final")
+    memo_in = st.text_area("メモ", placeholder="ヒットパターンなど", key="memo_final")
 
-    st.markdown("**メモ**")
-    memo_in = st.text_area("", placeholder="ヒットパターンなど", label_visibility="collapsed", key="memo_final")
+    # 日時入力（写真から取得したdefault_dtを初期値に）
+    c1, c2 = st.columns(2)
+    with c1: date_in = st.date_input("日付", default_dt.date())
+    with c2: time_in = st.time_input("時刻", default_dt.time())
 
-
-   # --- 7. 保存ボタンのデザイン（青色に変更） ---
+    # --- 7. 保存処理（1つの青いボタンに統合） ---
     st.markdown("""
         <style>
-        /* 保存ボタン（Primaryボタン）の色を青に変更 */
         div.stButton > button[kind="primary"] {
-            background-color: #007BFF !important; /* 鮮やかな青 */
+            background-color: #007BFF !important;
             color: white !important;
-            border: none !important;
             height: 60px !important;
             font-size: 20px !important;
             font-weight: bold !important;
             border-radius: 10px !important;
-            transition: 0.3s;
-        }
-        /* ホバー時（指で触れた時）の色調整 */
-        div.stButton > button[kind="primary"]:hover {
-            background-color: #0056b3 !important;
-            border-color: #0056b3 !important;
         }
         </style>
     """, unsafe_allow_html=True)
 
-    st.write("")
-    # type="primary" を指定することで、上記の青色CSSが適用されます
-    submit = st.button("釣果を記録する", type="primary", use_container_width=True, key="blue_submit_btn")
-  
-if st.button("🚀 この内容で保存する"):
-            drive_url = "https://via.placeholder.com/400x300.png?text=No+Image"
-            # 1. 画像がある時だけアップロードを試みる
-            if uploaded_file is not None:
-                try:
-                    with st.spinner('📸 画像をアップロード中...'):
-                        # Cloudinaryへのアップロード
-                        res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
-                        drive_url = res.get("secure_url")
-                except Exception as e:
-                    st.error(f"❌ 画像アップロード失敗: {e}")
-                    st.info("別の写真を選ぶか、時間を置いて試してください。")
-                    st.stop()
-            
-            # 2. データの保存（画像がなくても進めるように外に出しました）
-            with st.spinner('📊 データを保存中...'):
-                try:
-                    target_dt = datetime.combine(date_in, time_in)
-                    t_name = get_tide_name(target_dt)
-                    t_info = get_tide_details(lat_in, lon_in, target_dt, final_place_name)
-                    temp, wind_s, wind_d, prec = get_weather_data(lat_in, lon_in, target_dt)
+    if st.button("🚀 釣果を記録する", type="primary", use_container_width=True):
+        drive_url = "https://via.placeholder.com/400x300.png?text=No+Image"
+        
+        # 1. 画像アップロード
+        if uploaded_file is not None:
+            try:
+                with st.spinner('📸 画像をアップロード中...'):
+                    res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
+                    drive_url = res.get("secure_url")
+            except Exception as e:
+                st.error(f"❌ 画像アップロード失敗: {e}")
+                st.stop()
+        
+        # 2. データの保存
+        with st.spinner('📊 データを保存中...'):
+            try:
+                target_dt = datetime.combine(date_in, time_in)
+                # 位置情報の確定（写真から取得、なければデフォルト）
+                lat_val = auto_lat
+                lon_val = auto_lon
+                
+                # 外部データ取得（以前作成した関数群を呼び出し）
+                t_name = get_tide_name(target_dt)
+                t_info = get_tide_details(lat_val, lon_val, target_dt, final_place_name)
+                temp, wind_s, wind_d, prec = get_weather_data(lat_val, lon_val, target_dt)
 
-                    save_data = {
-                        "filename": drive_url, "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
-                        "date": date_in.strftime('%Y-%m-%d'), "time": time_in.strftime('%H:%M'),
-                        "lat": lat_in, "lon": lon_in, "気温": temp, "風速": wind_s, 
-                        "風向": get_wind_direction_label(wind_d), "降水量": prec,
-                        "潮位_cm": t_info.get("潮位_cm"), "月齢": get_moon_age(target_dt), "潮名": t_name,
-                        "次の満潮まで_分": t_info.get("次の満潮まで_分", ""), "次の干潮まで_分": t_info.get("次の干潮まで_分", ""),
-                        "直前の満潮_時刻": t_info.get("直前の満潮_時刻"), "直前の干潮_時刻": t_info.get("直前の干潮_時刻"),
-                        "潮位フェーズ": t_info.get("潮位フェーズ"), "場所": final_place_name, "魚種": final_fish_name,
-                        "全長_cm": length_in, "ルアー": lure_in, "備考": memo_in, "group_id": final_group_id, 
-                        "観測所": t_info.get("観測所", "不明"), "釣り人": angler
-                    }
+                save_data = {
+                    "filename": drive_url, 
+                    "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
+                    "date": date_in.strftime('%Y-%m-%d'), 
+                    "time": time_in.strftime('%H:%M'),
+                    "lat": lat_val, "lon": lon_val, "気温": temp, "風速": wind_s, 
+                    "風向": get_wind_direction_label(wind_d), "降水量": prec,
+                    "潮位_cm": t_info.get("潮位_cm"), "月齢": get_moon_age(target_dt), "潮名": t_name,
+                    "潮位フェーズ": t_info.get("潮位フェーズ"), "場所": final_place_name, 
+                    "魚種": final_fish_name, "全長_cm": final_length if final_length else 0.0, # 変数名を統一
+                    "ルアー": lure_in, "備考": memo_in, "group_id": final_group_id, 
+                    "釣り人": angler
+                }
 
-                    cols = ["filename", "datetime", "date", "time", "lat", "lon", "気温", "風速", "風向", "降水量", "潮位_cm", "月齢", "潮名", "次の満潮まで_分", "次の干潮まで_分", "直前の満潮_時刻", "直前の干潮_時刻", "潮位フェーズ", "場所", "魚種", "全長_cm", "ルアー", "備考", "group_id", "観測所", "釣り人"]
-                    new_row_df = pd.DataFrame([save_data])[cols]
-                    
-                    if "df" not in st.session_state:
-                        st.session_state.df = conn.read(spreadsheet=url)
-                    updated_df = pd.concat([st.session_state.df, new_row_df], ignore_index=True)
-                    conn.update(spreadsheet=url, data=updated_df)
-                    
-                    if is_new_place:
-                        new_m = pd.DataFrame([{"group_id": final_group_id, "place_name": final_place_name, "latitude": lat_in, "longitude": lon_in}])
-                        if "m_df" not in st.session_state:
-                            st.session_state.m_df = conn.read(spreadsheet=url, worksheet="place_master")
-                        updated_m = pd.concat([st.session_state.m_df, new_m], ignore_index=True)
-                        conn.update(spreadsheet=url, worksheet="place_master", data=updated_m)
+                # 保存実行
+                new_row_df = pd.DataFrame([save_data])
+                updated_df = pd.concat([conn.read(spreadsheet=url), new_row_df], ignore_index=True)
+                conn.update(spreadsheet=url, data=updated_df)
+                
+                # 新規地点ならマスタも更新
+                if is_new_place:
+                    new_m = pd.DataFrame([{"group_id": final_group_id, "place_name": final_place_name, "latitude": lat_val, "longitude": lon_val}])
+                    m_master = conn.read(spreadsheet=url, worksheet="place_master")
+                    updated_m = pd.concat([m_master, new_m], ignore_index=True)
+                    conn.update(spreadsheet=url, worksheet="place_master", data=updated_m)
 
-                    st.success("🎉 釣果を保存しました！")
-                    st.balloons()
-                    st.cache_data.clear()
-                    if "df" in st.session_state: del st.session_state.df
-                    import time
-                    time.sleep(2)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ 保存エラー: {e}")
+                st.success("🎉 釣果を保存しました！")
+                st.balloons()
+                time.sleep(2)
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ 保存エラー: {e}")
         # --- ここまで貼り付け ---
 # タブ2: 釣果の修正・削除)
 # ==========================================
@@ -700,6 +669,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
