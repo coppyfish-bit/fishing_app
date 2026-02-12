@@ -74,9 +74,9 @@ def upload_to_drive(uploaded_file):
     # Secretsから設定を読み込み（関数を呼ぶたびに確実に設定）
     import cloudinary.uploader # 追加
     cloudinary.config(
-        cloud_name = st.secrets["cloudinary"]["cloud_name"],
-        api_key = st.secrets["cloudinary"]["api_key"],
-        api_secret = st.secrets["cloudinary"]["api_secret"],
+        cloud_name = st.secrets["cloudinary"]["dmkvcofvn"],
+        api_key = st.secrets["cloudinary"]["825168477246119"],
+        api_secret = st.secrets["cloudinary"]["w33OhZQVdivf4g2nq_LgxhkjnJk"],
         secure = True
     )
     
@@ -663,6 +663,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
