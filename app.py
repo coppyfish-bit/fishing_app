@@ -18,6 +18,44 @@ from datetime import datetime
 import numpy as np
 import base64
 
+def get_best_station(lat, lon, place_name):
+    """
+    場所名または座標から、最も適切な気象庁観測所を返す
+    """
+    # 観測所マスタ（ご提示いただいたデータ）
+    STATIONS = [
+        {"name": "本渡瀬戸", "lat": 32.26, "lon": 130.13, "code": "HS"},
+        {"name": "苓北",     "lat": 32.28, "lon": 130.20, "code": "RH"},
+        {"name": "口之津",   "lat": 32.36, "lon": 130.12, "code": "KT"},
+        {"name": "八代",     "lat": 32.31, "lon": 130.34, "code": "O5"},
+    ]
+
+    # 1. 場所名（キーワード）による優先判定
+    # 名前から判断できる場合は、計算せずに特定の観測所を返す
+    p_name = place_name if place_name else ""
+    if any(k in p_name for k in ["苓北", "富岡", "都呂々", "通詞"]):
+        return next(s for s in STATIONS if s["name"] == "苓北")
+    if any(k in p_name for k in ["本渡", "瀬戸", "下浦", "栖本"]):
+        return next(s for s in STATIONS if s["name"] == "本渡瀬戸")
+    if any(k in p_name for k in ["八代", "鏡", "日奈久", "不知火"]):
+        return next(s for s in STATIONS if s["name"] == "八代")
+    if any(k in p_name for k in ["口之津", "島原", "南島原", "加津佐"]):
+        return next(s for s in STATIONS if s["name"] == "口之津")
+
+    # 2. 座標による距離計算（キーワードにヒットしなかった場合）
+    # 現在の座標(lat, lon)に最も近い観測所を探す
+    best_s = STATIONS[0]
+    min_dist = float('inf')
+
+    for s in STATIONS:
+        # 三平方の定理で簡易距離を計算
+        dist = ((lat - s["lat"])**2 + (lon - s["lon"])**2)**0.5
+        if dist < min_dist:
+            min_dist = dist
+            best_s = s
+
+    return best_s
+    
 def display_tide_graph(lat, lon, date_str, hit_time_str, tide_val, tide_phase):
     try:
         # 1. ヒット時刻を数値化
@@ -71,7 +109,6 @@ def display_tide_graph(lat, lon, date_str, hit_time_str, tide_val, tide_phase):
     except Exception as e:
         st.error(f"グラフ作成エラー: {e}")
         
-
 try:
     cloudinary.config(
         cloud_name = st.secrets["cloudinary"]["cloud_name"],
@@ -707,6 +744,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
