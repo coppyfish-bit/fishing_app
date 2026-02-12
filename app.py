@@ -695,8 +695,8 @@ with tab2:
                                         except Exception as e:
                                             st.error(f"削除失敗: {e}")
         
-            except Exception as e:
-                st.error(f"タブ2でエラーが発生しました: {e}")
+                                        except Exception as e:
+                                        st.error(f"タブ2でエラーが発生しました: {e}")
         
 with tab3:
         st.subheader("📸 釣果フォトギャラリー")
@@ -750,6 +750,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
