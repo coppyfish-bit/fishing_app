@@ -555,13 +555,20 @@ if st.button("🚀 釣果を記録する", type="primary", use_container_width=T
             # --- 【重要】日時の確定 ---
             target_dt = datetime.combine(date_in, time_in)
             
-            # --- 【重要】緯度・経度の最終決定 ---
-            # 手動選択がある場合はマスターの座標を、なければ判定された座標を使用
-            if manual_sel != "-- 自動判定・新規入力 --" and not m_df.empty:
-                place_info = m_df[m_df['place_name'] == manual_sel].iloc[0]
-                lat_val = place_info['latitude']
-                lon_val = place_info['longitude']
+            # --- 【重要】緯度・経度の最終決定（修正版） ---
+            # manual_sel が初期値や空でない場合のみマスターを参照する
+            if manual_sel not in ["-- リストから選ぶ場合はこちら --", "-- 自動判定・新規入力 --", ""] and not m_df.empty:
+                matched_rows = m_df[m_df['place_name'] == manual_sel]
+                if not matched_rows.empty:
+                    place_info = matched_rows.iloc[0]
+                    lat_val = place_info['latitude']
+                    lon_val = place_info['longitude']
+                else:
+                    # 見つからない場合は写真の解析値を採用
+                    lat_val = final_lat
+                    lon_val = final_lon
             else:
+                # リスト未選択時は写真のGPS(final_lat/lon)を採用
                 lat_val = final_lat
                 lon_val = final_lon
 
@@ -570,7 +577,6 @@ if st.button("🚀 釣果を記録する", type="primary", use_container_width=T
             t_name = get_tide_name(target_dt)
             
             # 2. 潮汐詳細の取得（気象庁データ解析）
-            # HSなどの地点コード小文字変換に対応した関数を呼び出す
             t_info = get_tide_details(lat_val, lon_val, target_dt, final_place_name)
             
             # 3. 気象データの取得（Open-Meteo）
@@ -594,7 +600,7 @@ if st.button("🚀 釣果を記録する", type="primary", use_container_width=T
                 "潮位フェーズ": t_info.get("潮位フェーズ", "不明"), 
                 "場所": final_place_name, 
                 "魚種": final_fish_name, 
-                "全長_cm": final_length if final_length else 0.0,
+                "全長_cm": final_length if final_length is not None else 0.0,
                 "ルアー": lure_in, 
                 "備考": memo_in, 
                 "group_id": final_group_id, 
@@ -612,7 +618,7 @@ if st.button("🚀 釣果を記録する", type="primary", use_container_width=T
             conn.update(spreadsheet=url, data=updated_df)
             
             # 新規地点の場合、場所マスターも自動更新
-            if is_new_place:
+            if is_new_place and final_place_name:
                 new_m = pd.DataFrame([{
                     "group_id": final_group_id, 
                     "place_name": final_place_name, 
@@ -632,12 +638,13 @@ if st.button("🚀 釣果を記録する", type="primary", use_container_width=T
             
             # キャッシュをクリアして最新データを反映させる
             st.cache_data.clear()
+            if 'df' in st.session_state:
+                del st.session_state.df
             time.sleep(2)
             st.rerun()
 
         except Exception as e:
             st.error(f"❌ 保存エラー: {e}")
-            # デバッグ用にエラーの詳細を表示
             import traceback
             st.code(traceback.format_exc())
 # タブ2: 釣果の修正・削除
@@ -826,6 +833,7 @@ with tab3:
             st.write("---")
     else:
         st.info("釣果データがありません。")
+
 
 
 
