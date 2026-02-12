@@ -705,58 +705,58 @@ with tab2:
 # --- ここからタブ3 ---
 with tab3:
     st.subheader("📸 釣果フォトギャラリー")
-        display_count = st.slider("表示件数", 5, 50, 10)
+    # インデントを 'with' より4マス右に統一
+    display_count = st.slider("表示件数", 5, 50, 10)
+    
+    if not df.empty:
+        # 最新のデータから順に取得
+        latest_data = df.sort_values(by=['date', 'time'], ascending=False).head(display_count)
         
-        if not df.empty:
-            # 最新のデータから順に取得
-            latest_data = df.sort_values(by=['date', 'time'], ascending=False).head(display_count)
+        for idx, row in latest_data.iterrows():
+            # --- 1. データの準備 ---
+            img = str(row.get('filename', '')).strip()
+            if not img.startswith('http'): 
+                continue
             
-            for idx, row in latest_data.iterrows():
-                # --- 1. データの準備 ---
-                img = str(row.get('filename', '')).strip()
-                if not img.startswith('http'): continue
-                
-                # 表示用テキストの作成
-                fish_text = f"{row.get('魚種', '不明')} {row.get('全長_cm', '---')}cm"
-                f_date = str(row.get('date'))
-                f_time = str(row.get('time'))[:5]
-                
-                info_text = f"📅 {f_date} {f_time} / 📍 {row.get('場所', '---')}"
-                tide_detail = f"🌊 {row.get('潮位_cm','--')}cm ({row.get('潮位フェーズ','--')})"
-                env_info = f"🍃 {row.get('風向','--')} {row.get('風速','--')}m/s | 🎣 {row.get('ルアー','--')} | ☔ {row.get('降水量','--')}mm"
+            # 表示用テキストの作成
+            fish_text = f"{row.get('魚種', '不明')} {row.get('全長_cm', '---')}cm"
+            f_date = str(row.get('date'))
+            f_time = str(row.get('time'))[:5]
+            
+            info_text = f"📅 {f_date} {f_time} / 📍 {row.get('場所', '---')}"
+            tide_detail = f"🌊 {row.get('潮位_cm','--')}cm ({row.get('潮位フェーズ','--')})"
+            env_info = f"🍃 {row.get('風向','--')} {row.get('風速','--')}m/s | 🎣 {row.get('ルアー','--')} | ☔ {row.get('降水量','--')}mm"
 
-                # --- 2. 写真にデータを重ねて表示 (HTML) ---
-                html_block = (
-                    f'<div style="position:relative; width:100%; border-radius:15px; overflow:hidden; margin-top:20px; box-shadow:0 4px 12px rgba(0,0,0,0.3);">'
-                    f'<img src="{img}" style="width:100%; display:block;">'
-                    # 左上：魚種タグ
-                    f'<div style="position:absolute; top:12px; left:12px; z-index:10; background:rgba(220,20,60,0.95); color:white; padding:5px 14px; border-radius:20px; font-weight:bold; font-size:15px;">'
-                    f'{fish_text}</div>'
-                    # 下部：グラデーションパネル
-                    f'<div style="position:absolute; bottom:0; left:0; right:0; z-index:5; background:linear-gradient(transparent, rgba(0,0,0,0.95) 50%); color:white; padding:40px 15px 15px 15px;">'
-                    f'<div style="font-size:15px; font-weight:bold; margin-bottom:8px; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">{info_text}</div>'
-                    f'<div style="display:flex; flex-wrap:wrap; gap:10px; font-size:12px; font-weight:500;">'
-                    f'<div style="background:rgba(255,255,255,0.2); padding:3px 10px; border-radius:6px; border:0.5px solid rgba(255,255,255,0.3);">{tide_detail}</div>'
-                    f'<div style="background:rgba(255,255,255,0.2); padding:3px 10px; border-radius:6px; border:0.5px solid rgba(255,255,255,0.3);">{env_info}</div>'
-                    f'</div></div></div>'
-                )
-                st.markdown(html_block, unsafe_allow_html=True)
+            # --- 2. 写真にデータを重ねて表示 (HTML) ---
+            html_block = (
+                f'<div style="position:relative; width:100%; border-radius:15px; overflow:hidden; margin-top:20px; box-shadow:0 4px 12px rgba(0,0,0,0.3);">'
+                f'<img src="{img}" style="width:100%; display:block;">'
+                # 左上：魚種タグ
+                f'<div style="position:absolute; top:12px; left:12px; z-index:10; background:rgba(220,20,60,0.95); color:white; padding:5px 14px; border-radius:20px; font-weight:bold; font-size:15px;">'
+                f'{fish_text}</div>'
+                # 下部：グラデーションパネル
+                f'<div style="position:absolute; bottom:0; left:0; right:0; z-index:5; background:linear-gradient(transparent, rgba(0,0,0,0.95) 50%); color:white; padding:40px 15px 15px 15px;">'
+                f'<div style="font-size:15px; font-weight:bold; margin-bottom:8px; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">{info_text}</div>'
+                f'<div style="display:flex; flex-wrap:wrap; gap:10px; font-size:12px; font-weight:500;">'
+                f'<div style="background:rgba(255,255,255,0.2); padding:3px 10px; border-radius:6px; border:0.5px solid rgba(255,255,255,0.3);">{tide_detail}</div>'
+                f'<div style="background:rgba(255,255,255,0.2); padding:3px 10px; border-radius:6px; border:0.5px solid rgba(255,255,255,0.3);">{env_info}</div>'
+                f'</div></div></div>'
+            )
+            st.markdown(html_block, unsafe_allow_html=True)
 
-                # --- 3. 潮汐グラフを表示 ---
-                display_tide_graph(
-                    lat=row.get('latitude', 35.0),
-                    lon=row.get('longitude', 135.0), 
-                    date_str=f_date, 
-                    hit_time_str=f_time,    # ← ここにカンマが必要です
-                    tide_val=row.get('潮位_cm', 150),
-                    tide_phase=row.get('潮位フェーズ', '---')
-                )
-                
-                st.write("---")
-        else:
-            st.info("釣果データがありません。")
-
-
+            # --- 3. 潮汐グラフを表示 ---
+            display_tide_graph(
+                lat=row.get('lat', 32.5),
+                lon=row.get('lon', 130.0), 
+                date_str=f_date, 
+                hit_time_str=f_time,
+                tide_val=row.get('潮位_cm', 150),
+                tide_phase=row.get('潮位フェーズ', '---')
+            )
+            
+            st.write("---")
+    else:
+        st.info("釣果データがありません。")
 
 
 
