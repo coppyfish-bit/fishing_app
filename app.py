@@ -315,9 +315,13 @@ with tab1:
         </style>
     """, unsafe_allow_html=True)
     
-    # --- 2. ファイルアップロードとEXIF解析 ---
+# --- 2. ファイルアップロードとEXIF解析 ---
     uploaded_file = st.file_uploader("📸 写真を選択", type=['jpg', 'jpeg'], key="main_uploader")
-    auto_lat, auto_lon, default_dt = 32.5, 130.0, datetime.now()
+    
+    # 【修正ポイント】ここで定義した変数を最後まで使う
+    final_lat = 32.5
+    final_lon = 130.0
+    default_dt = datetime.now()
 
     if uploaded_file:
         img = Image.open(uploaded_file)
@@ -325,13 +329,18 @@ with tab1:
         if exif:
             geotags = get_geotagging(exif)
             if geotags:
-                lat = get_decimal_from_dms(geotags.get('GPSLatitude'), geotags.get('GPSLatitudeRef'))
-                lon = get_decimal_from_dms(geotags.get('GPSLongitude'), geotags.get('GPSLongitudeRef'))
-                if lat: auto_lat, auto_lon = lat, lon
+                # DMS形式から十進法へ変換
+                lat_res = get_decimal_from_dms(geotags.get('GPSLatitude'), geotags.get('GPSLatitudeRef'))
+                lon_res = get_decimal_from_dms(geotags.get('GPSLongitude'), geotags.get('GPSLongitudeRef'))
+                if lat_res:
+                    final_lat = lat_res
+                    final_lon = lon_res
+            
+            # 日時も取得
             dt_str = exif.get(36867)
-            if dt_str: 
+            if dt_str:
                 try: default_dt = datetime.strptime(dt_str, '%Y:%m:%d %H:%M:%S')
-                except: pass
+                except: passpass
 
     # --- 3. 場所の判定と入力（修正版） ---
     detected_name, detected_id = find_nearest_place(auto_lat, auto_lon, m_df)
@@ -451,17 +460,15 @@ with tab1:
                 st.stop()
         
         # 2. データの保存
-        with st.spinner('📊 データを保存中...'):
+       with st.spinner('📊 データを保存中...'):
             try:
+                # 【重要】Exifから取得した final_lat, final_lon をここで使う！
                 target_dt = datetime.combine(date_in, time_in)
-                # 位置情報の確定（写真から取得、なければデフォルト）
-                lat_val = auto_lat
-                lon_val = auto_lon
                 
-                # 外部データ取得（以前作成した関数群を呼び出し）
+                # 潮汐・天気の取得関数に Exifの座標を渡す
                 t_name = get_tide_name(target_dt)
-                t_info = get_tide_details(lat_val, lon_val, target_dt, final_place_name)
-                temp, wind_s, wind_d, prec = get_weather_data(lat_val, lon_val, target_dt)
+                t_info = get_tide_details(final_lat, final_lon, target_dt, final_place_name)
+                temp, wind_s, wind_d, prec = get_weather_data(final_lat, final_lon, target_dt)
 
                 save_data = {
                     "filename": drive_url, 
@@ -669,6 +676,7 @@ with tab3:
                 st.write("---")
         else:
             st.info("釣果データがありません。")
+
 
 
 
