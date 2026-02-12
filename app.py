@@ -156,9 +156,6 @@ def get_wind_direction_label(degree):
     if degree is None: return "不明"
     labels = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
     return labels[int((degree + 11.25) / 22.5) % 16]
-
-# --- 3. 接続とメイン処理 ---
-
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
@@ -168,29 +165,6 @@ try:
 except Exception as e:
     st.error(f"接続失敗: {e}")
     st.stop()
-
-
-
-            save_data = {
-                "filename": drive_url,
-                "datetime": target_dt.strftime('%Y-%m-%d %H:%M'),
-                "lat": float(lat_to_save), # 数値型を保証
-                "lon": float(lon_to_save),
-                "気温": temp,
-                "風速": wind_s,
-                "風向": get_wind_direction_label(wind_d),
-                "潮位_cm": t_info.get("潮位_cm", 0),
-                "潮名": get_tide_name(target_dt),
-                "場所": final_place_name,
-                "魚種": final_fish_name,
-                "釣り人": angler
-                # ... その他必要項目を追加 ...
-            }
-            
-            # スプレッドシート更新ロジック（省略せずに既存のものを使用してください）
-            st.success(f"保存完了！座標: {lat_to_save}, {lon_to_save}")
-        except Exception as e:
-            st.error(f"保存失敗: {e}")
     
 # --- 2. メイン UI 制御 ---
 st.set_page_config(page_title="Fishing AI Log", layout="centered")
@@ -639,6 +613,7 @@ with tab3:
             st.write("---")
     else:
         st.info("釣果データがありません。")
+
 
 
 
