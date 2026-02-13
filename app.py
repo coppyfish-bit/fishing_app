@@ -164,28 +164,50 @@ if st.session_state.data_ready:
                 res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
                 
                 # 保存データ
+# スプレッドシートのカラム名と完全に一致させる
                 save_data = {
-                    "filename": res.get("secure_url"), "datetime": now.strftime("%Y-%m-%d %H:%M"),
-                    "date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H:%M"),
-                    "lat": float(st.session_state.lat), "lon": float(st.session_state.lon),
-                    "気温": 0, "風速": 0, "風向": "不明", "降水量": 0,
-                    "潮位_cm": 0, "月齢": moon_age,  # 【自動化完了】
-                    "潮名": "不明", "次の満潮まで_分": 0, "次の干潮まで_分": 0,
-                    "直前の満潮_時刻": "", "直前の干潮_時刻": "", "潮位フェーズ": "不明",
-                    "場所": place_name, "魚種": final_fish_name,
-                    "全長_cm": float(st.session_state.length_val), "ルアー": lure,
-                    "備考": memo, "group_id": current_gid, "観測所": "不明", "釣り人": angler
+                    "filename": res.get("secure_url"), 
+                    "datetime": now.strftime("%Y-%m-%d %H:%M"),
+                    "date": now.strftime("%Y-%m-%d"), 
+                    "time": now.strftime("%H:%M"),
+                    "lat": float(st.session_state.lat), 
+                    "lon": float(st.session_state.lon),
+                    "気温": 0, 
+                    "風速": 0,  # 「风速」を「風速」に修正
+                    "風向": "不明", 
+                    "降水量": 0,
+                    "潮位_cm": 0, 
+                    "月齢": moon_age,
+                    "潮名": tide_name,  # ここが「不明」のままだった箇所を確実に代入
+                    "次の満潮まで_分": 0, 
+                    "次の干潮まで_分": 0,
+                    "直前の満潮_時刻": "", 
+                    "直前の干潮_時刻": "", 
+                    "潮位フェーズ": "不明",
+                    "場所": place_name, 
+                    "魚種": final_fish_name,
+                    "全長_cm": float(st.session_state.length_val), 
+                    "ルアー": lure,
+                    "備考": memo, 
+                    "group_id": current_gid, 
+                    "観測所": "不明", 
+                    "釣り人": angler
                 }
 
                 df_main = conn.read(spreadsheet=url, ttl=0)
-                conn.update(spreadsheet=url, data=pd.concat([df_main, pd.DataFrame([save_data])], ignore_index=True))
+                # カラムの順番を固定
+                cols = ["filename","datetime","date","time","lat","lon","気温","風速","風向","降水量","潮位_cm","月齢","潮名","次の満潮まで_分","次の干潮まで_分","直前の満潮_時刻","直前の干潮_時刻","潮位フェーズ","場所","魚種","全長_cm","ルアー","備考","group_id","観測所","釣り人"]
+                new_row_df = pd.DataFrame([save_data])[cols]
+                updated_main = pd.concat([df_main, new_row_df], ignore_index=True)
+                conn.update(spreadsheet=url, data=updated_main)
                 
-                st.success(f"🎉 記録完了！ (月齢: {moon_age})")
+                st.success(f"🎉 記録完了！ ({tide_name} / 月齢: {moon_age})")
                 st.balloons()
                 st.session_state.data_ready = False
                 st.session_state.length_val = 0.0
                 time.sleep(2); st.rerun()
         except Exception as e:
             st.error(f"❌ 保存失敗: {e}")
+
 
 
