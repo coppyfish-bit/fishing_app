@@ -275,11 +275,11 @@ if uploaded_file:
                         # 1. どんな形式で届いても、まずは文字列にする
                         raw_value = str(value).strip()
                                         
-                clean_date_str = str(value).strip()[:16]
-                    temp_dt = datetime.strptime(clean_date_str, '%Y:%m:%d %H:%M')
-                except Exception as e:
-                    # 失敗しても止まらないように
-                    pass
+                    clean_date_str = str(value).strip()[:16]
+                        temp_dt = datetime.strptime(clean_date_str, '%Y:%m:%d %H:%M')
+                    except Exception as e:
+                        # 失敗しても止まらないように
+                        pass
                         
         # セッションに保存
         if temp_dt:
@@ -441,6 +441,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
