@@ -61,14 +61,22 @@ def find_nearest_place(lat, lon, df_master):
     nearest = valid_master.loc[valid_master['dist_m'].idxmin()]
     return (nearest['place_name'], nearest['group_id']) if nearest['dist_m'] <= 500 else ("新規地点", "default")
 
-# 【修正版】月齢計算関数
+# 月齢計算関数（修正版）
 def get_moon_age(date_obj):
-    # ephemの日付形式に変換
     e_date = ephem.Date(date_obj)
-    # 前回新月の日時を取得
     prev_new = ephem.previous_new_moon(e_date)
-    # 差分（月齢）を計算
     return round(float(e_date - prev_new), 1)
+
+# 【追加】月齢から潮名を判定する関数
+def get_tide_name(moon_age):
+    # 月齢を整数に丸めて判定（一般的な釣り用カレンダーの基準）
+    age = int(round(moon_age)) % 30
+    if age in [30, 0, 1, 14, 15, 16]: return "大潮"
+    elif age in [2, 3, 4, 11, 12, 13, 17, 18, 19, 26, 27, 28]: return "中潮"
+    elif age in [5, 6, 7, 8, 20, 21, 22, 23]: return "小潮"
+    elif age in [9, 24]: return "長潮"
+    elif age in [10, 25]: return "若潮"
+    else: return "不明"
 
 # --- 3. 初期設定とセッション状態 ---
 st.set_page_config(page_title="釣果記録アプリ", layout="centered")
@@ -179,4 +187,5 @@ if st.session_state.data_ready:
                 time.sleep(2); st.rerun()
         except Exception as e:
             st.error(f"❌ 保存失敗: {e}")
+
 
