@@ -13,6 +13,14 @@ import ephem
 import requests
 from PIL.ExifTags import TAGS
 
+def safe_strptime(date_str, fmt='%Y/%m/%d %H:%M'):
+    """ミリ秒などが混入していても、フォーマットに合う長さだけ切り取って解析する"""
+    if not date_str: return None
+    # 指定されたフォーマットの文字数（例: %Y/%m/%d %H:%M は 16文字）だけ抽出
+    target_len = len(datetime.now().strftime(fmt))
+    clean_str = str(date_str).replace("-", "/").strip()[:target_len]
+    return datetime.strptime(clean_str, fmt)
+
 # --- 1. 設定 ---
 try:
     cloudinary.config(
@@ -120,55 +128,52 @@ def find_nearest_tide_station(lat, lon):
 # 気象庁から潮位(cm)を取得・計算
 def get_tide_details(station_code, dt):
     try:
-        # 仕様に合わせた年月日文字列の作成 (73-78カラム用)
-        # 年(2桁) + 月(2桁/右詰め) + 日(2桁/右詰め)
-        target_ymd = dt.strftime('%y') + f"{dt.month:2d}" + f"{dt.day:2d}"
+        # 秒やミリ秒を切り捨てた「分」までの基準時刻を作成
+        base_dt = datetime.strptime(dt.strftime('%Y%m%d%H%M'), '%Y%m%d%H%M')
         
-        url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{dt.year}/{station_code}.txt"
+        # 仕様に合わせた年月日文字列の作成 (73-78カラム用)
+        target_ymd = base_dt.strftime('%y') + f"{base_dt.month:2d}" + f"{base_dt.day:2d}"
+        
+        url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{base_dt.year}/{station_code}.txt"
         res = requests.get(url, timeout=10)
         if res.status_code != 200: return None
         
         lines = res.text.splitlines()
         day_data = None
         
-        # 1. 該当する日の行を特定 (73-78カラムが年月日、79-80が地点コード)
+        # 1. 該当する日の行を特定
         for line in lines:
             if len(line) < 80: continue
-            # Pythonのindexは0開始なので、仕様のカラム番号から-1する
             if line[72:78] == target_ymd and line[78:80] == station_code:
                 day_data = line
                 break
         
         if not day_data: return None
 
-        # 2. 毎時潮位の取得 (1-72カラム / 3桁固定×24)
+        # 2. 毎時潮位の取得 (1-72カラム)
         hourly = []
         for i in range(24):
-            # 3文字ずつ正確に切り出し、空白を消して数値化
             val = day_data[i*3 : (i+1)*3].strip()
             hourly.append(int(val))
         
         # 現在時刻の潮位計算
-        t1 = hourly[dt.hour]
-        t2 = hourly[dt.hour+1] if dt.hour < 23 else hourly[dt.hour]
-        current_cm = int(round(t1 + (t2 - t1) * (dt.minute / 60.0)))
+        t1 = hourly[base_dt.hour]
+        t2 = hourly[base_dt.hour+1] if base_dt.hour < 23 else hourly[base_dt.hour]
+        current_cm = int(round(t1 + (t2 - t1) * (base_dt.minute / 60.0)))
 
-        # 3. 満干潮時刻の抽出 (満潮 81-108 / 干潮 109-136)
-        # 時刻4桁 + 潮位3桁 = 7文字セット
+        # 3. 満干潮時刻の抽出
         event_times = []
-        today_prefix = dt.strftime('%Y%m%d')
+        today_prefix = base_dt.strftime('%Y%m%d')
 
         # 満潮 (index 80から7文字×4)
         for i in range(4):
             start = 80 + (i * 7)
             time_part = day_data[start : start+4].strip()
             if time_part and time_part != "9999":
-                # 時刻だけを4桁で取得 (zfillで0埋め)
                 clean_time = time_part.zfill(4)
-                event_times.append({
-                    "time": datetime.strptime(today_prefix + clean_time, '%Y%m%d%H%M'),
-                    "type": "満潮"
-                })
+                # 秒を含まない形式で解析
+                ev_time = datetime.strptime(today_prefix + clean_time, '%Y%m%d%H%M')
+                event_times.append({"time": ev_time, "type": "満潮"})
 
         # 干潮 (index 108から7文字×4)
         for i in range(4):
@@ -176,28 +181,29 @@ def get_tide_details(station_code, dt):
             time_part = day_data[start : start+4].strip()
             if time_part and time_part != "9999":
                 clean_time = time_part.zfill(4)
-                event_times.append({
-                    "time": datetime.strptime(today_prefix + clean_time, '%Y%m%d%H%M'),
-                    "type": "干潮"
-                })
+                # 秒を含まない形式で解析
+                ev_time = datetime.strptime(today_prefix + clean_time, '%Y%m%d%H%M')
+                event_times.append({"time": ev_time, "type": "干潮"})
         
         event_times = sorted(event_times, key=lambda x: x['time'])
 
         # 4. フェーズ計算
         phase_text = "不明"
-        prev_ev = next((e for e in reversed(event_times) if e['time'] <= dt), None)
-        next_ev = next((e for e in event_times if e['time'] > dt), None)
+        prev_ev = next((e for e in reversed(event_times) if e['time'] <= base_dt), None)
+        next_ev = next((e for e in event_times if e['time'] > base_dt), None)
 
         if prev_ev and next_ev:
             duration = (next_ev['time'] - prev_ev['time']).total_seconds()
-            elapsed = (dt - prev_ev['time']).total_seconds()
-            step = max(1, min(9, int((elapsed / duration) * 10)))
-            phase_text = f"上げ{step}分" if prev_ev['type'] == "干潮" else f"下げ{step}分"
+            elapsed = (base_dt - prev_ev['time']).total_seconds()
+            if duration > 0:
+                step = max(1, min(9, int((elapsed / duration) * 10)))
+                phase_text = f"上げ{step}分" if prev_ev['type'] == "干潮" else f"下げ{step}分"
 
         return {"cm": current_cm, "phase": phase_text, "events": event_times}
 
     except Exception as e:
-        st.error(f"潮位解析エラー詳細: {e}")
+        # ここでエラーが出た場合、詳細を表示
+        st.error(f"潮位解析内部エラー: {e}")
         return None
 # 【修正】Open-Meteoを使用した過去48時間降水量対応の気象取得関数
 def get_weather_data_openmeteo(lat, lon, dt):
@@ -273,9 +279,9 @@ if not st.session_state.data_ready:
                     try:
                         # 1. 文字列にして、分まで（最初の16文字）を切り出す
                         # 例: "2025:12:29 15:17:00.4" -> "2025:12:29 15:17"
-                        clean_date_str = str(value).strip()[:16]
+                        clean_val = str(value).strip()[:16].replace(":", "/", 2)
                         # 2. 秒なしのフォーマットで解析
-                        temp_dt = datetime.strptime(clean_date_str, '%Y:%m:%d %H:%M')
+                        temp_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
                     except:
                         pass
         
@@ -440,6 +446,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
