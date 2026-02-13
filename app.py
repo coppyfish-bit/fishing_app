@@ -356,55 +356,55 @@ if st.session_state.data_ready:
     memo = st.text_area("🗒️ 備考")
     
 if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
-        # --- 1. 初期化 (NameError対策) ---
-        tide_cm = 0
-        tide_phase = "不明"
-        high_str = ""
-        low_str = ""
+        # 初期化
         val_next_high = ""
         val_next_low = ""
         
-        if place_name == "" or place_name == "新規地点":
-            st.error("⚠️ 場所名を入力してください。")
-        else:
-            try:
-                with st.spinner("📊 データ取得中..."):
-                    # 写真の撮影日時を取得
-                    target_dt = st.session_state.get('target_dt', datetime.now())
+        try:
+            with st.spinner("📊 翌日のデータも含めて計算中..."):
+                target_dt = st.session_state.get('target_dt', datetime.now())
+                station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
+                
+                # --- 【高度な処理】当日と翌日の2日分を取得 ---
+                tide_data_today = get_tide_details(station_info['code'], target_dt)
+                tomorrow_dt = target_dt + timedelta(days=1)
+                tide_data_tomorrow = get_tide_details(station_info['code'], tomorrow_dt)
+                
+                # 2日分のイベントを一つのリストに合体させる
+                all_events = []
+                if tide_data_today:
+                    all_events.extend(tide_data_today['events'])
+                if tide_data_tomorrow:
+                    all_events.extend(tide_data_tomorrow['events'])
+                
+                # --- 直前・次の計算 ---
+                if all_events:
+                    # 時間順に並び替え
+                    all_events.sort(key=lambda x: x['time'])
                     
-                    # A. 気象・潮汐データの取得
-                    m_age = get_moon_age(target_dt)
-                    t_name = get_tide_name(m_age)
-                    temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(
-                        st.session_state.lat, st.session_state.lon, target_dt
-                    )
+                    # 直前 (過去)
+                    past_events = [e for e in all_events if e['time'] <= target_dt]
+                    last_high = next((e for e in reversed(past_events) if e['type'] == '満潮'), None)
+                    last_low = next((e for e in reversed(past_events) if e['type'] == '干潮'), None)
                     
-                    station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
-                    tide_data = get_tide_details(station_info['code'], target_dt)
-                    
-                    # B. 潮汐データの計算
-                    if tide_data:
-                        tide_cm = tide_data['cm']
-                        tide_phase = tide_data['phase']
-                        
-                        # 直前のイベント
-                        past_events = [e for e in tide_data['events'] if e['time'] <= target_dt]
-                        last_high = next((e for e in reversed(past_events) if e['type'] == '満潮'), None)
-                        last_low = next((e for e in reversed(past_events) if e['type'] == '干潮'), None)
-                        high_str = last_high['time'].strftime('%Y/%m/%d %H:%M:%S') if last_high else ""
-                        low_str = last_low['time'].strftime('%Y/%m/%d %H:%M:%S') if last_low else ""
+                    high_str = last_high['time'].strftime('%Y/%m/%d %H:%M:%S') if last_high else ""
+                    low_str = last_low['time'].strftime('%Y/%m/%d %H:%M:%S') if last_low else ""
 
-                        # 次のイベント
-                        future_events = [e for e in tide_data['events'] if e['time'] > target_dt]
-                        next_high = next((e for e in future_events if e['type'] == '満潮'), None)
-                        next_low = next((e for e in future_events if e['type'] == '干潮'), None)
+                    # 次 (未来) ← ここで「翌日の潮汐」もヒットするようになります！
+                    future_events = [e for e in all_events if e['time'] > target_dt]
+                    next_high = next((e for e in future_events if e['type'] == '満潮'), None)
+                    next_low = next((e for e in future_events if e['type'] == '干潮'), None)
 
-                        # 次の満潮・干潮までの分
-                        if next_high:
-                            val_next_high = int((next_high['time'] - target_dt).total_seconds() / 60)
-                        if next_low:
-                            val_next_low = int((next_low['time'] - target_dt).total_seconds() / 60)
+                    if next_high:
+                        val_next_high = int((next_high['time'] - target_dt).total_seconds() / 60)
+                    if next_low:
+                        val_next_low = int((next_low['time'] - target_dt).total_seconds() / 60)
+                
+                # 今の瞬間の潮位とフェーズは「当日」のデータから取得
+                tide_cm = tide_data_today['cm'] if tide_data_today else 0
+                tide_phase = tide_data_today['phase'] if tide_data_today else "不明"
 
+                # (この後に Cloudinary へのアップロードや save_data の作成を続ける)
                     # C. マスター登録・地点ID特定
                     df_master = conn.read(spreadsheet=url, worksheet="place_master", ttl=0)
                     if force_new or (st.session_state.detected_place == "新規地点"):
@@ -458,6 +458,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
