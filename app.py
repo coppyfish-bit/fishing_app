@@ -98,7 +98,18 @@ if st.session_state.data_ready:
         col1.metric("緯度", f"{st.session_state.lat:.4f}")
         col2.metric("経度", f"{st.session_state.lon:.4f}")
 
-        fish_name = st.text_input("🐟 魚種", placeholder="シーバス、チヌなど")
+        # --- 【ここが追加：魚種の選択と手入力】 ---
+        fish_options = ["スズキ","ヒラスズキ","ボウズ","タチウオ","ターポン","チヌ","キビレ","コチ","ヒラメ","マダイ","キジハタ","カサゴ","ブリ","アジ","メバル","キス", "（手入力）"]
+        selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
+        
+        # 「（手入力）」が選ばれた時だけ入力欄を出す
+        manual_fish_name = ""
+        if selected_fish == "（手入力）":
+            manual_fish_name = st.text_input("魚種名を入力してください", placeholder="例: カクレクマノミ")
+        
+        # 最終的な魚種名を決定
+        final_fish_name = manual_fish_name if selected_fish == "（手入力）" else selected_fish
+        # --------------------------------------------
         length = st.number_input("📏 全長(cm)", min_value=0.0, max_value=200.0, value=40.0, step=0.5)
         place_name = st.text_input("📍 場所名", value="新規地点")
         lure = st.text_input("🪝 ルアー/仕掛け")
@@ -158,3 +169,4 @@ if st.session_state.data_ready:
 
             except Exception as e:
                 st.error(f"❌ 保存に失敗しました: {e}")
+
