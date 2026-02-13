@@ -274,18 +274,13 @@ if uploaded_file:
                     try:
                         # 1. どんな形式で届いても、まずは文字列にする
                         raw_value = str(value).strip()
+                                        
+                clean_date_str = str(value).strip()[:16]
+                    temp_dt = datetime.strptime(clean_date_str, '%Y:%m:%d %H:%M')
+                except Exception as e:
+                    # 失敗しても止まらないように
+                    pass
                         
-                        # 2. 【重要】最初の19文字だけを強制的に抽出
-                        #    例: "2025:12:29 15:17:00.4" -> "2025:12:29 15:17:00"
-                        clean_date_str = raw_value[:19]
-                        
-                        # 3. 秒までのフォーマット（19文字）で解析
-                        temp_dt = datetime.strptime(clean_date_str, '%Y:%m:%d %H:%M:%S')
-                    except Exception as e:
-                        # 万が一失敗した場合は、エラーメッセージを画面に出して確認
-                        st.error(f"⚠️ 日時解析エラー詳細: {e} (元の値: {value})")
-                        pass
-        
         # セッションに保存
         if temp_dt:
             st.session_state.target_dt = temp_dt
@@ -414,7 +409,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                     # 5. 保存データの作成
                     save_data = {
                         "filename": res.get("secure_url"), 
-                        "datetime": target_dt.strftime("%Y-%m-%d %H:%M"),
+                        "datetime": target_dt.strftime("%Y/%m/%d %H:%M"), # 秒をカット
                         "date": target_dt.strftime("%Y-%m-%d"), 
                         "time": target_dt.strftime("%H:%M"),
                         "lat": float(st.session_state.lat), 
@@ -423,8 +418,8 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                         "潮位_cm": tide_cm, "月齢": m_age, "潮名": t_name,
                         "次の満潮まで_分": val_next_high,
                         "次の干潮まで_分": val_next_low,
-                        "直前の満潮_時刻": high_str,
-                        "直前の干潮_時刻": low_str,
+                        "直前の満潮_時刻": last_high['time'].strftime('%Y/%m/%d %H:%M') if last_high else "", # 秒をカット
+                        "直前の干潮_時刻": last_low['time'].strftime('%Y/%m/%d %H:%M') if last_low else "",   # 秒をカット
                         "潮位フェーズ": tide_phase,
                         "場所": place_name, "魚種": final_fish_name,
                         "全長_cm": float(st.session_state.length_val), 
@@ -446,6 +441,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
