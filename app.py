@@ -265,15 +265,18 @@ if uploaded_file:
     if not st.session_state.data_ready:
         exif = img._getexif()
         
-        # --- 2. EXIFから日時を抽出 ---
+      # --- 1. 撮影日時の取得 (ミリ秒などの余分なデータを無視する修正版) ---
         temp_dt = None
         if exif:
             for tag, value in exif.items():
                 tag_name = TAGS.get(tag, tag)
                 if tag_name == 'DateTimeOriginal':
                     try:
-                        temp_dt = datetime.strptime(value, '%Y:%m:%d %H:%M:%S')
-                    except:
+                        # 文字列の最初から19文字目までを切り取る（ミリ秒対策）
+                        clean_date_str = str(value).strip()[:19]
+                        temp_dt = datetime.strptime(clean_date_str, '%Y:%m:%d %H:%M:%S')
+                    except Exception as e:
+                        st.write(f"DEBUG: 日時解析エラー {value} -> {e}") # デバッグ用
                         pass
         
         if temp_dt:
@@ -465,6 +468,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
