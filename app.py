@@ -139,15 +139,17 @@ def get_tide_details(station_code, dt):
         st.write(f"📅 探している日: {target_day}日, 地点: {station_code}")
         
         day_data = None
-        for i, line in enumerate(lines):
-            # 実際のデータの「日」と「コード」の場所を無理やり表示
-            if i < 5: # 最初の5行だけサンプル表示
-                st.write(f"行サンプル[{i}]: 日='{line[72:74]}' コード='{line[78:80]}'")
-            
+for line in lines:
             if len(line) < 80: continue
-            if line[72:74].strip() == target_day and line[78:80] == station_code:
+            
+            # 水産庁方式の厳密な位置
+            # 75-77枚目が「日」 (index 75:77)
+            # 78-80枚目が「地点」 (index 78:80)
+            line_day = line[75:77].strip()
+            line_code = line[78:80]
+            
+            if line_day == str(dt.day) and line_code == station_code:
                 day_data = line
-                st.success(f"🎯 該当行を発見しました！")
                 break
         
         if not day_data:
@@ -349,6 +351,7 @@ if st.session_state.data_ready:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+
 
 
 
