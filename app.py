@@ -118,54 +118,54 @@ def find_nearest_tide_station(lat, lon):
     return TIDE_STATIONS[np.argmin(distances)]
 
 # 気象庁から潮位(cm)を取得・計算
-def get_tide_full_data(station_code, dt):
-    """
-    気象庁のテキストデータを解析し、現在の潮位、満干潮、フェーズを返す
-    """
+def get_tide_details(station_code, dt):
     try:
         year = dt.year
         url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{year}/{station_code}.txt"
         res = requests.get(url, timeout=10)
         if res.status_code != 200: return None
-
+        
         lines = res.text.splitlines()
         target_date_str = dt.strftime('%y%m%d')
-        day_data = next((line for line in lines if line.startswith(target_date_str, 72)), None) # 73列目(index72)から年月日
-
+        day_data = next((line for line in lines if line.startswith(target_date_str, 72)), None)
         if not day_data: return None
 
-        # 1. 毎時潮位の取得 (1-72カラム)
-        hourly_tides = [int(day_data[i*3:i*3+3].strip()) for i in range(24)]
+        # 1. 現在の潮位(cm)を算出
+        hourly = [int(day_data[i*3:i*3+3].strip()) for i in range(24)]
+        t1, t2 = hourly[dt.hour], (hourly[dt.hour+1] if dt.hour < 23 else hourly[dt.hour])
+        current_cm = int(round(t1 + (t2 - t1) * (dt.minute / 60.0)))
+
+        # 2. 満潮・干潮の時刻をリスト化（今日+前後1日の猶予を持たせると正確ですが、簡易的に今日の分で判定）
+        event_times = []
+        # 満潮(81-108), 干潮(109-136)
+        for i in range(4):
+            h_tm = day_data[80+i*7 : 80+i*7+4].strip()
+            if h_tm != "9999":
+                event_times.append({"time": datetime.strptime(dt.strftime('%Y%m%d')+h_tm, '%Y%m%d%H%M'), "type": "満潮"})
+            l_tm = day_data[108+i*7 : 108+i*7+4].strip()
+            if l_tm != "9999":
+                event_times.append({"time": datetime.strptime(dt.strftime('%Y%m%d')+l_tm, '%Y%m%d%H%M'), "type": "干潮"})
         
-        # 2. 満潮データの解析 (81-108カラム: 7桁×4回)
-        high_tides = []
-        for i in range(4):
-            start = 80 + (i * 7)
-            tm = day_data[start:start+4].strip()
-            lv = day_data[start+4:start+7].strip()
-            if tm != "9999":
-                high_tides.append({"time": tm, "level": int(lv)})
+        event_times = sorted(event_times, key=lambda x: x['time'])
 
-        # 3. 干潮データの解析 (109-136カラム: 7桁×4回)
-        low_tides = []
-        for i in range(4):
-            start = 108 + (i * 7)
-            tm = day_data[start:start+4].strip()
-            lv = day_data[start+4:start+7].strip()
-            if tm != "9999":
-                low_tides.append({"time": tm, "level": int(lv)})
+        # 3. 現在時刻の前後にあるイベント（満潮/干潮）を特定
+        prev_ev = next((e for e in reversed(event_times) if e['time'] <= dt), None)
+        next_ev = next((e for e in event_times if e['time'] > dt), None)
 
-        # 現在時刻の潮位計算（線形補間）
-        h, m = dt.hour, dt.minute
-        t1 = hourly_tides[h]
-        t2 = hourly_tides[h+1] if h < 23 else t1
-        current_tide = int(round(t1 + (t2 - t1) * (m / 60.0)))
-
-        return {
-            "current_level": current_tide,
-            "high_tides": high_tides,
-            "low_tides": low_tides
-        }
+        phase_text = "不明"
+        if prev_ev and next_ev:
+            duration = (next_ev['time'] - prev_ev['time']).total_seconds()
+            elapsed = (dt - prev_ev['time']).total_seconds()
+            # 10段階計算 (1〜9)
+            step = int((elapsed / duration) * 10)
+            step = max(1, min(9, step)) # 0と10は満干潮そのものなので1-9に収める
+            
+            if prev_ev['type'] == "干潮": # 干潮から満潮へ = 上げ
+                phase_text = f"上げ{step}分"
+            else: # 満潮から干潮へ = 下げ
+                phase_text = f"下げ{step}分"
+        
+        return {"cm": current_cm, "phase": phase_text, "events": event_times}
     except:
         return None
 
@@ -332,6 +332,7 @@ if st.session_state.data_ready:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+
 
 
 
