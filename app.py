@@ -150,7 +150,7 @@ if st.session_state.data_ready:
                 now = datetime.now()
                 # 【追加】月齢を計算
                 moon_age = get_moon_age(now)
-
+                tide_name = get_tide_name(moon_age)
                 # マスター登録処理
                 current_gid = st.session_state.group_id
                 if st.session_state.detected_place == "新規地点" and place_name != "新規地点":
@@ -208,6 +208,7 @@ if st.session_state.data_ready:
                 time.sleep(2); st.rerun()
         except Exception as e:
             st.error(f"❌ 保存失敗: {e}")
+
 
 
 
