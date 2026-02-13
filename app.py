@@ -82,6 +82,7 @@ if uploaded_file:
     else:
         st.error("❌ この写真にはGPSが含まれていません。")
         st.session_state.data_ready = False
+        
 # --- 5. フォーム入力 ---
 if st.session_state.data_ready:
     with st.form("fishing_form"):
@@ -144,6 +145,7 @@ if st.session_state.data_ready:
                     
             except Exception as e:
                 st.error(f"保存エラー: {e}")
+
 
 
 
