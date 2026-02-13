@@ -11,6 +11,7 @@ import io
 import numpy as np
 import ephem
 import requests
+from PIL.ExifTags import TAGS
 
 # --- 1. 設定 ---
 try:
@@ -57,30 +58,6 @@ TIDE_STATIONS = [
 
 # --- 2. 関数定義 ---
 # (既存の get_geotagging, get_decimal_from_dms, normalize_float, find_nearest_place, get_moon_age, get_tide_name は維持)
-
-def get_exif_datetime(image_file):
-    try:
-        img = Image.open(image_file)
-        exif_data = img._getexif()
-        if exif_data:
-            for tag, value in exif_data.items():
-                tag_name = TAGS.get(tag, tag)
-                if tag_name == 'DateTimeOriginal':
-                    # "2026:01:13 10:30:00" という形式を変換
-                    return datetime.strptime(value, '%Y:%m:%d %H:%M:%S')
-    except Exception:
-        pass
-    return None
-
-# --- ファイルアップロード後の処理 ---
-if uploaded_file:
-    dt_object = get_exif_datetime(uploaded_file)
-    if dt_object:
-        st.info(f"📸 写真から撮影日時を検出しました: {dt_object.strftime('%Y/%m/%d %H:%M')}")
-    else:
-        dt_object = datetime.now() # EXIFがない場合は現在時刻
-        st.warning("⚠️ 写真から撮影日時を取得できませんでした。現在時刻を使用します。")
-
 def get_geotagging(exif):
     if not exif: return None
     gps_info = exif.get(34853)
@@ -280,20 +257,43 @@ uploaded_file = st.file_uploader("📸 釣果写真をアップロード", type=
 if uploaded_file:
     img = Image.open(uploaded_file)
     st.image(img, use_container_width=True)
+    
     if not st.session_state.data_ready:
         exif = img._getexif()
+        
+        # --- 1. 撮影日時の取得 ---
+        dt_object = None
+        if exif:
+            for tag, value in exif.items():
+                tag_name = TAGS.get(tag, tag)
+                if tag_name == 'DateTimeOriginal':
+                    try:
+                        dt_object = datetime.strptime(value, '%Y:%m:%d %H:%M:%S')
+                    except:
+                        pass
+        
+        # 日時が取れたら保存、取れなければ現在時刻
+        if dt_object:
+            st.session_state.target_dt = dt_object
+            st.success(f"📸 撮影日時を検出: {dt_object.strftime('%Y/%m/%d %H:%M')}")
+        else:
+            st.session_state.target_dt = datetime.now()
+            st.warning("⚠️ 撮影日時が不明なため、現在時刻を使用します。")
+
+        # --- 2. GPS情報の取得 ---
         geo = get_geotagging(exif)
         if geo:
             lat = get_decimal_from_dms(geo['GPSLatitude'], geo['GPSLatitudeRef'])
             lon = get_decimal_from_dms(geo['GPSLongitude'], geo['GPSLongitudeRef'])
             if lat and lon:
                 st.session_state.lat, st.session_state.lon = lat, lon
+                # find_nearest_place で場所を特定
                 place, gid = find_nearest_place(lat, lon, df_master)
                 st.session_state.detected_place, st.session_state.group_id = place, gid
                 st.session_state.data_ready = True
         else:
-            st.warning("⚠️ GPSが見つかりません。")
-            st.session_state.data_ready = True
+            st.warning("⚠️ GPS情報が見つかりません。地点を選択してください。")
+            st.session_state.data_ready = TrueTrue
 
 if st.session_state.data_ready:
     with st.expander("📍 位置情報の確認", expanded=True):
@@ -396,6 +396,7 @@ if st.session_state.data_ready:
                 except Exception as e:
                     st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
