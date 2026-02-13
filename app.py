@@ -254,17 +254,17 @@ if st.session_state.data_ready:
             st.error("⚠️ 場所名を入力してください。")
         else:
             try:
-            with st.spinner("📊 気象・潮位データを取得中..."):
-                now = datetime.now()
-                
-                # 1. 気象・月齢を取得
-                m_age = get_moon_age(now)
-                t_name = get_tide_name(m_age)
-                temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(st.session_state.lat, st.session_state.lon, now)
-                
-                # 2. 【新規】最寄りの観測所を特定して潮位を取得
-                station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
-                tide_cm = get_tide_level(station_info['code'], now)
+                with st.spinner("📊 気象・潮位データを取得中..."):
+                    now = datetime.now()
+                    
+                    # 1. 気象・月齢を取得
+                    m_age = get_moon_age(now)
+                    t_name = get_tide_name(m_age)
+                    temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(st.session_state.lat, st.session_state.lon, now)
+                    
+                    # 2. 【新規】最寄りの観測所を特定して潮位を取得
+                    station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
+                    tide_cm = get_tide_level(station_info['code'], now)
                     # マスター登録ロジック
                     if force_new or (st.session_state.detected_place == "新規地点"):
                         if not df_master.empty and place_name in df_master['place_name'].values:
@@ -306,5 +306,6 @@ if st.session_state.data_ready:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+
 
 
