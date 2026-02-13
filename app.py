@@ -148,7 +148,7 @@ if st.session_state.data_ready:
         place_name = st.text_input("📍 新しい場所名を入力してください", value="")
         target_group_id = "default" # 保存時に新規発行
     else:
-        place_name = st.text_input("📍 場所名", value=st.session_state.detected_place)
+        place_name = st.text_input("📍 場所名（すでに登録されたポイントは自動入力されます）", value=st.session_state.detected_place)
         target_group_id = st.session_state.group_id
 
     lure = st.text_input("🪝 ルアー/仕掛け")
@@ -211,6 +211,7 @@ if st.session_state.data_ready:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+
 
 
 
