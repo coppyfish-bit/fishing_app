@@ -99,20 +99,27 @@ if st.session_state.data_ready:
         manual_fish_name = st.text_input("魚種名を入力")
     final_fish_name = manual_fish_name if selected_fish == "（手入力）" else selected_fish
 
+    st.markdown("---")
     st.write("📏 全長 (cm)")
     
-    # 全長調整（ボタンを独立させて即時反映）
+    # --- 全長調整セクション（0.5cm刻み） ---
     c1, c2, c3 = st.columns([1, 2, 1])
     
-    if c1.button("➖ 1", use_container_width=True):
-        st.session_state.length_val = max(0.0, st.session_state.length_val - 1.0)
+    if c1.button("➖ 0.5", use_container_width=True):
+        st.session_state.length_val = max(0.0, st.session_state.length_val - 0.5)
         st.rerun()
 
-    length_text = c2.text_input("数値", value=str(st.session_state.length_val), label_visibility="collapsed")
+    # プレースホルダー付き入力欄
+    length_text = c2.text_input(
+        "全長入力", 
+        value=str(st.session_state.length_val) if st.session_state.length_val > 0 else "", 
+        placeholder="ここに全長（cm）を入力", 
+        label_visibility="collapsed"
+    )
     st.session_state.length_val = normalize_float(length_text)
 
-    if c3.button("➕ 1", use_container_width=True):
-        st.session_state.length_val += 1.0
+    if c3.button("➕ 0.5", use_container_width=True):
+        st.session_state.length_val += 0.5
         st.rerun()
 
     # その他の項目
@@ -169,3 +176,4 @@ if st.session_state.data_ready:
                 st.rerun()
         except Exception as e:
             st.error(f"❌ 保存失敗: {e}")
+
