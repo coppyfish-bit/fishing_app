@@ -375,17 +375,22 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                     tide_data = get_tide_details(station_info['code'], target_dt)
                     
                     # --- 潮位データの整理部分を修正 ---
+                   # --- 潮位データの整理部分を修正 ---
                     if tide_data:
                         tide_cm = tide_data['cm']
                         tide_phase = tide_data['phase']
                         
-                        # 満潮時刻と干潮時刻に「日付」を合体させてフル形式にする
-                        # e['time'] は既に datetime オブジェクトなのでそのまま strftime できます
-                        high_tides = [e['time'].strftime('%Y/%m/%d %H:%M:%S') for e in tide_data['events'] if e['type'] == '満潮']
-                        low_tides = [e['time'].strftime('%Y/%m/%d %H:%M:%S') for e in tide_data['events'] if e['type'] == '干潮']
+                        # 1. 写真の時刻 (target_dt) より前のイベントだけを抽出
+                        past_events = [e for e in tide_data['events'] if e['time'] <= target_dt]
                         
-                        high_str = ", ".join(high_tides)
-                        low_str = ", ".join(low_tides)
+                        # 2. その中から「満潮」と「干潮」の最新(一番最後)をそれぞれ1つ取得
+                        last_high = next((e for e in reversed(past_events) if e['type'] == '満潮'), None)
+                        last_low = next((e for e in reversed(past_events) if e['type'] == '干潮'), None)
+                        
+                        # 3. 指定の形式で文字列化（なければ空文字）
+                        high_str = last_high['time'].strftime('%Y/%m/%d %H:%M:%S') if last_high else ""
+                        low_str = last_low['time'].strftime('%Y/%m/%d %H:%M:%S') if last_low else ""
+                        
                     else:
                         tide_cm = 0
                         tide_phase = "不明"
@@ -443,6 +448,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
