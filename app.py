@@ -109,19 +109,19 @@ if st.session_state.data_ready:
         
         # 最終的な魚種名を決定
         final_fish_name = manual_fish_name if selected_fish == "（手入力）" else selected_fish
-        # --- 【全長のテキスト入力 + 増減ボタン】 ---
+       # 2. 全長調整（フォーム外に置くことで即時反映させる）
         st.write("📏 全長 (cm)")
-        length_input = st.text_input("数値入力（全角OK）", value=str(st.session_state.length_val), label_visibility="collapsed")
+        c1, c2, c3 = st.columns([1, 2, 1])
+        if c1.button("➖", use_container_width=True):
+            st.session_state.length_val = max(0.0, st.session_state.length_val - 1.0)
         
-        # ボタンを横に並べる
-        b_col1, b_col2 = st.columns(2)
-        if b_col1.form_submit_button("➖ 1cm減らす", use_container_width=True):
-            st.session_state.length_val = max(0.0, normalize_float(length_input) - 1.0)
+        # 中央の入力欄を更新
+        length_text = c2.text_input("全長入力", value=str(st.session_state.length_val), label_visibility="collapsed")
+        st.session_state.length_val = normalize_float(length_text)
+        
+        if c3.button("➕", use_container_width=True):
+            st.session_state.length_val += 1.0
             st.rerun()
-        if b_col2.form_submit_button("➕ 1cm増やす", use_container_width=True):
-            st.session_state.length_val = normalize_float(length_input) + 1.0
-            st.rerun()
-        # ------------------------------------------
         place_name = st.text_input("📍 場所名", value="新規地点")
         lure = st.text_input("🪝 ルアー/仕掛け")
         angler = st.selectbox("👤 釣り人", ["長元", "川口","山川"])
@@ -180,5 +180,6 @@ if st.session_state.data_ready:
 
             except Exception as e:
                 st.error(f"❌ 保存に失敗しました: {e}")
+
 
 
