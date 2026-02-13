@@ -69,12 +69,12 @@ if uploaded_file:
         # 緯度経度を大きな文字で表示
         st.metric(label="緯度", value=f"{st.session_state.lat:.4f}")
         st.metric(label="経度", value=f"{st.session_state.lon:.4f}")
-        
-        else:
-            st.error("位置情報の計算に失敗しました。")
     else:
+            st.error("位置情報の計算に失敗しました。")
+            st.session_state.data_ready = False
+else:
         st.error("❌ この写真にはGPSが含まれていません。")
-
+        st.session_state.data_ready = False
 # --- 5. フォーム入力 ---
 if st.session_state.data_ready:
     with st.form("fishing_form"):
@@ -137,5 +137,6 @@ if st.session_state.data_ready:
                     
             except Exception as e:
                 st.error(f"保存エラー: {e}")
+
 
 
