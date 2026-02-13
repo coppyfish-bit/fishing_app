@@ -118,30 +118,56 @@ def find_nearest_tide_station(lat, lon):
     return TIDE_STATIONS[np.argmin(distances)]
 
 # 気象庁から潮位(cm)を取得・計算
-def get_tide_level(station_code, dt):
+def get_tide_full_data(station_code, dt):
+    """
+    気象庁のテキストデータを解析し、現在の潮位、満干潮、フェーズを返す
+    """
     try:
         year = dt.year
         url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{year}/{station_code}.txt"
         res = requests.get(url, timeout=10)
-        if res.status_code != 200: return 0
-        
+        if res.status_code != 200: return None
+
         lines = res.text.splitlines()
         target_date_str = dt.strftime('%y%m%d')
-        day_data = next((line for line in lines if line.startswith(target_date_str)), None)
+        day_data = next((line for line in lines if line.startswith(target_date_str, 72)), None) # 73列目(index72)から年月日
+
+        if not day_data: return None
+
+        # 1. 毎時潮位の取得 (1-72カラム)
+        hourly_tides = [int(day_data[i*3:i*3+3].strip()) for i in range(24)]
         
-        if not day_data: return 0
-        
-        # 毎時潮位を24個取得
-        hourly_tides = [int(day_data[7+(i*3):7+(i*3)+3].strip()) for i in range(24)]
-        
-        # 線形補間
+        # 2. 満潮データの解析 (81-108カラム: 7桁×4回)
+        high_tides = []
+        for i in range(4):
+            start = 80 + (i * 7)
+            tm = day_data[start:start+4].strip()
+            lv = day_data[start+4:start+7].strip()
+            if tm != "9999":
+                high_tides.append({"time": tm, "level": int(lv)})
+
+        # 3. 干潮データの解析 (109-136カラム: 7桁×4回)
+        low_tides = []
+        for i in range(4):
+            start = 108 + (i * 7)
+            tm = day_data[start:start+4].strip()
+            lv = day_data[start+4:start+7].strip()
+            if tm != "9999":
+                low_tides.append({"time": tm, "level": int(lv)})
+
+        # 現在時刻の潮位計算（線形補間）
         h, m = dt.hour, dt.minute
         t1 = hourly_tides[h]
         t2 = hourly_tides[h+1] if h < 23 else t1
-        tide_cm = t1 + (t2 - t1) * (m / 60.0)
-        return int(round(tide_cm))
+        current_tide = int(round(t1 + (t2 - t1) * (m / 60.0)))
+
+        return {
+            "current_level": current_tide,
+            "high_tides": high_tides,
+            "low_tides": low_tides
+        }
     except:
-        return 0
+        return None
 
 # 【修正】Open-Meteoを使用した過去48時間降水量対応の気象取得関数
 def get_weather_data_openmeteo(lat, lon, dt):
@@ -306,6 +332,7 @@ if st.session_state.data_ready:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+
 
 
 
