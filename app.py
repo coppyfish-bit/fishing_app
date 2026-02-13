@@ -356,64 +356,74 @@ if st.session_state.data_ready:
     memo = st.text_area("🗒️ 備考")
     
 if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
+        # --- 1. 最初にすべての変数を空の値で初期化する (NameError対策) ---
+        tide_cm = 0
+        tide_phase = "不明"
+        high_str = ""
+        low_str = ""
+        val_next_high = ""
+        val_next_low = ""
+        
         if place_name == "" or place_name == "新規地点":
             st.error("⚠️ 場所名を入力してください。")
         else:
             try:
-                with st.spinner("📊 写真撮影時のデータを取得中..."):
-                    # セッションから日時を取り出す（なければ現在時刻）
+                with st.spinner("📊 データ取得中..."):
                     target_dt = st.session_state.get('target_dt', datetime.now())
                     
-                    # 1. 気象・潮位データの取得
-                    m_age = get_moon_age(target_dt)
-                    t_name = get_tide_name(m_age)
-                    temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(
-                        st.session_state.lat, st.session_state.lon, target_dt
-                    )
-                    
+                    # 潮位データの取得
                     station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
                     tide_data = get_tide_details(station_info['code'], target_dt)
-
-                    # --- 潮位データの整理部分を修正 ---
+                    
+                    # --- 2. データがある場合のみ中身を計算して上書きする ---
                     if tide_data:
                         tide_cm = tide_data['cm']
                         tide_phase = tide_data['phase']
                         
-                        # --- 【直前】のイベント特定 ---
+                        # 直前のイベント
                         past_events = [e for e in tide_data['events'] if e['time'] <= target_dt]
                         last_high = next((e for e in reversed(past_events) if e['type'] == '満潮'), None)
                         last_low = next((e for e in reversed(past_events) if e['type'] == '干潮'), None)
-                        
                         high_str = last_high['time'].strftime('%Y/%m/%d %H:%M:%S') if last_high else ""
                         low_str = last_low['time'].strftime('%Y/%m/%d %H:%M:%S') if last_low else ""
-                    
-                        # --- 【次】のイベント特定と差分（分）の計算 ---
+
+                        # 次のイベント
                         future_events = [e for e in tide_data['events'] if e['time'] > target_dt]
                         next_high = next((e for e in future_events if e['type'] == '満潮'), None)
                         next_low = next((e for e in future_events if e['type'] == '干潮'), None)
-                    
-                        # 差分を分で計算（未来の時刻 - 写真の時刻）
-                        next_high_min = int((next_high['time'] - target_dt).total_seconds() / 60) if next_high else 0
-                        next_low_min = int((next_low['time'] - target_dt).total_seconds() / 60) if next_low else 0
-                        
-                    else:
-                        tide_cm = 0
-                        tide_phase = "不明"
-                        high_str = ""
-                        low_str = ""
-                        next_high_min = 0
-                        next_low_min = 0
-                    
-                    # --- save_data の中身も書き換え ---
-                    save_data = {
-                        # ... 他の項目はそのまま ...
-                        "次の満潮まで_分": next_high_min,
-                        "次の干潮まで_分": next_low_min,
-                        "直前の満潮_時刻": high_str,
-                        "直前の干潮_時刻": low_str,
-                        # ...
-                    }
 
+                        # 差分（分）の計算
+                        if next_high:
+                            val_next_high = int((next_high['time'] - target_dt).total_seconds() / 60)
+                        if next_low:
+                            val_next_low = int((next_low['time'] - target_dt).total_seconds() / 60)
+
+                    # --- 3. save_data の作成 (変数が必ず存在するので NameError は起きない) ---
+                                       save_data = {
+                    "filename": res.get("secure_url"), 
+                    "datetime": target_dt.strftime("%Y-%m-%d %H:%M"),
+                    "date": target_dt.strftime("%Y-%m-%d"), 
+                    "time": target_dt.strftime("%H:%M"),
+                    "lat": float(st.session_state.lat), 
+                    "lon": float(st.session_state.lon),
+                    "気温": temp, "風速": wind_s, "風向": wind_d, "降水量": rain_48, 
+                    "潮位_cm": tide_cm, 
+                    "月齢": m_age, 
+                    "潮名": t_name,
+                    "次の満潮まで_分": val_next_high,  # ← 計算した変数を代入
+                    "次の干潮まで_分": val_next_low,   # ← 計算した変数を代入
+                    "直前の満潮_時刻": high_str, 
+                    "直前の干潮_時刻": low_str,
+                    "潮位フェーズ": tide_phase,
+                    "場所": place_name, 
+                    "魚種": final_fish_name,
+                    "全長_cm": float(st.session_state.length_val), 
+                    "ルアー": lure, 
+                    "備考": memo, 
+                    "group_id": target_group_id, 
+                    "観測所": station_info['name'], 
+                    "釣り人": angler
+                }
                     # 2. マスター登録・ID特定
                     df_master = conn.read(spreadsheet=url, worksheet="place_master", ttl=0)
                     if force_new or (st.session_state.detected_place == "新規地点"):
@@ -472,6 +482,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
