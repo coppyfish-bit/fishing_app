@@ -356,7 +356,7 @@ if st.session_state.data_ready:
     memo = st.text_area("🗒️ 備考")
     
 if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
-        # --- 1. 最初にすべての変数を空の値で初期化する (NameError対策) ---
+        # --- 1. 初期化 (NameError対策) ---
         tide_cm = 0
         tide_phase = "不明"
         high_str = ""
@@ -369,13 +369,20 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
         else:
             try:
                 with st.spinner("📊 データ取得中..."):
+                    # 写真の撮影日時を取得
                     target_dt = st.session_state.get('target_dt', datetime.now())
                     
-                    # 潮位データの取得
+                    # A. 気象・潮汐データの取得
+                    m_age = get_moon_age(target_dt)
+                    t_name = get_tide_name(m_age)
+                    temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(
+                        st.session_state.lat, st.session_state.lon, target_dt
+                    )
+                    
                     station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
                     tide_data = get_tide_details(station_info['code'], target_dt)
                     
-                    # --- 2. データがある場合のみ中身を計算して上書きする ---
+                    # B. 潮汐データの計算
                     if tide_data:
                         tide_cm = tide_data['cm']
                         tide_phase = tide_data['phase']
@@ -392,39 +399,13 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                         next_high = next((e for e in future_events if e['type'] == '満潮'), None)
                         next_low = next((e for e in future_events if e['type'] == '干潮'), None)
 
-                        # 差分（分）の計算
+                        # 次の満潮・干潮までの分
                         if next_high:
                             val_next_high = int((next_high['time'] - target_dt).total_seconds() / 60)
                         if next_low:
                             val_next_low = int((next_low['time'] - target_dt).total_seconds() / 60)
 
-                    # --- 3. save_data の作成 (変数が必ず存在するので NameError は起きない) ---
-                                       save_data = {
-                    "filename": res.get("secure_url"), 
-                    "datetime": target_dt.strftime("%Y-%m-%d %H:%M"),
-                    "date": target_dt.strftime("%Y-%m-%d"), 
-                    "time": target_dt.strftime("%H:%M"),
-                    "lat": float(st.session_state.lat), 
-                    "lon": float(st.session_state.lon),
-                    "気温": temp, "風速": wind_s, "風向": wind_d, "降水量": rain_48, 
-                    "潮位_cm": tide_cm, 
-                    "月齢": m_age, 
-                    "潮名": t_name,
-                    "次の満潮まで_分": val_next_high,  # ← 計算した変数を代入
-                    "次の干潮まで_分": val_next_low,   # ← 計算した変数を代入
-                    "直前の満潮_時刻": high_str, 
-                    "直前の干潮_時刻": low_str,
-                    "潮位フェーズ": tide_phase,
-                    "場所": place_name, 
-                    "魚種": final_fish_name,
-                    "全長_cm": float(st.session_state.length_val), 
-                    "ルアー": lure, 
-                    "備考": memo, 
-                    "group_id": target_group_id, 
-                    "観測所": station_info['name'], 
-                    "釣り人": angler
-                }
-                    # 2. マスター登録・ID特定
+                    # C. マスター登録・地点ID特定
                     df_master = conn.read(spreadsheet=url, worksheet="place_master", ttl=0)
                     if force_new or (st.session_state.detected_place == "新規地点"):
                         if not df_master.empty and place_name in df_master['place_name'].values:
@@ -437,37 +418,32 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                     else:
                         target_group_id = df_master[df_master['place_name'] == place_name]['group_id'].values[0] if not df_master.empty else 0
 
-                    # 3. 画像アップロード
+                    # D. 画像アップロード
                     uploaded_file.seek(0)
                     res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
                     
-                    # 4. 保存データの作成
+                    # E. 保存データの作成 (1回に集約)
                     save_data = {
-                    "filename": res.get("secure_url"), 
-                    "datetime": target_dt.strftime("%Y-%m-%d %H:%M"),
-                    "date": target_dt.strftime("%Y-%m-%d"), 
-                    "time": target_dt.strftime("%H:%M"),
-                    "lat": float(st.session_state.lat), 
-                    "lon": float(st.session_state.lon),
-                    "気温": temp, "風速": wind_s, "風向": wind_d, "降水量": rain_48, 
-                    "潮位_cm": tide_cm, 
-                    "月齢": m_age, 
-                    "潮名": t_name,
-                    "次の満潮まで_分": val_next_high,  # ← 計算した変数を代入
-                    "次の干潮まで_分": val_next_low,   # ← 計算した変数を代入
-                    "直前の満潮_時刻": high_str, 
-                    "直前の干潮_時刻": low_str,
-                    "潮位フェーズ": tide_phase,
-                    "場所": place_name, 
-                    "魚種": final_fish_name,
-                    "全長_cm": float(st.session_state.length_val), 
-                    "ルアー": lure, 
-                    "備考": memo, 
-                    "group_id": target_group_id, 
-                    "観測所": station_info['name'], 
-                    "釣り人": angler
-                }
-                    # --- ここで IndentationError が起きていた部分を修正 ---
+                        "filename": res.get("secure_url"), 
+                        "datetime": target_dt.strftime("%Y-%m-%d %H:%M"),
+                        "date": target_dt.strftime("%Y-%m-%d"), 
+                        "time": target_dt.strftime("%H:%M"),
+                        "lat": float(st.session_state.lat), 
+                        "lon": float(st.session_state.lon),
+                        "気温": temp, "風速": wind_s, "風向": wind_d, "降水量": rain_48, 
+                        "潮位_cm": tide_cm, "月齢": m_age, "潮名": t_name,
+                        "次の満潮まで_分": val_next_high,
+                        "次の干潮まで_分": val_next_low,
+                        "直前の満潮_時刻": high_str,
+                        "直前の干潮_時刻": low_str,
+                        "潮位フェーズ": tide_phase,
+                        "場所": place_name, "魚種": final_fish_name,
+                        "全長_cm": float(st.session_state.length_val), 
+                        "ルアー": lure, "備考": memo, "group_id": target_group_id, 
+                        "観測所": station_info['name'], "釣り人": angler
+                    }
+
+                    # F. スプレッドシート更新
                     df_main = conn.read(spreadsheet=url, ttl=0)
                     cols = ["filename","datetime","date","time","lat","lon","気温","風速","風向","降水量","潮位_cm","月齢","潮名","次の満潮まで_分","次の干潮まで_分","直前の満潮_時刻","直前の干潮_時刻","潮位フェーズ","場所","魚種","全長_cm","ルアー","備考","group_id","観測所","釣り人"]
                     new_row_df = pd.DataFrame([save_data])[cols]
@@ -482,32 +458,6 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
