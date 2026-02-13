@@ -129,7 +129,7 @@ def get_tide_details(station_code, dt):
         lines = res.text.splitlines()
         day_data = None
         
-        # 今日のデータを特定
+        # 1. 今日のデータ行を特定 (位置インデックス 75-77: 日, 78-80: 地点)
         for line in lines:
             if len(line) < 80:
                 continue
@@ -142,30 +142,38 @@ def get_tide_details(station_code, dt):
         if not day_data:
             return None
 
-        # 潮位計算
+        # 2. 現在の潮位を算出
         hourly = [int(day_data[i*3:(i+1)*3].strip()) for i in range(24)]
         t1, t2 = hourly[dt.hour], (hourly[dt.hour+1] if dt.hour < 23 else hourly[dt.hour])
         current_cm = int(round(t1 + (t2 - t1) * (dt.minute / 60.0)))
 
-        # 満干潮時刻の抽出（ここを修正しました）
+        # 3. 満干潮時刻の抽出 ([:4]を追加して4桁に限定)
         event_times = []
         for i in range(4):
+            # 満潮(80+), 干潮(108+)
             h_base, l_base = 80 + (i * 7), 108 + (i * 7)
-            h_tm = day_data[h_base:h_base+4].strip()
-            if h_tm and h_tm != "9999":
-                # 時刻部分のみを確実に4桁で取得
-                clean_tm = h_tm.zfill(4)[:4]
-                event_times.append({"time": datetime.strptime(dt.strftime('%Y%m%d')+clean_tm, '%Y%m%d%H%M'), "type": "満潮"})
             
-            l_tm = day_data[l_base:l_base+4].strip()
-            if l_tm and l_tm != "9999":
-                # 時刻部分のみを確実に4桁で取得
-                clean_tm = l_tm.zfill(4)[:4]
-                event_times.append({"time": datetime.strptime(dt.strftime('%Y%m%d')+clean_tm, '%Y%m%d%H%M'), "type": "干潮"})
+            # 満潮の解析
+            h_tm_raw = day_data[h_base:h_base+4].strip()
+            if h_tm_raw and h_tm_raw != "9999":
+                clean_h = h_tm_raw.zfill(4)[:4] # 確実に4桁にする
+                event_times.append({
+                    "time": datetime.strptime(dt.strftime('%Y%m%d') + clean_h, '%Y%m%d%H%M'),
+                    "type": "満潮"
+                })
+            
+            # 干潮の解析
+            l_tm_raw = day_data[l_base:l_base+4].strip()
+            if l_tm_raw and l_tm_raw != "9999":
+                clean_l = l_tm_raw.zfill(4)[:4] # 確実に4桁にする
+                event_times.append({
+                    "time": datetime.strptime(dt.strftime('%Y%m%d') + clean_l, '%Y%m%d%H%M'),
+                    "type": "干潮"
+                })
         
         event_times = sorted(event_times, key=lambda x: x['time'])
         
-        # 10段階フェーズ判定
+        # 4. 10段階フェーズ判定
         phase_text = "不明"
         prev_ev = next((e for e in reversed(event_times) if e['time'] <= dt), None)
         next_ev = next((e for e in event_times if e['time'] > dt), None)
@@ -179,6 +187,7 @@ def get_tide_details(station_code, dt):
         return {"cm": current_cm, "phase": phase_text, "events": event_times}
 
     except Exception as e:
+        # 竹山の叫び（デバッグ表示）
         st.error(f"潮位解析エラー詳細: {e}")
         return None
 # 【修正】Open-Meteoを使用した過去48時間降水量対応の気象取得関数
@@ -372,6 +381,7 @@ if st.session_state.data_ready:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+
 
 
 
