@@ -389,11 +389,11 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                     uploaded_file.seek(0)
                     res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
                     
-                    # 5. 保存データの作成
+                    # --- 6. 保存データの作成 (カッコの閉じ忘れに注意) ---
                     save_data = {
                         "filename": res.get("secure_url"), 
-                        "datetime": target_dt.strftime("%Y/%m/%d %H:%M"), # 秒をカット
-                        "date": target_dt.strftime("%Y-%m-%d"), 
+                        "datetime": target_dt.strftime("%Y/%m/%d %H:%M"),
+                        "date": target_dt.strftime("%Y/%m/%d"), 
                         "time": target_dt.strftime("%H:%M"),
                         "lat": float(st.session_state.lat), 
                         "lon": float(st.session_state.lon),
@@ -401,16 +401,16 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                         "潮位_cm": tide_cm, "月齢": m_age, "潮名": t_name,
                         "次の満潮まで_分": val_next_high,
                         "次の干潮まで_分": val_next_low,
-                        "直前の満潮_時刻": last_high['time'].strftime('%Y/%m/%d %H:%M') if last_high else "", # 秒をカット
-                        "直前の干潮_時刻": last_low['time'].strftime('%Y/%m/%d %H:%M') if last_low else "",   # 秒をカット
+                        "直前の満潮_時刻": high_str,
+                        "直前の干潮_時刻": low_str,
                         "潮位フェーズ": tide_phase,
                         "場所": place_name, "魚種": final_fish_name,
                         "全長_cm": float(st.session_state.length_val), 
                         "ルアー": lure, "備考": memo, "group_id": target_group_id, 
                         "観測所": station_info['name'], "釣り人": angler
-                    }
+                    } # ← ここでしっかり } を閉じる
 
-                    # 6. スプレッドシート更新
+                    # --- 7. スプレッドシート更新 ---
                     df_main = conn.read(spreadsheet=url, ttl=0)
                     cols = ["filename","datetime","date","time","lat","lon","気温","風速","風向","降水量","潮位_cm","月齢","潮名","次の満潮まで_分","次の干潮まで_分","直前の満潮_時刻","直前の干潮_時刻","潮位フェーズ","場所","魚種","全長_cm","ルアー","備考","group_id","観測所","釣り人"]
                     new_row_df = pd.DataFrame([save_data])[cols]
@@ -421,9 +421,10 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                     st.session_state.data_ready = False
                     time.sleep(2); st.rerun()
 
-                    except Exception as e:
-                        st.error(f"❌ 保存失敗: {e}")
+            except Exception as e: # ← ここが 424行目。tryと同じ深さにする
+                st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
