@@ -58,6 +58,29 @@ TIDE_STATIONS = [
 # --- 2. 関数定義 ---
 # (既存の get_geotagging, get_decimal_from_dms, normalize_float, find_nearest_place, get_moon_age, get_tide_name は維持)
 
+def get_exif_datetime(image_file):
+    try:
+        img = Image.open(image_file)
+        exif_data = img._getexif()
+        if exif_data:
+            for tag, value in exif_data.items():
+                tag_name = TAGS.get(tag, tag)
+                if tag_name == 'DateTimeOriginal':
+                    # "2026:01:13 10:30:00" という形式を変換
+                    return datetime.strptime(value, '%Y:%m:%d %H:%M:%S')
+    except Exception:
+        pass
+    return None
+
+# --- ファイルアップロード後の処理 ---
+if uploaded_file:
+    dt_object = get_exif_datetime(uploaded_file)
+    if dt_object:
+        st.info(f"📸 写真から撮影日時を検出しました: {dt_object.strftime('%Y/%m/%d %H:%M')}")
+    else:
+        dt_object = datetime.now() # EXIFがない場合は現在時刻
+        st.warning("⚠️ 写真から撮影日時を取得できませんでした。現在時刻を使用します。")
+
 def get_geotagging(exif):
     if not exif: return None
     gps_info = exif.get(34853)
@@ -401,6 +424,7 @@ if st.session_state.data_ready:
                         time.sleep(2); st.rerun()
                 except Exception as e:
                     st.error(f"❌ 保存失敗: {e}")
+
 
 
 
