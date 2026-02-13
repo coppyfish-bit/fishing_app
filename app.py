@@ -333,24 +333,22 @@ if st.session_state.data_ready:
                 st.error("⚠️ 場所名を入力してください。")
             else:
                 try:
-                    with st.spinner("📊 写真撮影時の気象・潮位データを取得中..."):
-                        # 【重要】現在の時刻ではなく、写真の解析日時（dt_object）を使用する
-                        # もし dt_object が定義されていない場合（手動入力など）の保険として now も用意
-                        target_dt = dt_object if 'dt_object' in locals() else datetime.now()
+                    with st.spinner("📊 写真の撮影時のデータを取得中..."):
+                        # 【重要】ここを dt_object に固定する
+                        target_dt = dt_object 
                         
-                        # 1. 気象・月齢（target_dtを渡す）
+                        # 1. 気象・月齢（撮影時の日時を渡す）
                         m_age = get_moon_age(target_dt)
                         t_name = get_tide_name(m_age)
-                        # get_weather_data_openmeteo が過去データを取得できる仕様であることを前提
                         temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(
                             st.session_state.lat, st.session_state.lon, target_dt
                         )
                         
-                        # 2. 潮位詳細（写真の日時 target_dt を渡す）
+                        # 2. 潮位詳細（撮影時の日時を渡す）
                         station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
                         tide_data = get_tide_details(station_info['code'], target_dt)
                         
-                        # --- データの整理 ---
+                        # --- 潮位データの整理 ---
                         if tide_data:
                             tide_cm = tide_data['cm']
                             tide_phase = tide_data['phase']
@@ -359,71 +357,45 @@ if st.session_state.data_ready:
                             high_str = ", ".join(high_tides)
                             low_str = ", ".join(low_tides)
                         else:
-                            tide_cm = 0
-                            tide_phase = "不明"
-                            high_str = ""
-                            low_str = ""
+                            tide_cm = 0; tide_phase = "不明"; high_str = ""; low_str = ""
     
-                        # (マスター登録ロジック)
-                        if force_new or (st.session_state.detected_place == "新規地点"):
-                            df_master = conn.read(spreadsheet=url, worksheet="place_master", ttl=0)
-                            if not df_master.empty and place_name in df_master['place_name'].values:
-                                target_group_id = df_master[df_master['place_name'] == place_name]['group_id'].values[0]
-                            else:
-                                new_gid = int(df_master['group_id'].max()) + 1 if not df_master.empty else 0
-                                new_place_df = pd.DataFrame([{"group_id": new_gid, "place_name": place_name, "latitude": st.session_state.lat, "longitude": st.session_state.lon}])
-                                conn.update(spreadsheet=url, worksheet="place_master", data=pd.concat([df_master, new_place_df], ignore_index=True))
-                                target_group_id = new_gid
-                        else:
-                            # 既存地点の場合は既存のIDを特定（必要に応じて追加）
-                            df_master = conn.read(spreadsheet=url, worksheet="place_master", ttl=0)
-                            target_group_id = df_master[df_master['place_name'] == place_name]['group_id'].values[0] if not df_master.empty else 0
-    
-                        # Cloudinaryアップロード
+                        # (Cloudinaryアップロードなど...)
                         uploaded_file.seek(0)
                         res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
                         
-                        # --- データの保存 (target_dt を使用して日付・時刻を固定) ---
+                        # --- 保存用データの作成 ---
+                        # ここで dt_object (target_dt) の日付を文字列にして渡す
                         save_data = {
                             "filename": res.get("secure_url"), 
-                            "datetime": target_dt.strftime("%Y-%m-%d %H:%M"),
-                            "date": target_dt.strftime("%Y-%m-%d"), 
-                            "time": target_dt.strftime("%H:%M"),
-                            "lat": float(st.session_state.lat), "lon": float(st.session_state.lon),
-                            "気温": temp if temp else 0,
-                            "風速": wind_s if wind_s else 0,
-                            "風向": wind_d,
-                            "降水量": rain_48, 
-                            "潮位_cm": tide_cm,
-                            "月齢": m_age, 
-                            "潮名": t_name, 
-                            "次の満潮まで_分": 0, # ロジックが必要ならここに追加
-                            "次の干潮まで_分": 0, 
-                            "直前の満潮_時刻": high_str,
-                            "直前の干潮_時刻": low_str,
+                            "datetime": target_dt.strftime("%Y-%m-%d %H:%M"), # 撮影日時
+                            "date": target_dt.strftime("%Y-%m-%d"),          # 撮影日
+                            "time": target_dt.strftime("%H:%M"),             # 撮影時間
+                            "lat": float(st.session_state.lat), 
+                            "lon": float(st.session_state.lon),
+                            "気温": temp, "風速": wind_s, "風向": wind_d, "降水量": rain_48, 
+                            "潮位_cm": tide_cm, "月齢": m_age, "潮名": t_name,
+                            "次の満潮まで_分": 0, "次の干潮まで_分": 0, 
+                            "直前の満潮_時刻": high_str, "直前の干潮_時刻": low_str,
                             "潮位フェーズ": tide_phase,
-                            "場所": place_name, 
-                            "魚種": final_fish_name,
+                            "場所": place_name, "魚種": final_fish_name,
                             "全長_cm": float(st.session_state.length_val), 
-                            "ルアー": lure,
-                            "備考": memo, 
-                            "group_id": target_group_id, 
-                            "観測所": station_info['name'],
-                            "釣り人": angler
+                            "ルアー": lure, "備考": memo, "group_id": target_group_id, 
+                            "観測所": station_info['name'], "釣り人": angler
                         }
     
+                        # スプレッドシート更新
                         df_main = conn.read(spreadsheet=url, ttl=0)
                         cols = ["filename","datetime","date","time","lat","lon","気温","風速","風向","降水量","潮位_cm","月齢","潮名","次の満潮まで_分","次の干潮まで_分","直前の満潮_時刻","直前の干潮_時刻","潮位フェーズ","場所","魚種","全長_cm","ルアー","備考","group_id","観測所","釣り人"]
                         new_row_df = pd.DataFrame([save_data])[cols]
                         conn.update(spreadsheet=url, data=pd.concat([df_main, new_row_df], ignore_index=True))
                         
-                        st.success(f"🎉 記録完了！ ({target_dt.strftime('%Y/%m/%d %H:%M')} のデータとして保存しました)")
+                        st.success(f"✅ {target_dt.strftime('%Y/%m/%d')} の記録として保存しました！")
                         st.balloons()
-                        st.session_state.data_ready = False
-                        st.session_state.length_val = 0.0
                         time.sleep(2); st.rerun()
+    
                 except Exception as e:
                     st.error(f"❌ 保存失敗: {e}")
+    
 
 
 
