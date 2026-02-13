@@ -265,22 +265,25 @@ if uploaded_file:
         exif = img._getexif()
         
         # --- 撮影日時の取得（ミリ秒や余分なデータを完全に無視する修正版） ---
+       # --- 撮影日時の取得（ミリ秒対策・決定版） ---
         temp_dt = None
         if exif:
             for tag, value in exif.items():
                 tag_name = TAGS.get(tag, tag)
                 if tag_name == 'DateTimeOriginal':
                     try:
-                        # 1. まず文字列にする
-                        date_str = str(value).strip()
-                        # 2. 最初の19文字（YYYY:MM:DD HH:MM:SS）だけを切り出す
-                        #    これで「.4」などの余計なミリ秒を物理的にカットします
-                        clean_date_str = date_str[:19]
+                        # 1. どんな形式で届いても、まずは文字列にする
+                        raw_value = str(value).strip()
                         
+                        # 2. 【重要】最初の19文字だけを強制的に抽出
+                        #    例: "2025:12:29 15:17:00.4" -> "2025:12:29 15:17:00"
+                        clean_date_str = raw_value[:19]
+                        
+                        # 3. 秒までのフォーマット（19文字）で解析
                         temp_dt = datetime.strptime(clean_date_str, '%Y:%m:%d %H:%M:%S')
                     except Exception as e:
-                        # エラーが出ても止まらないようにしつつ、内容を表示
-                        st.warning(f"日時解析の予備警告: {e}")
+                        # 万が一失敗した場合は、エラーメッセージを画面に出して確認
+                        st.error(f"⚠️ 日時解析エラー詳細: {e} (元の値: {value})")
                         pass
         
         # セッションに保存
@@ -443,6 +446,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
