@@ -60,19 +60,26 @@ uploaded_file = st.file_uploader("写真をアップロード (JPEG形式)", typ
 uploaded_file = st.file_uploader("📸 釣果写真をアップロード", type=["jpg", "jpeg"])
 
 if uploaded_file:
-    # プレビュー画像も横幅いっぱいにする
-    st.image(uploaded_file, use_container_width=True)
+    img = Image.open(uploaded_file)
+    st.image(img, caption="プレビュー", use_container_width=True)
     
-    # 解析後の確認画面
-    with st.container(border=True): # 枠で囲って視認性を高める
-        st.write("📍 **位置情報解析結果**")
-        # 緯度経度を大きな文字で表示
-        st.metric(label="緯度", value=f"{st.session_state.lat:.4f}")
-        st.metric(label="経度", value=f"{st.session_state.lon:.4f}")
-    else:
+    exif = img._getexif()
+    geo = get_geotagging(exif)
+    
+    # ここで位置情報の解析結果を判定
+    if geo:
+        lat = get_decimal_from_dms(geo['GPSLatitude'], geo['GPSLatitudeRef'])
+        lon = get_decimal_from_dms(geo['GPSLongitude'], geo['GPSLongitudeRef'])
+        
+        if lat and lon:
+            st.success(f"📍 位置を特定しました")
+            st.session_state.data_ready = True
+            st.session_state.lat = lat
+            st.session_state.lon = lon
+        else:
             st.error("位置情報の計算に失敗しました。")
             st.session_state.data_ready = False
-else:
+    else:
         st.error("❌ この写真にはGPSが含まれていません。")
         st.session_state.data_ready = False
 # --- 5. フォーム入力 ---
@@ -137,6 +144,7 @@ if st.session_state.data_ready:
                     
             except Exception as e:
                 st.error(f"保存エラー: {e}")
+
 
 
 
