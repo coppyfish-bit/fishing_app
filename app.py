@@ -6,9 +6,10 @@ from PIL import Image
 from datetime import datetime
 import cloudinary
 import cloudinary.uploader
+import unicodedata
 import io
 
-# --- 1. Cloudinary設定 (Secretsから取得) ---
+# --- 1. Cloudinary設定 ---
 try:
     cloudinary.config(
         cloud_name = st.secrets["cloudinary"]["cloud_name"],
@@ -19,10 +20,9 @@ try:
 except Exception as e:
     st.error("Cloudinaryの設定を確認してください。")
 
-# --- 2. 関数定義: 位置情報の解析 ---
+# --- 2. 関数定義 ---
 def get_geotagging(exif):
     if not exif: return None
-    # GPSInfoのタグIDは 34853
     gps_info = exif.get(34853)
     if not gps_info: return None
     return {
@@ -35,116 +35,109 @@ def get_geotagging(exif):
 def get_decimal_from_dms(dms, ref):
     if not dms or not ref: return None
     try:
-        # Pillowのバージョンによりデータ形式が異なるためfloatに変換
-        d = float(dms[0])
-        m = float(dms[1])
-        s = float(dms[2])
+        d, m, s = float(dms[0]), float(dms[1]), float(dms[2])
         decimal = d + (m / 60.0) + (s / 3600.0)
         if ref in ['S', 'W']: decimal = -decimal
         return decimal
     except: return None
 
-# --- 3. 接続と初期化 ---
+def normalize_float(text):
+    if not text: return 0.0
+    try:
+        normalized = unicodedata.normalize('NFKC', str(text))
+        return float(normalized)
+    except ValueError:
+        return 0.0
+
+# --- 3. 初期設定とセッション状態の管理 ---
 st.set_page_config(page_title="釣果記録アプリ", layout="centered")
 st.title("🎣 釣果記録システム")
 
-# セッション状態の初期化
+# 必要な変数をセッション(保持用メモリ)に登録
 if "data_ready" not in st.session_state: st.session_state.data_ready = False
-if "lat" not in st.session_state: st.session_state.lat = None
-if "lon" not in st.session_state: st.session_state.lon = None
+if "lat" not in st.session_state: st.session_state.lat = 0.0
+if "lon" not in st.session_state: st.session_state.lon = 0.0
+if "length_val" not in st.session_state: st.session_state.length_val = 0.0
 
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
 except Exception as e:
-    st.error(f"接続エラー: {e}")
+    st.error(f"スプレッドシート接続エラー: {e}")
     st.stop()
 
-# --- 4. メインUI: 画像アップロード ---
+# --- 4. 画像アップロードセクション ---
 uploaded_file = st.file_uploader("📸 釣果写真をアップロード", type=["jpg", "jpeg"])
 
 if uploaded_file:
     img = Image.open(uploaded_file)
-    st.image(img, caption="アップロード画像", use_container_width=True)
+    st.image(img, use_container_width=True)
     
-    # EXIFから位置情報を解析
-    exif = img._getexif()
-    geo = get_geotagging(exif)
-    
-    if geo:
-        lat = get_decimal_from_dms(geo['GPSLatitude'], geo['GPSLatitudeRef'])
-        lon = get_decimal_from_dms(geo['GPSLongitude'], geo['GPSLongitudeRef'])
-        
-        if lat and lon:
-            st.session_state.lat = lat
-            st.session_state.lon = lon
-            st.session_state.data_ready = True
-            st.success("📍 位置情報の取得に成功！")
+    # 解析は一度だけ行う
+    if not st.session_state.data_ready:
+        exif = img._getexif()
+        geo = get_geotagging(exif)
+        if geo:
+            lat = get_decimal_from_dms(geo['GPSLatitude'], geo['GPSLatitudeRef'])
+            lon = get_decimal_from_dms(geo['GPSLongitude'], geo['GPSLongitudeRef'])
+            if lat and lon:
+                st.session_state.lat, st.session_state.lon = lat, lon
+                st.session_state.data_ready = True
+                st.success("📍 位置情報を取得しました！")
         else:
-            st.error("位置情報の数値変換に失敗しました。")
-            st.session_state.data_ready = False
-    else:
-        st.warning("⚠️ この写真には位置情報(GPS)が含まれていません。")
-        # GPSがない場合も手動入力できるようフラグを立てる場合はここを調整
-        st.session_state.data_ready = False
+            st.warning("⚠️ 写真にGPSが含まれていません。手動で入力してください。")
+            st.session_state.data_ready = True # 入力欄は出す
 
-# --- 5. 入力フォーム ---
+# --- 5. 入力セクション（ここがメイン） ---
 if st.session_state.data_ready:
-    with st.form("fishing_form"):
-        st.subheader("📝 釣果の詳細を入力")
-        
-        # スマホで見やすい大きな数字表示
-        col1, col2 = st.columns(2)
-        col1.metric("緯度", f"{st.session_state.lat:.4f}")
-        col2.metric("経度", f"{st.session_state.lon:.4f}")
+    st.subheader("📝 釣果の詳細")
 
-        # --- 【ここが追加：魚種の選択と手入力】 ---
-        fish_options = ["スズキ","ヒラスズキ","ボウズ","タチウオ","ターポン","チヌ","キビレ","コチ","ヒラメ","マダイ","キジハタ","カサゴ","ブリ","アジ","メバル","キス", "（手入力）"]
-        selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
-        
-        # 「（手入力）」が選ばれた時だけ入力欄を出す
-        manual_fish_name = ""
-        if selected_fish == "（手入力）":
-            manual_fish_name = st.text_input("魚種名を入力してください", placeholder="例: カクレクマノミ")
-        
-        # 最終的な魚種名を決定
-        final_fish_name = manual_fish_name if selected_fish == "（手入力）" else selected_fish
-          # 【2. 全長調整】（★ここが重要：フォームの外に置く）
-        st.write("📏 全長 (cm)")
-        c1, c2, c3 = st.columns([1, 2, 1])
-        
-        # マイナスボタン
-        if c1.button("➖", use_container_width=True):
-            st.session_state.length_val = max(0.0, st.session_state.length_val - 1.0)
-            st.rerun() # 値を更新して再描画
-        
-        # 中央の入力欄
-        length_text = c2.text_input("数値入力（全角OK）", value=str(st.session_state.length_val), label_visibility="collapsed")
-        st.session_state.length_val = normalize_float(length_text)
-        
-        # プラスボタン
-        if c3.button("➕", use_container_width=True):
-            st.session_state.length_val += 1.0
-            st.rerun() # 値を更新して再描画
+    # A. 魚種選択
+    fish_options = ["シーバス", "チヌ", "真鯛", "アオリイカ", "ブリ", "アジ", "（手入力）"]
+    selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
+    manual_fish_name = ""
+    if selected_fish == "（手入力）":
+        manual_fish_name = st.text_input("魚種名を入力")
+    final_fish_name = manual_fish_name if selected_fish == "（手入力）" else selected_fish
+
+    st.write("📏 全長 (cm)")
     
-        st.markdown("---") # 区切り線
-        place_name = st.text_input("📍 場所名", value="新規地点")
-        lure = st.text_input("🪝 ルアー/仕掛け")
-        angler = st.selectbox("👤 釣り人", ["長元", "川口","山川"])
-        memo = st.text_area("🗒️ 備考")
+    # B. 全長調整（ボタンを独立させて即時反映）
+    c1, c2, c3 = st.columns([1, 2, 1])
+    
+    if c1.button("➖ 1", use_container_width=True):
+        st.session_state.length_val = max(0.0, st.session_state.length_val - 1.0)
+        st.rerun()
 
-        # スマホで押しやすい巨大な保存ボタン
-        submit = st.form_submit_button("🚀 釣果を記録する", use_container_width=True, type="primary")
+    # テキスト入力欄。変更されたらセッションに保存
+    length_text = c2.text_input("数値", value=str(st.session_state.length_val), label_visibility="collapsed")
+    st.session_state.length_val = normalize_float(length_text)
 
-        if submit:
+    if c3.button("➕ 1", use_container_width=True):
+        st.session_state.length_val += 1.0
+        st.rerun()
+
+    # C. その他の項目
+    place_name = st.text_input("📍 場所名", value="新規地点")
+    lure = st.text_input("🪝 ルアー/仕掛け")
+    angler = st.selectbox("👤 釣り人", ["自分", "同行者"])
+    memo = st.text_area("🗒️ 備考")
+
+    st.markdown("---")
+
+    # D. 保存ボタン（ここも独立したボタンにする）
+    if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
+        if selected_fish == "（手入力）" and not manual_fish_name:
+            st.error("魚種名を入力してください。")
+        else:
             try:
                 with st.spinner("📊 データを保存中..."):
-                    # ① Cloudinaryへ画像アップロード
+                    # 1. Cloudinary
                     uploaded_file.seek(0)
                     res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
                     image_url = res.get("secure_url")
                     
-                    # ② 保存データの作成
+                    # 2. データの組み立て
                     now = datetime.now()
                     save_data = {
                         "filename": image_url,
@@ -159,35 +152,28 @@ if st.session_state.data_ready:
                         "直前の満潮_時刻": "", "直前の干潮_時刻": "",
                         "潮位フェーズ": "不明",
                         "場所": place_name,
-                        "魚種": fish_name,
-                        "全長_cm": float(length),
+                        "魚種": final_fish_name,
+                        "全長_cm": float(st.session_state.length_val),
                         "ルアー": lure,
                         "備考": memo,
-                        "group_id": "default",
-                        "観測所": "不明",
-                        "釣り人": angler
+                        "group_id": "default", "観測所": "不明", "釣り人": angler
                     }
 
-                    # ③ スプレッドシートへ書き込み
+                    # 3. GSheets
                     current_df = conn.read(spreadsheet=url, ttl=0)
                     cols = ["filename","datetime","date","time","lat","lon","気温","風速","風向","降水量","潮位_cm","月齢","潮名","次の満潮まで_分","次の干潮まで_分","直前の満潮_時刻","直前の干潮_時刻","潮位フェーズ","場所","魚種","全長_cm","ルアー","備考","group_id","観測所","釣り人"]
                     new_row_df = pd.DataFrame([save_data])[cols]
-                    
                     updated_df = pd.concat([current_df, new_row_df], ignore_index=True)
                     conn.update(spreadsheet=url, data=updated_df)
                     
-                    st.success("🎉 記録完了！スプレッドシートを更新しました。")
+                    st.success("🎉 保存に成功しました！")
                     st.balloons()
                     
-                    # 状態をリセットして再起動
+                    # リセット
                     st.session_state.data_ready = False
+                    st.session_state.length_val = 0.0
                     time.sleep(2)
                     st.rerun()
 
             except Exception as e:
-                st.error(f"❌ 保存に失敗しました: {e}")
-
-
-
-
-
+                st.error(f"❌ 保存失敗: {e}")
