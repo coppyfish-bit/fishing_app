@@ -3,14 +3,14 @@ import pandas as pd
 import time
 from streamlit_gsheets import GSheetsConnection
 from PIL import Image
-from datetime import datetime
+from datetime import datetime, timedelta # timedeltaを追加
 import cloudinary
 import cloudinary.uploader
 import unicodedata
 import io
 import numpy as np
 import ephem
-import requests # 天気取得用に追加
+import requests
 
 # --- 1. 設定 ---
 try:
@@ -20,12 +20,11 @@ try:
         api_secret = st.secrets["cloudinary"]["api_secret"],
         secure = True
     )
-    OWM_API_KEY = st.secrets["openweathermap"]["api_key"]
 except Exception as e:
-    st.error("設定（Cloudinary/OpenWeatherMap）を確認してください。")
+    st.error("Cloudinaryの設定を確認してください。")
 
 # --- 2. 関数定義 ---
-# (既存の関数 get_geotagging, get_decimal_from_dms, normalize_float, find_nearest_place, get_moon_age, get_tide_name はそのまま)
+# (既存の get_geotagging, get_decimal_from_dms, normalize_float, find_nearest_place, get_moon_age, get_tide_name は維持)
 
 def get_geotagging(exif):
     if not exif: return None
@@ -78,54 +77,41 @@ def get_tide_name(moon_age):
     elif age in [10, 25]: return "若潮"
     else: return "不明"
 
-# 【追加】天気取得関数
-# 【診断機能付き】天気取得関数
-def get_weather(lat, lon):
+# 【修正】Open-Meteoを使用した過去48時間降水量対応の気象取得関数
+def get_weather_data_openmeteo(lat, lon, dt):
     try:
-        # APIキーがSecretsにあるか確認
-        if "openweathermap" not in st.secrets:
-            st.error("Secretsに 'openweathermap' の設定が見つかりません。")
-            return None
-            
-        api_key = st.secrets["openweathermap"]["api_key"]
-        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric&lang=ja"
+        url = "https://archive-api.open-meteo.com/v1/archive"
+        params = {
+            "latitude": lat, "longitude": lon,
+            "start_date": (dt - timedelta(days=2)).strftime('%Y-%m-%d'),
+            "end_date": dt.strftime('%Y-%m-%d'),
+            "hourly": "temperature_2m,windspeed_10m,winddirection_10m,precipitation",
+            "timezone": "Asia/Tokyo"
+        }
+        res = requests.get(url, params=params, timeout=10).json()
+        h = res['hourly']
         
-        response = requests.get(url)
-        res = response.json()
+        # 配列の最後から現在時刻に最も近いインデックスを特定
+        # 48時間以上のデータが返ってくるため、末尾付近から計算
+        idx = (len(h['temperature_2m']) - 25) + dt.hour
         
-        # API側からエラーが返ってきている場合（キーが無効など）
-        if response.status_code != 200:
-            st.warning(f"天気APIエラー: {res.get('message', '不明なエラー')}")
-            return None
+        temp = h['temperature_2m'][idx]
+        wind_speed = round(h['windspeed_10m'][idx] / 3.6, 1) # km/h -> m/s 変換
+        wind_deg = h['winddirection_10m'][idx]
+        
+        # 過去48時間の合計降水量
+        precip_48h = round(sum(h['precipitation'][:idx+1][-48:]), 1)
 
-        # 風向きを16方位に変換
+        # 16方位変換
         def get_wind_dir(deg):
             dirs = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
             return dirs[int((deg + 11.25) / 22.5) % 16]
-
-        return {
-            "temp": res["main"]["temp"],
-            "wind_speed": res["wind"]["speed"],
-            "wind_dir": get_wind_dir(res["wind"]["deg"]),
-            "rain": res.get("rain", {}).get("1h", 0)
-        }
+        
+        return temp, wind_speed, get_wind_dir(wind_deg), precip_48h
     except Exception as e:
-        st.error(f"天気取得中に例外が発生しました: {e}")
-        return None
+        return None, None, "不明", 0.0
 
-# --- 保存処理の中身も少し修正 ---
-# --- 保存処理の中身も少し修正 ---
-if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
-    # ... (前段の処理) ...
-    w_info = get_weather(st.session_state.lat, st.session_state.lon)
-    
-    # もし取得失敗していたらデフォルト値を入れる
-    if w_info is None:
-        w_info = {"temp": 0, "wind_speed": 0, "wind_dir": "取得失敗", "rain": 0}
-    
-    # ... (save_data作成へ) ...
-
-# --- 3. 初期設定とセッション状態 ---
+# --- 3. 以降、初期設定・画像アップロード・入力画面は既存と同じ ---
 st.set_page_config(page_title="釣果記録アプリ", layout="centered")
 st.title("🎣 釣果記録システム")
 
@@ -144,7 +130,6 @@ except Exception as e:
     st.error(f"接続エラー: {e}")
     st.stop()
 
-# --- 4. 画像アップロード ---
 uploaded_file = st.file_uploader("📸 釣果写真をアップロード", type=["jpg", "jpeg"])
 
 if uploaded_file:
@@ -165,7 +150,6 @@ if uploaded_file:
             st.warning("⚠️ GPSが見つかりません。")
             st.session_state.data_ready = True
 
-# --- 5. 入力セクション ---
 if st.session_state.data_ready:
     with st.expander("📍 位置情報の確認", expanded=True):
         if st.session_state.lat != 0.0:
@@ -204,13 +188,14 @@ if st.session_state.data_ready:
             st.error("⚠️ 場所名を入力してください。")
         else:
             try:
-                with st.spinner("📊 保存中..."):
+                with st.spinner("📊 気象データを取得して保存中..."):
                     now = datetime.now()
                     
-                    # --- 月齢/潮名/天気を取得 ---
+                    # --- 気象・月齢・潮名を取得 ---
                     m_age = get_moon_age(now)
                     t_name = get_tide_name(m_age)
-                    w_info = get_weather(st.session_state.lat, st.session_state.lon) # 【追加】
+                    # Open-Meteoから一括取得
+                    temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(st.session_state.lat, st.session_state.lon, now)
 
                     # マスター登録ロジック
                     if force_new or (st.session_state.detected_place == "新規地点"):
@@ -222,7 +207,6 @@ if st.session_state.data_ready:
                             conn.update(spreadsheet=url, worksheet="place_master", data=pd.concat([df_master, new_place_df], ignore_index=True))
                             target_group_id = new_gid
 
-                    # 画像/データ保存
                     uploaded_file.seek(0)
                     res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
                     
@@ -230,10 +214,10 @@ if st.session_state.data_ready:
                         "filename": res.get("secure_url"), "datetime": now.strftime("%Y-%m-%d %H:%M"),
                         "date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H:%M"),
                         "lat": float(st.session_state.lat), "lon": float(st.session_state.lon),
-                        "気温": w_info["temp"], # 【自動化】
-                        "風速": w_info["wind_speed"], # 【自動化】
-                        "風向": w_info["wind_dir"], # 【自動化】
-                        "降水量": w_info["rain"], # 【自動化】
+                        "気温": temp if temp else 0,
+                        "風速": wind_s if wind_s else 0,
+                        "風向": wind_d,
+                        "降水量": rain_48, # これが48時間降水量
                         "潮位_cm": 0, "月齢": m_age, "潮名": t_name, 
                         "次の満潮まで_分": 0, "次の干潮まで_分": 0,
                         "直前の満潮_時刻": "", "直前の干潮_時刻": "", "潮位フェーズ": "不明",
@@ -247,11 +231,10 @@ if st.session_state.data_ready:
                     new_row_df = pd.DataFrame([save_data])[cols]
                     conn.update(spreadsheet=url, data=pd.concat([df_main, new_row_df], ignore_index=True))
                     
-                    st.success(f"🎉 記録完了！ ({t_name} / {w_info['temp']}℃ / {w_info['wind_dir']}の風 {w_info['wind_speed']}m)")
+                    st.success(f"🎉 記録完了！ (48h降水: {rain_48}mm)")
                     st.balloons()
                     st.session_state.data_ready = False
                     st.session_state.length_val = 0.0
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
-
