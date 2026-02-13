@@ -261,46 +261,37 @@ if uploaded_file:
     img = Image.open(uploaded_file)
     st.image(img, use_container_width=True)
     
-    # データをまだ解析していない場合のみ実行
     if not st.session_state.data_ready:
         exif = img._getexif()
         
-    
-        # --- 修正版：日時取得ロジック ---
+        # --- 撮影日時の取得（ミリ秒や余分なデータを完全に無視する修正版） ---
         temp_dt = None
         if exif:
             for tag, value in exif.items():
                 tag_name = TAGS.get(tag, tag)
                 if tag_name == 'DateTimeOriginal':
                     try:
-                        # 文字列を文字列型に変換し、最初の19文字 (YYYY:MM:DD HH:MM:SS) だけを抽出
-                        clean_date_str = str(value).strip()[:19]
+                        # 1. まず文字列にする
+                        date_str = str(value).strip()
+                        # 2. 最初の19文字（YYYY:MM:DD HH:MM:SS）だけを切り出す
+                        #    これで「.4」などの余計なミリ秒を物理的にカットします
+                        clean_date_str = date_str[:19]
+                        
                         temp_dt = datetime.strptime(clean_date_str, '%Y:%m:%d %H:%M:%S')
                     except Exception as e:
-                        # 解析に失敗した場合はエラーを表示して確認できるようにする
-                        st.error(f"日時解析エラー: {value} -> {e}")
-
-        # --- 2. GPS情報の取得 ---
-        geo = get_geotagging(exif)
-        if geo:
-            lat = get_decimal_from_dms(geo['GPSLatitude'], geo['GPSLatitudeRef'])
-            lon = get_decimal_from_dms(geo['GPSLongitude'], geo['GPSLongitudeRef'])
-            if lat and lon:
-                st.session_state.lat, st.session_state.lon = lat, lon
-                place, gid = find_nearest_place(lat, lon, df_master)
-                st.session_state.detected_place, st.session_state.group_id = place, gid
-                st.session_state.data_ready = True
-        else:
-            st.warning("⚠️ GPS情報が見つかりません。地点を選択してください。")
-            st.session_state.data_ready = True
+                        # エラーが出ても止まらないようにしつつ、内容を表示
+                        st.warning(f"日時解析の予備警告: {e}")
+                        pass
         
-        # 日時が取れたら保存、取れなければ現在時刻
-        if dt_object:
-            st.session_state.target_dt = dt_object
-            st.success(f"📸 撮影日時を検出: {dt_object.strftime('%Y/%m/%d %H:%M')}")
+        # セッションに保存
+        if temp_dt:
+            st.session_state.target_dt = temp_dt
+            st.success(f"📸 撮影日時を検出: {temp_dt.strftime('%Y/%m/%d %H:%M')}")
         else:
             st.session_state.target_dt = datetime.now()
-            st.warning("⚠️ 撮影日時が不明なため、現在時刻を使用します。")
+            st.info("ℹ️ 撮影日時が取得できないため現在時刻を使用します。")
+
+        # --- 以下、GPS等の既存処理 ---
 
         # --- 2. GPS情報の取得 ---
         geo = get_geotagging(exif)
@@ -460,6 +451,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
