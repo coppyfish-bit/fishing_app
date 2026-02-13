@@ -153,9 +153,11 @@ def get_tide_details(station_code, dt):
         if not day_data:
             st.warning("⚠️ 該当する日のデータ行が見つかりませんでした")
             return None
+            
 except Exception as e: # ← ここが抜けているか、インデントがズレています
         st.error(f"潮位解析エラー: {e}")
         return None
+
 # 【修正】Open-Meteoを使用した過去48時間降水量対応の気象取得関数
 def get_weather_data_openmeteo(lat, lon, dt):
     try:
@@ -347,6 +349,7 @@ if st.session_state.data_ready:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+
 
 
 
