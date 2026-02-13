@@ -120,60 +120,70 @@ def find_nearest_tide_station(lat, lon):
 # 気象庁から潮位(cm)を取得・計算
 def get_tide_details(station_code, dt):
     try:
-        year = dt.year
-        url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{year}/{station_code}.txt"
+        # 仕様に合わせた年月日文字列の作成 (73-78カラム用)
+        # 年(2桁) + 月(2桁/右詰め) + 日(2桁/右詰め)
+        target_ymd = dt.strftime('%y') + f"{dt.month:2d}" + f"{dt.day:2d}"
+        
+        url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{dt.year}/{station_code}.txt"
         res = requests.get(url, timeout=10)
-        if res.status_code != 200:
-            return None
+        if res.status_code != 200: return None
         
         lines = res.text.splitlines()
         day_data = None
         
-        # 1. 今日のデータ行を特定 (位置インデックス 75-77: 日, 78-80: 地点)
+        # 1. 該当する日の行を特定 (73-78カラムが年月日、79-80が地点コード)
         for line in lines:
-            if len(line) < 80:
-                continue
-            line_day = line[75:77].strip()
-            line_code = line[78:80]
-            if line_day == str(dt.day) and line_code == station_code:
+            if len(line) < 80: continue
+            # Pythonのindexは0開始なので、仕様のカラム番号から-1する
+            if line[72:78] == target_ymd and line[78:80] == station_code:
                 day_data = line
                 break
         
-        if not day_data:
-            return None
+        if not day_data: return None
 
-        # 2. 現在の潮位を算出
-        hourly = [int(day_data[i*3:(i+1)*3].strip()) for i in range(24)]
-        t1, t2 = hourly[dt.hour], (hourly[dt.hour+1] if dt.hour < 23 else hourly[dt.hour])
+        # 2. 毎時潮位の取得 (1-72カラム / 3桁固定×24)
+        hourly = []
+        for i in range(24):
+            # 3文字ずつ正確に切り出し、空白を消して数値化
+            val = day_data[i*3 : (i+1)*3].strip()
+            hourly.append(int(val))
+        
+        # 現在時刻の潮位計算
+        t1 = hourly[dt.hour]
+        t2 = hourly[dt.hour+1] if dt.hour < 23 else hourly[dt.hour]
         current_cm = int(round(t1 + (t2 - t1) * (dt.minute / 60.0)))
 
-        # 3. 満干潮時刻の抽出 ([:4]を追加して4桁に限定)
+        # 3. 満干潮時刻の抽出 (満潮 81-108 / 干潮 109-136)
+        # 時刻4桁 + 潮位3桁 = 7文字セット
         event_times = []
+        today_prefix = dt.strftime('%Y%m%d')
+
+        # 満潮 (index 80から7文字×4)
         for i in range(4):
-            # 満潮(80+), 干潮(108+)
-            h_base, l_base = 80 + (i * 7), 108 + (i * 7)
-            
-            # 満潮の解析
-            h_tm_raw = day_data[h_base:h_base+4].strip()
-            if h_tm_raw and h_tm_raw != "9999":
-                clean_h = h_tm_raw.zfill(4)[:4] # 確実に4桁にする
+            start = 80 + (i * 7)
+            time_part = day_data[start : start+4].strip()
+            if time_part and time_part != "9999":
+                # 時刻だけを4桁で取得 (zfillで0埋め)
+                clean_time = time_part.zfill(4)
                 event_times.append({
-                    "time": datetime.strptime(dt.strftime('%Y%m%d') + clean_h, '%Y%m%d%H%M'),
+                    "time": datetime.strptime(today_prefix + clean_time, '%Y%m%d%H%M'),
                     "type": "満潮"
                 })
-            
-            # 干潮の解析
-            l_tm_raw = day_data[l_base:l_base+4].strip()
-            if l_tm_raw and l_tm_raw != "9999":
-                clean_l = l_tm_raw.zfill(4)[:4] # 確実に4桁にする
+
+        # 干潮 (index 108から7文字×4)
+        for i in range(4):
+            start = 108 + (i * 7)
+            time_part = day_data[start : start+4].strip()
+            if time_part and time_part != "9999":
+                clean_time = time_part.zfill(4)
                 event_times.append({
-                    "time": datetime.strptime(dt.strftime('%Y%m%d') + clean_l, '%Y%m%d%H%M'),
+                    "time": datetime.strptime(today_prefix + clean_time, '%Y%m%d%H%M'),
                     "type": "干潮"
                 })
         
         event_times = sorted(event_times, key=lambda x: x['time'])
-        
-        # 4. 10段階フェーズ判定
+
+        # 4. フェーズ計算
         phase_text = "不明"
         prev_ev = next((e for e in reversed(event_times) if e['time'] <= dt), None)
         next_ev = next((e for e in event_times if e['time'] > dt), None)
@@ -187,7 +197,6 @@ def get_tide_details(station_code, dt):
         return {"cm": current_cm, "phase": phase_text, "events": event_times}
 
     except Exception as e:
-        # 竹山の叫び（デバッグ表示）
         st.error(f"潮位解析エラー詳細: {e}")
         return None
 # 【修正】Open-Meteoを使用した過去48時間降水量対応の気象取得関数
@@ -381,6 +390,7 @@ if st.session_state.data_ready:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+
 
 
 
