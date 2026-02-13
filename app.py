@@ -122,81 +122,37 @@ def get_tide_details(station_code, dt):
     try:
         year = dt.year
         url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{year}/{station_code}.txt"
+        
+        # --- ここからデバッグ ---
+        st.info(f"🔍 アクセス中: {url}")
         res = requests.get(url, timeout=10)
-        if res.status_code != 200: return None
+        st.write(f"📡 ステータスコード: {res.status_code}")
+        
+        if res.status_code != 200:
+            st.error("❌ URLにアクセスできませんでした")
+            return None
         
         lines = res.text.splitlines()
-        # 気象庁フォーマット：73-74カラム目が「日」 (index 72-74)
-        target_day = f"{dt.day:2d}" # 2桁（1日は " 1"）
+        st.write(f"📝 全行数: {len(lines)} 行取得")
         
-        # 行の抽出を確実に（72文字目から2文字が日にち、その後に地点コードが続く行を探す）
+        target_day = str(dt.day)
+        st.write(f"📅 探している日: {target_day}日, 地点: {station_code}")
+        
         day_data = None
-        for line in lines:
+        for i, line in enumerate(lines):
+            # 実際のデータの「日」と「コード」の場所を無理やり表示
+            if i < 5: # 最初の5行だけサンプル表示
+                st.write(f"行サンプル[{i}]: 日='{line[72:74]}' コード='{line[78:80]}'")
+            
             if len(line) < 80: continue
-            line_day = line[72:74] # 日にち
-            line_code = line[78:80] # 地点記号 (HS, TKなど)
-            if line_day.strip() == str(dt.day) and line_code == station_code:
+            if line[72:74].strip() == target_day and line[78:80] == station_code:
                 day_data = line
+                st.success(f"🎯 該当行を発見しました！")
                 break
         
-        if not day_data: return None
-
-        # 1. 毎時潮位 (1-72カラム / 3桁×24)
-        hourly = []
-        for i in range(24):
-            val = day_data[i*3 : (i+1)*3].strip()
-            hourly.append(int(val))
-        
-        # 現在時刻の潮位計算
-        t1 = hourly[dt.hour]
-        t2 = hourly[dt.hour+1] if dt.hour < 23 else hourly[dt.hour]
-        current_cm = int(round(t1 + (t2 - t1) * (dt.minute / 60.0)))
-
-        # 2. 満潮(81-108)・干潮(109-136) 4桁時刻+3桁潮位
-        event_times = []
-        # 満潮
-        for i in range(4):
-            base = 80 + (i * 7)
-            tm = day_data[base : base+4].strip()
-            if tm and tm != "9999":
-                event_times.append({
-                    "time": datetime.strptime(dt.strftime('%Y%m%d')+tm.zfill(4), '%Y%m%d%H%M'),
-                    "type": "満潮"
-                })
-        # 干潮
-        for i in range(4):
-            base = 108 + (i * 7)
-            tm = day_data[base : base+4].strip()
-            if tm and tm != "9999":
-                event_times.append({
-                    "time": datetime.strptime(dt.strftime('%Y%m%d')+tm.zfill(4), '%Y%m%d%H%M'),
-                    "type": "干潮"
-                })
-        
-        event_times = sorted(event_times, key=lambda x: x['time'])
-
-        # 3. 潮位フェーズ (上げ○分 / 下げ○分)
-        phase_text = "不明"
-        prev_ev = next((e for e in reversed(event_times) if e['time'] <= dt), None)
-        next_ev = next((e for e in event_times if e['time'] > dt), None)
-
-        if prev_ev and next_ev:
-            duration = (next_ev['time'] - prev_ev['time']).total_seconds()
-            elapsed = (dt - prev_ev['time']).total_seconds()
-            step = int((elapsed / duration) * 10)
-            step = max(1, min(9, step))
-            
-            if prev_ev['type'] == "干潮":
-                phase_text = f"上げ{step}分"
-            else:
-                phase_text = f"下げ{step}分"
-        elif prev_ev: # 次のイベントが明日になる場合
-            phase_text = "上げ潮傾向" if prev_ev['type'] == "干潮" else "下げ潮傾向"
-
-        return {"cm": current_cm, "phase": phase_text, "events": event_times}
-    except Exception as e:
-        print(f"Error parsing tide: {e}")
-        return None
+        if not day_data:
+            st.warning("⚠️ 該当する日のデータ行が見つかりませんでした")
+            return None
 
 # 【修正】Open-Meteoを使用した過去48時間降水量対応の気象取得関数
 def get_weather_data_openmeteo(lat, lon, dt):
@@ -389,6 +345,7 @@ if st.session_state.data_ready:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+
 
 
 
