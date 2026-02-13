@@ -126,47 +126,76 @@ def get_tide_details(station_code, dt):
         if res.status_code != 200: return None
         
         lines = res.text.splitlines()
-        target_date_str = dt.strftime('%y%m%d')
-        day_data = next((line for line in lines if line.startswith(target_date_str, 72)), None)
+        # 気象庁フォーマット：73-74カラム目が「日」 (index 72-74)
+        target_day = f"{dt.day:2d}" # 2桁（1日は " 1"）
+        
+        # 行の抽出を確実に（72文字目から2文字が日にち、その後に地点コードが続く行を探す）
+        day_data = None
+        for line in lines:
+            if len(line) < 80: continue
+            line_day = line[72:74] # 日にち
+            line_code = line[78:80] # 地点記号 (HS, TKなど)
+            if line_day.strip() == str(dt.day) and line_code == station_code:
+                day_data = line
+                break
+        
         if not day_data: return None
 
-        # 1. 現在の潮位(cm)を算出
-        hourly = [int(day_data[i*3:i*3+3].strip()) for i in range(24)]
-        t1, t2 = hourly[dt.hour], (hourly[dt.hour+1] if dt.hour < 23 else hourly[dt.hour])
+        # 1. 毎時潮位 (1-72カラム / 3桁×24)
+        hourly = []
+        for i in range(24):
+            val = day_data[i*3 : (i+1)*3].strip()
+            hourly.append(int(val))
+        
+        # 現在時刻の潮位計算
+        t1 = hourly[dt.hour]
+        t2 = hourly[dt.hour+1] if dt.hour < 23 else hourly[dt.hour]
         current_cm = int(round(t1 + (t2 - t1) * (dt.minute / 60.0)))
 
-        # 2. 満潮・干潮の時刻をリスト化（今日+前後1日の猶予を持たせると正確ですが、簡易的に今日の分で判定）
+        # 2. 満潮(81-108)・干潮(109-136) 4桁時刻+3桁潮位
         event_times = []
-        # 満潮(81-108), 干潮(109-136)
+        # 満潮
         for i in range(4):
-            h_tm = day_data[80+i*7 : 80+i*7+4].strip()
-            if h_tm != "9999":
-                event_times.append({"time": datetime.strptime(dt.strftime('%Y%m%d')+h_tm, '%Y%m%d%H%M'), "type": "満潮"})
-            l_tm = day_data[108+i*7 : 108+i*7+4].strip()
-            if l_tm != "9999":
-                event_times.append({"time": datetime.strptime(dt.strftime('%Y%m%d')+l_tm, '%Y%m%d%H%M'), "type": "干潮"})
+            base = 80 + (i * 7)
+            tm = day_data[base : base+4].strip()
+            if tm and tm != "9999":
+                event_times.append({
+                    "time": datetime.strptime(dt.strftime('%Y%m%d')+tm.zfill(4), '%Y%m%d%H%M'),
+                    "type": "満潮"
+                })
+        # 干潮
+        for i in range(4):
+            base = 108 + (i * 7)
+            tm = day_data[base : base+4].strip()
+            if tm and tm != "9999":
+                event_times.append({
+                    "time": datetime.strptime(dt.strftime('%Y%m%d')+tm.zfill(4), '%Y%m%d%H%M'),
+                    "type": "干潮"
+                })
         
         event_times = sorted(event_times, key=lambda x: x['time'])
 
-        # 3. 現在時刻の前後にあるイベント（満潮/干潮）を特定
+        # 3. 潮位フェーズ (上げ○分 / 下げ○分)
+        phase_text = "不明"
         prev_ev = next((e for e in reversed(event_times) if e['time'] <= dt), None)
         next_ev = next((e for e in event_times if e['time'] > dt), None)
 
-        phase_text = "不明"
         if prev_ev and next_ev:
             duration = (next_ev['time'] - prev_ev['time']).total_seconds()
             elapsed = (dt - prev_ev['time']).total_seconds()
-            # 10段階計算 (1〜9)
             step = int((elapsed / duration) * 10)
-            step = max(1, min(9, step)) # 0と10は満干潮そのものなので1-9に収める
+            step = max(1, min(9, step))
             
-            if prev_ev['type'] == "干潮": # 干潮から満潮へ = 上げ
+            if prev_ev['type'] == "干潮":
                 phase_text = f"上げ{step}分"
-            else: # 満潮から干潮へ = 下げ
+            else:
                 phase_text = f"下げ{step}分"
-        
+        elif prev_ev: # 次のイベントが明日になる場合
+            phase_text = "上げ潮傾向" if prev_ev['type'] == "干潮" else "下げ潮傾向"
+
         return {"cm": current_cm, "phase": phase_text, "events": event_times}
-    except:
+    except Exception as e:
+        print(f"Error parsing tide: {e}")
         return None
 
 # 【修正】Open-Meteoを使用した過去48時間降水量対応の気象取得関数
@@ -360,6 +389,7 @@ if st.session_state.data_ready:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+
 
 
 
