@@ -61,12 +61,14 @@ def find_nearest_place(lat, lon, df_master):
     nearest = valid_master.loc[valid_master['dist_m'].idxmin()]
     return (nearest['place_name'], nearest['group_id']) if nearest['dist_m'] <= 500 else ("新規地点", "default")
 
-# 【追加】月齢計算関数
+# 【修正版】月齢計算関数
 def get_moon_age(date_obj):
-    # ephemを使用して、指定された日時の月齢を計算
-    m = ephem.Moon(date_obj)
-    # 前回新月からの経過日数（月齢）を返す
-    return round(date_obj - ephem.previous_new_moon(date_obj), 1)
+    # ephemの日付形式に変換
+    e_date = ephem.Date(date_obj)
+    # 前回新月の日時を取得
+    prev_new = ephem.previous_new_moon(e_date)
+    # 差分（月齢）を計算
+    return round(float(e_date - prev_new), 1)
 
 # --- 3. 初期設定とセッション状態 ---
 st.set_page_config(page_title="釣果記録アプリ", layout="centered")
@@ -177,3 +179,4 @@ if st.session_state.data_ready:
                 time.sleep(2); st.rerun()
         except Exception as e:
             st.error(f"❌ 保存失敗: {e}")
+
