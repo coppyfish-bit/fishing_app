@@ -374,15 +374,23 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                     station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
                     tide_data = get_tide_details(station_info['code'], target_dt)
                     
+                    # --- 潮位データの整理部分を修正 ---
                     if tide_data:
                         tide_cm = tide_data['cm']
                         tide_phase = tide_data['phase']
-                        high_tides = [e['time'].strftime('%H:%M') for e in tide_data['events'] if e['type'] == '満潮']
-                        low_tides = [e['time'].strftime('%H:%M') for e in tide_data['events'] if e['type'] == '干潮']
+                        
+                        # 満潮時刻と干潮時刻に「日付」を合体させてフル形式にする
+                        # e['time'] は既に datetime オブジェクトなのでそのまま strftime できます
+                        high_tides = [e['time'].strftime('%Y/%m/%d %H:%M:%S') for e in tide_data['events'] if e['type'] == '満潮']
+                        low_tides = [e['time'].strftime('%Y/%m/%d %H:%M:%S') for e in tide_data['events'] if e['type'] == '干潮']
+                        
                         high_str = ", ".join(high_tides)
                         low_str = ", ".join(low_tides)
                     else:
-                        tide_cm = 0; tide_phase = "不明"; high_str = ""; low_str = ""
+                        tide_cm = 0
+                        tide_phase = "不明"
+                        high_str = ""
+                        low_str = ""
 
                     # 2. マスター登録・ID特定
                     df_master = conn.read(spreadsheet=url, worksheet="place_master", ttl=0)
@@ -435,6 +443,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
