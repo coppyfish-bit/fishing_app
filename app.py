@@ -154,7 +154,7 @@ def get_tide_details(station_code, dt):
             st.warning("⚠️ 該当する日のデータ行が見つかりませんでした")
             return None
             
-except Exception as e: # ← ここが抜けているか、インデントがズレています
+    except Exception as e: # ← ここが抜けているか、インデントがズレています
         st.error(f"潮位解析エラー: {e}")
         return None
 
@@ -349,6 +349,7 @@ if st.session_state.data_ready:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+
 
 
 
