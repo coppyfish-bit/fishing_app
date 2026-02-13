@@ -265,28 +265,20 @@ if uploaded_file:
     if not st.session_state.data_ready:
         exif = img._getexif()
         
-      # --- 1. 撮影日時の取得 (ミリ秒などの余分なデータを無視する修正版) ---
+    
+        # --- 修正版：日時取得ロジック ---
         temp_dt = None
         if exif:
             for tag, value in exif.items():
                 tag_name = TAGS.get(tag, tag)
                 if tag_name == 'DateTimeOriginal':
                     try:
-                        # 文字列の最初から19文字目までを切り取る（ミリ秒対策）
+                        # 文字列を文字列型に変換し、最初の19文字 (YYYY:MM:DD HH:MM:SS) だけを抽出
                         clean_date_str = str(value).strip()[:19]
                         temp_dt = datetime.strptime(clean_date_str, '%Y:%m:%d %H:%M:%S')
                     except Exception as e:
-                        st.write(f"DEBUG: 日時解析エラー {value} -> {e}") # デバッグ用
-                        pass
-        
-        if temp_dt:
-            dt_object = temp_dt  # 写真の日時を代入
-            st.session_state.target_dt = dt_object
-            st.success(f"📸 撮影日時を検出: {dt_object.strftime('%Y/%m/%d %H:%M')}")
-        else:
-            dt_object = datetime.now() # 取れなければ現在時刻
-            st.session_state.target_dt = dt_object
-            st.warning("⚠️ 撮影日時が不明なため、現在時刻を使用します。")
+                        # 解析に失敗した場合はエラーを表示して確認できるようにする
+                        st.error(f"日時解析エラー: {value} -> {e}")
 
         # --- 2. GPS情報の取得 ---
         geo = get_geotagging(exif)
@@ -468,6 +460,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
