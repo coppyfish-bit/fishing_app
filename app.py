@@ -261,35 +261,31 @@ if uploaded_file:
     img = Image.open(uploaded_file)
     st.image(img, use_container_width=True)
     
-    if not st.session_state.data_ready:
+if not st.session_state.data_ready:
         exif = img._getexif()
         
-        # --- 撮影日時の取得（ミリ秒や余分なデータを完全に無視する修正版） ---
-       # --- 撮影日時の取得（ミリ秒対策・決定版） ---
+        # --- 撮影日時の取得（秒なし・エラー回避版） ---
         temp_dt = None
         if exif:
             for tag, value in exif.items():
                 tag_name = TAGS.get(tag, tag)
                 if tag_name == 'DateTimeOriginal':
                     try:
-                        # 1. どんな形式で届いても、まずは文字列にする
-                        raw_value = str(value).strip()
-                                        
+                        # 1. 文字列にして、分まで（最初の16文字）を切り出す
+                        # 例: "2025:12:29 15:17:00.4" -> "2025:12:29 15:17"
                         clean_date_str = str(value).strip()[:16]
-                            temp_dt = datetime.strptime(clean_date_str, '%Y:%m:%d %H:%M')
-                        except Exception as e:
-                            # 失敗しても止まらないように
-                            pass
-                        
-        # セッションに保存
+                        # 2. 秒なしのフォーマットで解析
+                        temp_dt = datetime.strptime(clean_date_str, '%Y:%m:%d %H:%M')
+                    except:
+                        pass
+        
+        # 取得できたか判定
         if temp_dt:
             st.session_state.target_dt = temp_dt
             st.success(f"📸 撮影日時を検出: {temp_dt.strftime('%Y/%m/%d %H:%M')}")
         else:
             st.session_state.target_dt = datetime.now()
             st.info("ℹ️ 撮影日時が取得できないため現在時刻を使用します。")
-
-        # --- 以下、GPS等の既存処理 ---
 
         # --- 2. GPS情報の取得 ---
         geo = get_geotagging(exif)
@@ -441,6 +437,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
