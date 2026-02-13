@@ -49,11 +49,11 @@ def normalize_float(text):
     except ValueError:
         return 0.0
 
-# --- 3. 初期設定とセッション状態の管理 ---
+# --- 3. 初期設定とセッション状態 ---
 st.set_page_config(page_title="釣果記録アプリ", layout="centered")
 st.title("🎣 釣果記録システム")
 
-# 必要な変数をセッション(保持用メモリ)に登録
+# 状態保持用
 if "data_ready" not in st.session_state: st.session_state.data_ready = False
 if "lat" not in st.session_state: st.session_state.lat = 0.0
 if "lon" not in st.session_state: st.session_state.lon = 0.0
@@ -63,17 +63,16 @@ try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
 except Exception as e:
-    st.error(f"スプレッドシート接続エラー: {e}")
+    st.error(f"接続エラー: {e}")
     st.stop()
 
-# --- 4. 画像アップロードセクション ---
+# --- 4. 画像アップロード ---
 uploaded_file = st.file_uploader("📸 釣果写真をアップロード", type=["jpg", "jpeg"])
 
 if uploaded_file:
     img = Image.open(uploaded_file)
     st.image(img, use_container_width=True)
     
-    # 解析は一度だけ行う
     if not st.session_state.data_ready:
         exif = img._getexif()
         geo = get_geotagging(exif)
@@ -83,16 +82,16 @@ if uploaded_file:
             if lat and lon:
                 st.session_state.lat, st.session_state.lon = lat, lon
                 st.session_state.data_ready = True
-                st.success("📍 位置情報を取得しました！")
+                st.success("📍 位置を取得しました！")
         else:
-            st.warning("⚠️ 写真にGPSが含まれていません。手動で入力してください。")
-            st.session_state.data_ready = True # 入力欄は出す
+            st.warning("⚠️ GPSが見つかりません。")
+            st.session_state.data_ready = True
 
-# --- 5. 入力セクション（ここがメイン） ---
+# --- 5. 入力セクション（ここからフォームなし） ---
 if st.session_state.data_ready:
     st.subheader("📝 釣果の詳細")
 
-    # A. 魚種選択
+    # 魚種
     fish_options = ["シーバス", "チヌ", "真鯛", "アオリイカ", "ブリ", "アジ", "（手入力）"]
     selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
     manual_fish_name = ""
@@ -102,14 +101,13 @@ if st.session_state.data_ready:
 
     st.write("📏 全長 (cm)")
     
-    # B. 全長調整（ボタンを独立させて即時反映）
+    # 全長調整（ボタンを独立させて即時反映）
     c1, c2, c3 = st.columns([1, 2, 1])
     
     if c1.button("➖ 1", use_container_width=True):
         st.session_state.length_val = max(0.0, st.session_state.length_val - 1.0)
         st.rerun()
 
-    # テキスト入力欄。変更されたらセッションに保存
     length_text = c2.text_input("数値", value=str(st.session_state.length_val), label_visibility="collapsed")
     st.session_state.length_val = normalize_float(length_text)
 
@@ -117,7 +115,7 @@ if st.session_state.data_ready:
         st.session_state.length_val += 1.0
         st.rerun()
 
-    # C. その他の項目
+    # その他の項目
     place_name = st.text_input("📍 場所名", value="新規地点")
     lure = st.text_input("🪝 ルアー/仕掛け")
     angler = st.selectbox("👤 釣り人", ["自分", "同行者"])
@@ -125,55 +123,49 @@ if st.session_state.data_ready:
 
     st.markdown("---")
 
-    # D. 保存ボタン（ここも独立したボタンにする）
+    # 保存ボタン（これも通常のボタン）
     if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
-        if selected_fish == "（手入力）" and not manual_fish_name:
-            st.error("魚種名を入力してください。")
-        else:
-            try:
-                with st.spinner("📊 データを保存中..."):
-                    # 1. Cloudinary
-                    uploaded_file.seek(0)
-                    res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
-                    image_url = res.get("secure_url")
-                    
-                    # 2. データの組み立て
-                    now = datetime.now()
-                    save_data = {
-                        "filename": image_url,
-                        "datetime": now.strftime("%Y-%m-%d %H:%M"),
-                        "date": now.strftime("%Y-%m-%d"),
-                        "time": now.strftime("%H:%M"),
-                        "lat": float(st.session_state.lat),
-                        "lon": float(st.session_state.lon),
-                        "気温": 0, "風速": 0, "風向": "不明", "降水量": 0,
-                        "潮位_cm": 0, "月齢": 0, "潮名": "不明",
-                        "次の満潮まで_分": 0, "次の干潮まで_分": 0,
-                        "直前の満潮_時刻": "", "直前の干潮_時刻": "",
-                        "潮位フェーズ": "不明",
-                        "場所": place_name,
-                        "魚種": final_fish_name,
-                        "全長_cm": float(st.session_state.length_val),
-                        "ルアー": lure,
-                        "備考": memo,
-                        "group_id": "default", "観測所": "不明", "釣り人": angler
-                    }
+        try:
+            with st.spinner("📊 保存中..."):
+                # 画像アップロード
+                uploaded_file.seek(0)
+                res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
+                image_url = res.get("secure_url")
+                
+                # データの組み立て
+                now = datetime.now()
+                save_data = {
+                    "filename": image_url,
+                    "datetime": now.strftime("%Y-%m-%d %H:%M"),
+                    "date": now.strftime("%Y-%m-%d"),
+                    "time": now.strftime("%H:%M"),
+                    "lat": float(st.session_state.lat),
+                    "lon": float(st.session_state.lon),
+                    "気温": 0, "風速": 0, "風向": "不明", "降水量": 0,
+                    "潮位_cm": 0, "月齢": 0, "潮名": "不明",
+                    "次の満潮まで_分": 0, "次の干潮まで_分": 0,
+                    "直前の満潮_時刻": "", "直前の干潮_時刻": "",
+                    "潮位フェーズ": "不明",
+                    "場所": place_name,
+                    "魚種": final_fish_name,
+                    "全長_cm": float(st.session_state.length_val),
+                    "ルアー": lure,
+                    "備考": memo,
+                    "group_id": "default", "観測所": "不明", "釣り人": angler
+                }
 
-                    # 3. GSheets
-                    current_df = conn.read(spreadsheet=url, ttl=0)
-                    cols = ["filename","datetime","date","time","lat","lon","気温","風速","風向","降水量","潮位_cm","月齢","潮名","次の満潮まで_分","次の干潮まで_分","直前の満潮_時刻","直前の干潮_時刻","潮位フェーズ","場所","魚種","全長_cm","ルアー","備考","group_id","観測所","釣り人"]
-                    new_row_df = pd.DataFrame([save_data])[cols]
-                    updated_df = pd.concat([current_df, new_row_df], ignore_index=True)
-                    conn.update(spreadsheet=url, data=updated_df)
-                    
-                    st.success("🎉 保存に成功しました！")
-                    st.balloons()
-                    
-                    # リセット
-                    st.session_state.data_ready = False
-                    st.session_state.length_val = 0.0
-                    time.sleep(2)
-                    st.rerun()
-
-            except Exception as e:
-                st.error(f"❌ 保存失敗: {e}")
+                # 書き込み
+                current_df = conn.read(spreadsheet=url, ttl=0)
+                cols = ["filename","datetime","date","time","lat","lon","気温","風速","風向","降水量","潮位_cm","月齢","潮名","次の満潮まで_分","次の干潮まで_分","直前の満潮_時刻","直前の干潮_時刻","潮位フェーズ","場所","魚種","全長_cm","ルアー","備考","group_id","観測所","釣り人"]
+                new_row_df = pd.DataFrame([save_data])[cols]
+                updated_df = pd.concat([current_df, new_row_df], ignore_index=True)
+                conn.update(spreadsheet=url, data=updated_df)
+                
+                st.success("🎉 保存成功！")
+                st.balloons()
+                st.session_state.data_ready = False
+                st.session_state.length_val = 0.0
+                time.sleep(2)
+                st.rerun()
+        except Exception as e:
+            st.error(f"❌ 保存失敗: {e}")
