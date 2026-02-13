@@ -421,9 +421,10 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                     st.session_state.data_ready = False
                     time.sleep(2); st.rerun()
 
-            except Exception as e: # ← ここが 424行目。tryと同じ深さにする
+        except Exception as e: # ← ここが 424行目。tryと同じ深さにする
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
