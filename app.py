@@ -102,7 +102,7 @@ if st.session_state.data_ready:
             
             # スマホでスクロールしやすくするため、地図の操作を制限気味にする設定
             # zoomレベルを15（街区レベル）まで拡大
-            st.map(map_df, zoom=10, use_container_width=True)
+            st.map(map_df, zoom=13, use_container_width=True)
         else:
             st.info("位置情報がありません。写真はGPSオンで撮影してください。")
     # ------------------------------------------
@@ -194,6 +194,7 @@ if st.session_state.data_ready:
                 st.rerun()
         except Exception as e:
             st.error(f"❌ 保存失敗: {e}")
+
 
 
 
