@@ -349,62 +349,63 @@ if st.session_state.data_ready:
     lure = st.text_input("🪝 ルアー/仕掛け")
     angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"])
     memo = st.text_area("🗒️ 備考")
-
-   if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
-        if place_name == "" or place_name == "新規地点":
-            st.error("⚠️ 場所名を入力してください。")
-        else:
-            try:
-                with st.spinner("📊 写真撮影時のデータを取得中..."):
-                    # 【ここを修正】セッションから日時を取り出す
-                    target_dt = st.session_state.get('target_dt', datetime.now())
-                    
-                    # 1. 気象・月齢（target_dtを渡す）
-                    m_age = get_moon_age(target_dt)
-                    t_name = get_tide_name(m_age)
-                    temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(
-                        st.session_state.lat, st.session_state.lon, target_dt
-                    )
-                    
-                    # 2. 潮位詳細（target_dtを渡す）
-                    station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
-                    tide_data = get_tide_details(station_info['code'], target_dt)
-                    
-                    # (中略: tide_dataの整理などはそのまま)
-
-                    # --- 保存用データの作成 ---
-                    save_data = {
-                        "filename": res.get("secure_url"), 
-                        "datetime": target_dt.strftime("%Y-%m-%d %H:%M"), # 写真の日時！
-                        "date": target_dt.strftime("%Y-%m-%d"),          # 写真の日付！
-                        "time": target_dt.strftime("%H:%M"),             # 写真の時刻！
-                        "lat": float(st.session_state.lat), 
-                        "lon": float(st.session_state.lon),
-                        # ... 他の項目もそのまま ...
-                        "潮位フェーズ": tide_phase,
-                        "場所": place_name, 
-                        "魚種": final_fish_name,
-                        "全長_cm": float(st.session_state.length_val), 
-                        "ルアー": lure,
-                        "備考": memo, 
-                        "group_id": target_group_id, 
-                        "観測所": station_info['name'],
-                        "釣り人": angler
-                    }
-                    
-                        # スプレッドシート更新
-                        df_main = conn.read(spreadsheet=url, ttl=0)
-                        cols = ["filename","datetime","date","time","lat","lon","気温","風速","風向","降水量","潮位_cm","月齢","潮名","次の満潮まで_分","次の干潮まで_分","直前の満潮_時刻","直前の干潮_時刻","潮位フェーズ","場所","魚種","全長_cm","ルアー","備考","group_id","観測所","釣り人"]
-                        new_row_df = pd.DataFrame([save_data])[cols]
-                        conn.update(spreadsheet=url, data=pd.concat([df_main, new_row_df], ignore_index=True))
+    
+    if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
+            if place_name == "" or place_name == "新規地点":
+                st.error("⚠️ 場所名を入力してください。")
+            else:
+                try:
+                    with st.spinner("📊 写真撮影時のデータを取得中..."):
+                        # 【ここを修正】セッションから日時を取り出す
+                        target_dt = st.session_state.get('target_dt', datetime.now())
                         
-                        st.success(f"✅ {target_dt.strftime('%Y/%m/%d')} の記録として保存しました！")
-                        st.balloons()
-                        time.sleep(2); st.rerun()
+                        # 1. 気象・月齢（target_dtを渡す）
+                        m_age = get_moon_age(target_dt)
+                        t_name = get_tide_name(m_age)
+                        temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(
+                            st.session_state.lat, st.session_state.lon, target_dt
+                        )
+                        
+                        # 2. 潮位詳細（target_dtを渡す）
+                        station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
+                        tide_data = get_tide_details(station_info['code'], target_dt)
+                        
+                        # (中略: tide_dataの整理などはそのまま)
     
-                except Exception as e:
-                    st.error(f"❌ 保存失敗: {e}")
+                        # --- 保存用データの作成 ---
+                        save_data = {
+                            "filename": res.get("secure_url"), 
+                            "datetime": target_dt.strftime("%Y-%m-%d %H:%M"), # 写真の日時！
+                            "date": target_dt.strftime("%Y-%m-%d"),          # 写真の日付！
+                            "time": target_dt.strftime("%H:%M"),             # 写真の時刻！
+                            "lat": float(st.session_state.lat), 
+                            "lon": float(st.session_state.lon),
+                            # ... 他の項目もそのまま ...
+                            "潮位フェーズ": tide_phase,
+                            "場所": place_name, 
+                            "魚種": final_fish_name,
+                            "全長_cm": float(st.session_state.length_val), 
+                            "ルアー": lure,
+                            "備考": memo, 
+                            "group_id": target_group_id, 
+                            "観測所": station_info['name'],
+                            "釣り人": angler
+                        }
+                        
+                            # スプレッドシート更新
+                            df_main = conn.read(spreadsheet=url, ttl=0)
+                            cols = ["filename","datetime","date","time","lat","lon","気温","風速","風向","降水量","潮位_cm","月齢","潮名","次の満潮まで_分","次の干潮まで_分","直前の満潮_時刻","直前の干潮_時刻","潮位フェーズ","場所","魚種","全長_cm","ルアー","備考","group_id","観測所","釣り人"]
+                            new_row_df = pd.DataFrame([save_data])[cols]
+                            conn.update(spreadsheet=url, data=pd.concat([df_main, new_row_df], ignore_index=True))
+                            
+                            st.success(f"✅ {target_dt.strftime('%Y/%m/%d')} の記録として保存しました！")
+                            st.balloons()
+                            time.sleep(2); st.rerun()
+        
+                    except Exception as e:
+                        st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
