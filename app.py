@@ -23,6 +23,38 @@ try:
 except Exception as e:
     st.error("Cloudinaryの設定を確認してください。")
 
+TIDE_STATIONS = [
+    # --- 熊本・有明海・八代海エリア ---
+    {"name": "苓北", "lat": 32.4667, "lon": 130.0333, "code": "RH"},
+    {"name": "三角", "lat": 32.6167, "lon": 130.4500, "code": "MS"},
+    {"name": "本渡瀬戸", "lat": 32.4333, "lon": 130.2167, "code": "HS"},
+    {"name": "八代", "lat": 32.5167, "lon": 130.5667, "code": "O5"},
+    {"name": "水俣", "lat": 32.2000, "lon": 130.3667, "code": "O7"},
+    {"name": "熊本", "lat": 32.7500, "lon": 130.5667, "code": "KU"},
+    {"name": "大牟田", "lat": 33.0167, "lon": 130.4167, "code": "O6"},
+    {"name": "大浦", "lat": 32.9833, "lon": 130.2167, "code": "OU"},
+    {"name": "口之津", "lat": 32.6000, "lon": 130.2000, "code": "KT"},
+    
+    # --- 九州他エリア ---
+    {"name": "長崎", "lat": 32.7333, "lon": 129.8667, "code": "NS"},
+    {"name": "佐世保", "lat": 33.1500, "lon": 129.7167, "code": "QD"},
+    {"name": "博多", "lat": 33.6167, "lon": 130.4000, "code": "QF"},
+    {"name": "鹿児島", "lat": 31.6000, "lon": 130.5667, "code": "KG"},
+    {"name": "枕崎", "lat": 31.2667, "lon": 130.3000, "code": "MK"},
+    {"name": "油津", "lat": 31.5833, "lon": 131.4167, "code": "AB"},
+    
+    # --- 主要都市・その他 ---
+    {"name": "東京", "lat": 35.6500, "lon": 139.7667, "code": "TK"},
+    {"name": "横浜", "lat": 35.4500, "lon": 139.6500, "code": "QS"},
+    {"name": "名古屋", "lat": 35.0833, "lon": 136.8833, "code": "NG"},
+    {"name": "大阪", "lat": 34.6500, "lon": 135.4333, "code": "OS"},
+    {"name": "神戸", "lat": 34.6833, "lon": 135.1833, "code": "KB"},
+    {"name": "広島", "lat": 34.3500, "lon": 132.4667, "code": "Q8"},
+    {"name": "高松", "lat": 34.3500, "lon": 134.0500, "code": "TA"},
+    {"name": "高知", "lat": 33.5000, "lon": 133.5667, "code": "KC"},
+    {"name": "那覇", "lat": 26.2167, "lon": 127.6667, "code": "NH"}
+]
+
 # --- 2. 関数定義 ---
 # (既存の get_geotagging, get_decimal_from_dms, normalize_float, find_nearest_place, get_moon_age, get_tide_name は維持)
 
@@ -76,6 +108,40 @@ def get_tide_name(moon_age):
     elif age in [9, 24]: return "長潮"
     elif age in [10, 25]: return "若潮"
     else: return "不明"
+
+# 最寄りの潮位観測所を探す
+def find_nearest_tide_station(lat, lon):
+    distances = []
+    for s in TIDE_STATIONS:
+        d = np.sqrt((s['lat'] - lat)**2 + (s['lon'] - lon)**2)
+        distances.append(d)
+    return TIDE_STATIONS[np.argmin(distances)]
+
+# 気象庁から潮位(cm)を取得・計算
+def get_tide_level(station_code, dt):
+    try:
+        year = dt.year
+        url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{year}/{station_code}.txt"
+        res = requests.get(url, timeout=10)
+        if res.status_code != 200: return 0
+        
+        lines = res.text.splitlines()
+        target_date_str = dt.strftime('%y%m%d')
+        day_data = next((line for line in lines if line.startswith(target_date_str)), None)
+        
+        if not day_data: return 0
+        
+        # 毎時潮位を24個取得
+        hourly_tides = [int(day_data[7+(i*3):7+(i*3)+3].strip()) for i in range(24)]
+        
+        # 線形補間
+        h, m = dt.hour, dt.minute
+        t1 = hourly_tides[h]
+        t2 = hourly_tides[h+1] if h < 23 else t1
+        tide_cm = t1 + (t2 - t1) * (m / 60.0)
+        return int(round(tide_cm))
+    except:
+        return 0
 
 # 【修正】Open-Meteoを使用した過去48時間降水量対応の気象取得関数
 def get_weather_data_openmeteo(lat, lon, dt):
@@ -238,3 +304,4 @@ if st.session_state.data_ready:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+
