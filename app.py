@@ -292,10 +292,24 @@ if st.session_state.data_ready:
                     station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
                     tide_data = get_tide_details(station_info['code'], now)
                     
-                    tide_cm = tide_data['cm'] if tide_data else 0
-                    tide_phase = tide_data['phase'] if tide_data else "不明"
-                    # マスター登録ロジック
+                    # --- データの整理 ---
+                    if tide_data:
+                        tide_cm = tide_data['cm']
+                        tide_phase = tide_data['phase']
+                        # 満潮時刻と干潮時刻を分けて文字列にする
+                        high_tides = [e['time'].strftime('%H:%M') for e in tide_data['events'] if e['type'] == '満潮']
+                        low_tides = [e['time'].strftime('%H:%M') for e in tide_data['events'] if e['type'] == '干潮']
+                        high_str = ", ".join(high_tides)
+                        low_str = ", ".join(low_tides)
+                    else:
+                        tide_cm = 0
+                        tide_phase = "不明"
+                        high_str = ""
+                        low_str = ""
+
+                    # (マスター登録ロジックとCloudinaryアップロードはそのまま維持)
                     if force_new or (st.session_state.detected_place == "新規地点"):
+                        # ...既存のマスター登録ロジック...
                         if not df_master.empty and place_name in df_master['place_name'].values:
                             target_group_id = df_master[df_master['place_name'] == place_name]['group_id'].values[0]
                         else:
@@ -307,6 +321,7 @@ if st.session_state.data_ready:
                     uploaded_file.seek(0)
                     res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
                     
+                    # --- 修正された save_data ---
                     save_data = {
                         "filename": res.get("secure_url"), "datetime": now.strftime("%Y-%m-%d %H:%M"),
                         "date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H:%M"),
@@ -314,13 +329,23 @@ if st.session_state.data_ready:
                         "気温": temp if temp else 0,
                         "風速": wind_s if wind_s else 0,
                         "風向": wind_d,
-                        "降水量": rain_48, # これが48時間降水量
-                        "潮位_cm": 0, "月齢": m_age, "潮名": t_name, 
-                        "次の満潮まで_分": 0, "次の干潮まで_分": 0,
-                        "直前の満潮_時刻": "", "直前の干潮_時刻": "", "潮位フェーズ": "不明",
-                        "場所": place_name, "魚種": final_fish_name,
-                        "全長_cm": float(st.session_state.length_val), "ルアー": lure,
-                        "備考": memo, "group_id": target_group_id, "観測所": "不明", "釣り人": angler
+                        "降水量": rain_48, 
+                        "潮位_cm": tide_cm,           # 修正: tide_data['cm'] を反映
+                        "月齢": m_age, 
+                        "潮名": t_name, 
+                        "次の満潮まで_分": 0,           # (必要に応じて計算)
+                        "次の干潮まで_分": 0,           # (必要に応じて計算)
+                        "直前の満潮_時刻": high_str,    # 修正: 今日の満潮リストを反映
+                        "直前の干潮_時刻": low_str,     # 修正: 今日の干潮リストを反映
+                        "潮位フェーズ": tide_phase,    # 修正: 「上げ3分」などを反映
+                        "場所": place_name, 
+                        "魚種": final_fish_name,
+                        "全長_cm": float(st.session_state.length_val), 
+                        "ルアー": lure,
+                        "備考": memo, 
+                        "group_id": target_group_id, 
+                        "観測所": station_info['name'], # 修正: 観測所名を反映
+                        "釣り人": angler
                     }
 
                     df_main = conn.read(spreadsheet=url, ttl=0)
@@ -335,6 +360,7 @@ if st.session_state.data_ready:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+
 
 
 
