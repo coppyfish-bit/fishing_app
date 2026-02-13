@@ -369,29 +369,42 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                     tide_data_tomorrow = get_tide_details(station_info['code'], tomorrow_dt)
                     
                     all_events = []
-                    if tide_data_today:
-                        all_events.extend(tide_data_today['events'])
-                        tide_cm = tide_data_today['cm']
-                        tide_phase = tide_data_today['phase']
-                    if tide_data_tomorrow:
-                        all_events.extend(tide_data_tomorrow['events'])
+                  # 当日分
+                tide_data_today = get_tide_details(station_info['code'], target_dt)
+                if tide_data_today and 'events' in tide_data_today:
+                    all_events.extend(tide_data_today['events'])
+                    tide_cm = tide_data_today['cm']
+                    tide_phase = tide_data_today['phase']
+                
+                # 翌日分 (target_dtの24時間後)
+                tomorrow_dt = target_dt + timedelta(days=1)
+                tide_data_tomorrow = get_tide_details(station_info['code'], tomorrow_dt)
+                if tide_data_tomorrow and 'events' in tide_data_tomorrow:
+                    all_events.extend(tide_data_tomorrow['events'])
+                
+                # --- 【最重要】2日分のイベントを時間順に並び替える ---
+                # これをやらないと、今日のイベントの後に明日のイベントが繋がらず、正しく「次」が探せません
+                all_events.sort(key=lambda x: x['time'])
+                
+                if all_events:
+                    # 1. 直前 (過去のイベントから最新を1つ)
+                    past_events = [e for e in all_events if e['time'] <= target_dt]
+                    last_high = next((e for e in reversed(past_events) if '満' in e['type']), None)
+                    last_low = next((e for e in reversed(past_events) if '干' in e['type']), None)
                     
-                    if all_events:
-                        all_events.sort(key=lambda x: x['time'])
-                        # 直前 (過去)
-                        past_events = [e for e in all_events if e['time'] <= target_dt]
-                        last_high = next((e for e in reversed(past_events) if e['type'] == '満潮'), None)
-                        last_low = next((e for e in reversed(past_events) if e['type'] == '干潮'), None)
-                        high_str = last_high['time'].strftime('%Y/%m/%d %H:%M') if last_high else ""
-                        low_str = last_low['time'].strftime('%Y/%m/%d %H:%M') if last_low else ""
-                        # 次 (未来)
-                        future_events = [e for e in all_events if e['time'] > target_dt]
-                        next_high = next((e for e in future_events if e['type'] == '満潮'), None)
-                        next_low = next((e for e in future_events if e['type'] == '干潮'), None)
-                        if next_high:
-                            val_next_high = int((next_high['time'] - target_dt).total_seconds() / 60)
-                        if next_low:
-                            val_next_low = int((next_low['time'] - target_dt).total_seconds() / 60)
+                    high_str = last_high['time'].strftime('%Y/%m/%d %H:%M') if last_high else ""
+                    low_str = last_low['time'].strftime('%Y/%m/%d %H:%M') if last_low else ""
+
+                    # 2. 次 (未来のイベントから一番近いものを1つ)
+                    # 2日分がソートされているので、今日中に「干潮」がなくても、自動的に明日の干潮がヒットします
+                    future_events = [e for e in all_events if e['time'] > target_dt]
+                    next_high = next((e for e in future_events if '満' in e['type']), None)
+                    next_low = next((e for e in future_events if '干' in e['type']), None)
+
+                    if next_high:
+                        val_next_high = int((next_high['time'] - target_dt).total_seconds() / 60)
+                    if next_low:
+                        val_next_low = int((next_low['time'] - target_dt).total_seconds() / 60)
 
                     # 5. 画像アップロード
                     uploaded_file.seek(0)
@@ -427,6 +440,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
