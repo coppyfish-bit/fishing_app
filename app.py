@@ -79,25 +79,51 @@ def get_tide_name(moon_age):
     else: return "不明"
 
 # 【追加】天気取得関数
+# 【診断機能付き】天気取得関数
 def get_weather(lat, lon):
     try:
-        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={OWM_API_KEY}&units=metric&lang=ja"
-        res = requests.get(url).json()
+        # APIキーがSecretsにあるか確認
+        if "openweathermap" not in st.secrets:
+            st.error("Secretsに 'openweathermap' の設定が見つかりません。")
+            return None
+            
+        api_key = st.secrets["openweathermap"]["api_key"]
+        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric&lang=ja"
         
-        # 風向きを16方位の文字列に変換
+        response = requests.get(url)
+        res = response.json()
+        
+        # API側からエラーが返ってきている場合（キーが無効など）
+        if response.status_code != 200:
+            st.warning(f"天気APIエラー: {res.get('message', '不明なエラー')}")
+            return None
+
+        # 風向きを16方位に変換
         def get_wind_dir(deg):
             dirs = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
             return dirs[int((deg + 11.25) / 22.5) % 16]
 
-        weather_info = {
+        return {
             "temp": res["main"]["temp"],
             "wind_speed": res["wind"]["speed"],
             "wind_dir": get_wind_dir(res["wind"]["deg"]),
-            "rain": res.get("rain", {}).get("1h", 0) # 過去1時間の降水量（なければ0）
+            "rain": res.get("rain", {}).get("1h", 0)
         }
-        return weather_info
-    except:
-        return {"temp": 0, "wind_speed": 0, "wind_dir": "不明", "rain": 0}
+    except Exception as e:
+        st.error(f"天気取得中に例外が発生しました: {e}")
+        return None
+
+# --- 保存処理の中身も少し修正 ---
+# --- 保存処理の中身も少し修正 ---
+if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
+    # ... (前段の処理) ...
+    w_info = get_weather(st.session_state.lat, st.session_state.lon)
+    
+    # もし取得失敗していたらデフォルト値を入れる
+    if w_info is None:
+        w_info = {"temp": 0, "wind_speed": 0, "wind_dir": "取得失敗", "rain": 0}
+    
+    # ... (save_data作成へ) ...
 
 # --- 3. 初期設定とセッション状態 ---
 st.set_page_config(page_title="釣果記録アプリ", layout="centered")
@@ -228,3 +254,4 @@ if st.session_state.data_ready:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+
