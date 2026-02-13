@@ -91,6 +91,21 @@ if uploaded_file:
 if st.session_state.data_ready:
     st.subheader("📝 釣果の詳細")
 
+    # --- 【追加】緯度経度の表示と地図 ---
+    with st.expander("📍 位置情報の確認", expanded=True):
+        col_lat, col_lon = st.columns(2)
+        col_lat.metric("緯度", f"{st.session_state.lat:.6f}")
+        col_lon.metric("経度", f"{st.session_state.lon:.6f}")
+        
+        # 地図データの作成
+        map_data = pd.DataFrame({
+            'lat': [st.session_state.lat],
+            'lon': [st.session_state.lon]
+        })
+        # 地図を表示
+        st.map(map_data, zoom=12)
+    # ----------------------------------
+
     # 魚種
     fish_options = ["シーバス", "チヌ", "真鯛", "アオリイカ", "ブリ", "アジ", "（手入力）"]
     selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
@@ -176,4 +191,5 @@ if st.session_state.data_ready:
                 st.rerun()
         except Exception as e:
             st.error(f"❌ 保存失敗: {e}")
+
 
