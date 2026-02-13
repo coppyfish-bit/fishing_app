@@ -252,16 +252,20 @@ except Exception as e:
     st.error(f"接続エラー: {e}")
     st.stop()
 
-uploaded_file = st.file_uploader("📸 釣果写真をアップロード", type=["jpg", "jpeg"])
+# --- 1. まず最初に変数を準備しておく（これで NameError を防ぐ） ---
+dt_object = datetime.now()
+
+uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
     img = Image.open(uploaded_file)
     st.image(img, use_container_width=True)
     
+    # データをまだ解析していない場合のみ実行
     if not st.session_state.data_ready:
         exif = img._getexif()
         
-        # --- 1. 撮影日時の取得 ---
+        # --- 2. EXIFから日時を抽出 ---
         temp_dt = None
         if exif:
             for tag, value in exif.items():
@@ -272,12 +276,13 @@ if uploaded_file:
                     except:
                         pass
         
-        # セッション状態に保存（ここがポイント！）
         if temp_dt:
-            st.session_state.target_dt = temp_dt
-            st.success(f"📸 撮影日時を検出: {temp_dt.strftime('%Y/%m/%d %H:%M')}")
+            dt_object = temp_dt  # 写真の日時を代入
+            st.session_state.target_dt = dt_object
+            st.success(f"📸 撮影日時を検出: {dt_object.strftime('%Y/%m/%d %H:%M')}")
         else:
-            st.session_state.target_dt = datetime.now()
+            dt_object = datetime.now() # 取れなければ現在時刻
+            st.session_state.target_dt = dt_object
             st.warning("⚠️ 撮影日時が不明なため、現在時刻を使用します。")
 
         # --- 2. GPS情報の取得 ---
@@ -430,6 +435,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
