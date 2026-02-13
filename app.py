@@ -89,22 +89,25 @@ if uploaded_file:
 
 # --- 5. 入力セクション（ここからフォームなし） ---
 if st.session_state.data_ready:
-    st.subheader("📝 釣果の詳細")
 
-    # --- 【追加】緯度経度の表示と地図 ---
-    with st.expander("📍 位置情報の確認", expanded=True):
-        col_lat, col_lon = st.columns(2)
-        col_lat.metric("緯度", f"{st.session_state.lat:.6f}")
-        col_lon.metric("経度", f"{st.session_state.lon:.6f}")
-        
-        # 地図データの作成
-        map_data = pd.DataFrame({
-            'lat': [st.session_state.lat],
-            'lon': [st.session_state.lon]
-        })
-        # 地図を表示
-        st.map(map_data, zoom=12)
-    # ----------------------------------
+# --- 【改善】緯度経度表示とスマホ最適化地図 ---
+    with st.expander("📍 位置情報の確認（クリックで開閉）", expanded=True):
+        if st.session_state.lat != 0.0:
+            col_lat, col_lon = st.columns(2)
+            col_lat.metric("緯度", f"{st.session_state.lat:.6f}")
+            col_lon.metric("経度", f"{st.session_state.lon:.6f}")
+            
+            # 地図用データ
+            map_df = pd.DataFrame({'lat': [st.session_state.lat], 'lon': [st.session_state.lon]})
+            
+            # スマホでスクロールしやすくするため、地図の操作を制限気味にする設定
+            # zoomレベルを15（街区レベル）まで拡大
+            st.map(map_df, zoom=15, use_container_width=True)
+        else:
+            st.info("位置情報がありません。写真はGPSオンで撮影してください。")
+    # ------------------------------------------
+    
+    st.subheader("📝 釣果の詳細")
 
     # 魚種
     fish_options = ["シーバス", "チヌ", "真鯛", "アオリイカ", "ブリ", "アジ", "（手入力）"]
@@ -191,5 +194,6 @@ if st.session_state.data_ready:
                 st.rerun()
         except Exception as e:
             st.error(f"❌ 保存失敗: {e}")
+
 
 
