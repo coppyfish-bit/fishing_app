@@ -9,6 +9,7 @@ import cloudinary.uploader
 import unicodedata
 import io
 import numpy as np
+import ephem  # 月齢計算用のライブラリ（要：pip install pyephem）
 
 # --- 1. Cloudinary設定 ---
 try:
@@ -54,23 +55,18 @@ def normalize_float(text):
 def find_nearest_place(lat, lon, df_master):
     if lat == 0.0 or lon == 0.0 or df_master.empty:
         return "新規地点", "default"
-    
     valid_master = df_master.dropna(subset=['latitude', 'longitude']).copy()
-    if valid_master.empty:
-        return "新規地点", "default"
-
-    # 距離計算 (1度 = 約111km)
-    valid_master['dist_m'] = np.sqrt(
-        ( (valid_master['latitude'] - lat) * 111000 )**2 + 
-        ( (valid_master['longitude'] - lon) * 91000 )**2
-    )
-    
+    if valid_master.empty: return "新規地点", "default"
+    valid_master['dist_m'] = np.sqrt(((valid_master['latitude'] - lat) * 111000 )**2 + ((valid_master['longitude'] - lon) * 91000 )**2)
     nearest = valid_master.loc[valid_master['dist_m'].idxmin()]
-    
-    if nearest['dist_m'] <= 500:
-        return nearest['place_name'], nearest['group_id']
-    else:
-        return "新規地点", "default"
+    return (nearest['place_name'], nearest['group_id']) if nearest['dist_m'] <= 500 else ("新規地点", "default")
+
+# 【追加】月齢計算関数
+def get_moon_age(date_obj):
+    # ephemを使用して、指定された日時の月齢を計算
+    m = ephem.Moon(date_obj)
+    # 前回新月からの経過日数（月齢）を返す
+    return round(date_obj - ephem.previous_new_moon(date_obj), 1)
 
 # --- 3. 初期設定とセッション状態 ---
 st.set_page_config(page_title="釣果記録アプリ", layout="centered")
@@ -88,7 +84,7 @@ try:
     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
     df_master = conn.read(spreadsheet=url, worksheet="place_master")
 except Exception as e:
-    st.error(f"スプレッドシート接続エラー: {e}")
+    st.error(f"接続エラー: {e}")
     st.stop()
 
 # --- 4. 画像アップロード ---
@@ -97,7 +93,6 @@ uploaded_file = st.file_uploader("📸 釣果写真をアップロード", type=
 if uploaded_file:
     img = Image.open(uploaded_file)
     st.image(img, use_container_width=True)
-    
     if not st.session_state.data_ready:
         exif = img._getexif()
         geo = get_geotagging(exif)
@@ -107,8 +102,7 @@ if uploaded_file:
             if lat and lon:
                 st.session_state.lat, st.session_state.lon = lat, lon
                 place, gid = find_nearest_place(lat, lon, df_master)
-                st.session_state.detected_place = place
-                st.session_state.group_id = gid
+                st.session_state.detected_place, st.session_state.group_id = place, gid
                 st.session_state.data_ready = True
         else:
             st.warning("⚠️ GPSが見つかりません。")
@@ -121,7 +115,6 @@ if st.session_state.data_ready:
             st.map(pd.DataFrame({'lat': [st.session_state.lat], 'lon': [st.session_state.lon]}), zoom=14)
     
     st.subheader("📝 釣果の詳細")
-
     fish_options = ["スズキ", "ヒラスズキ", "ボウズ", "タチウオ", "ターポン", "カサゴ", "メバル", "マダイ", "チヌ", "キビレ", "ブリ", "アジ", "（手入力）"]
     selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
     final_fish_name = st.text_input("魚種名を入力") if selected_fish == "（手入力）" else selected_fish
@@ -130,15 +123,12 @@ if st.session_state.data_ready:
     st.write("📏 全長 (cm)")
     c1, c2, c3 = st.columns([1, 2, 1])
     if c1.button("➖ 0.5", use_container_width=True):
-        st.session_state.length_val = max(0.0, st.session_state.length_val - 0.5)
-        st.rerun()
+        st.session_state.length_val = max(0.0, st.session_state.length_val - 0.5); st.rerun()
     length_text = c2.text_input("全長入力", value=str(st.session_state.length_val) if st.session_state.length_val > 0 else "", placeholder="ここに全長を入力", label_visibility="collapsed")
     st.session_state.length_val = normalize_float(length_text)
     if c3.button("➕ 0.5", use_container_width=True):
-        st.session_state.length_val += 0.5
-        st.rerun()
+        st.session_state.length_val += 0.5; st.rerun()
 
-    # 場所名入力
     place_name = st.text_input("📍 場所名", value=st.session_state.detected_place)
     lure = st.text_input("🪝 ルアー/仕掛け")
     angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"])
@@ -147,53 +137,43 @@ if st.session_state.data_ready:
     if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
         try:
             with st.spinner("📊 保存中..."):
-                # 新規地点かつ場所名が入力されている場合、マスターに登録
+                now = datetime.now()
+                # 【追加】月齢を計算
+                moon_age = get_moon_age(now)
+
+                # マスター登録処理
                 current_gid = st.session_state.group_id
                 if st.session_state.detected_place == "新規地点" and place_name != "新規地点":
                     new_gid = int(df_master['group_id'].max()) + 1 if not df_master.empty else 0
-                    new_place_df = pd.DataFrame([{
-                        "group_id": new_gid,
-                        "place_name": place_name,
-                        "latitude": st.session_state.lat,
-                        "longitude": st.session_state.lon
-                    }])
-                    # place_masterシートを更新
-                    updated_master = pd.concat([df_master, new_place_df], ignore_index=True)
-                    conn.update(spreadsheet=url, worksheet="place_master", data=updated_master)
+                    new_place_df = pd.DataFrame([{"group_id": new_gid, "place_name": place_name, "latitude": st.session_state.lat, "longitude": st.session_state.lon}])
+                    conn.update(spreadsheet=url, worksheet="place_master", data=pd.concat([df_master, new_place_df], ignore_index=True))
                     current_gid = new_gid
-                    st.info(f"🆕 新しい場所「{place_name}」をマスターに登録しました！")
 
                 # 画像アップロード
                 uploaded_file.seek(0)
                 res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
-                image_url = res.get("secure_url")
                 
-                # 釣果データ保存
-                now = datetime.now()
+                # 保存データ
                 save_data = {
-                    "filename": image_url, "datetime": now.strftime("%Y-%m-%d %H:%M"),
+                    "filename": res.get("secure_url"), "datetime": now.strftime("%Y-%m-%d %H:%M"),
                     "date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H:%M"),
                     "lat": float(st.session_state.lat), "lon": float(st.session_state.lon),
                     "気温": 0, "風速": 0, "風向": "不明", "降水量": 0,
-                    "潮位_cm": 0, "月齢": 0, "潮名": "不明",
-                    "次の満潮まで_分": 0, "次の干潮まで_分": 0,
-                    "直前の満潮_時刻": "", "直前の干潮_時刻": "",
-                    "潮位フェーズ": "不明",
+                    "潮位_cm": 0, "月齢": moon_age,  # 【自動化完了】
+                    "潮名": "不明", "次の満潮まで_分": 0, "次の干潮まで_分": 0,
+                    "直前の満潮_時刻": "", "直前の干潮_時刻": "", "潮位フェーズ": "不明",
                     "場所": place_name, "魚種": final_fish_name,
                     "全長_cm": float(st.session_state.length_val), "ルアー": lure,
                     "備考": memo, "group_id": current_gid, "観測所": "不明", "釣り人": angler
                 }
 
-                df_main = conn.read(spreadsheet=url, ttl=0) # mainシート
-                new_row = pd.DataFrame([save_data])
-                updated_main = pd.concat([df_main, new_row], ignore_index=True)
-                conn.update(spreadsheet=url, data=updated_main)
+                df_main = conn.read(spreadsheet=url, ttl=0)
+                conn.update(spreadsheet=url, data=pd.concat([df_main, pd.DataFrame([save_data])], ignore_index=True))
                 
-                st.success("🎉 釣果を記録しました！")
+                st.success(f"🎉 記録完了！ (月齢: {moon_age})")
                 st.balloons()
                 st.session_state.data_ready = False
                 st.session_state.length_val = 0.0
-                time.sleep(2)
-                st.rerun()
+                time.sleep(2); st.rerun()
         except Exception as e:
             st.error(f"❌ 保存失敗: {e}")
