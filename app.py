@@ -110,7 +110,7 @@ if st.session_state.data_ready:
     st.subheader("📝 釣果の詳細")
 
     # 魚種
-    fish_options = ["シーバス", "チヌ", "真鯛", "アオリイカ", "ブリ", "アジ", "（手入力）"]
+    fish_options = ["スズキ", "ヒラスズキ", "ボウズ", "タチウオ", "ターポン", "カサゴ", "メバル", "マダイ", "チヌ", "キビレ", "ブリ", "アジ", "（手入力）"]
     selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
     manual_fish_name = ""
     if selected_fish == "（手入力）":
@@ -143,7 +143,7 @@ if st.session_state.data_ready:
     # その他の項目
     place_name = st.text_input("📍 場所名", value="新規地点")
     lure = st.text_input("🪝 ルアー/仕掛け")
-    angler = st.selectbox("👤 釣り人", ["自分", "同行者"])
+    angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"])
     memo = st.text_area("🗒️ 備考")
 
     st.markdown("---")
@@ -194,6 +194,7 @@ if st.session_state.data_ready:
                 st.rerun()
         except Exception as e:
             st.error(f"❌ 保存失敗: {e}")
+
 
 
 
