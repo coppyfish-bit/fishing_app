@@ -9,9 +9,10 @@ import cloudinary.uploader
 import unicodedata
 import io
 import numpy as np
-import ephem  # 月齢計算用のライブラリ（要：pip install pyephem）
+import ephem
+import requests # 天気取得用に追加
 
-# --- 1. Cloudinary設定 ---
+# --- 1. 設定 ---
 try:
     cloudinary.config(
         cloud_name = st.secrets["cloudinary"]["cloud_name"],
@@ -19,10 +20,13 @@ try:
         api_secret = st.secrets["cloudinary"]["api_secret"],
         secure = True
     )
+    OWM_API_KEY = st.secrets["openweathermap"]["api_key"]
 except Exception as e:
-    st.error("Cloudinaryの設定を確認してください。")
+    st.error("設定（Cloudinary/OpenWeatherMap）を確認してください。")
 
 # --- 2. 関数定義 ---
+# (既存の関数 get_geotagging, get_decimal_from_dms, normalize_float, find_nearest_place, get_moon_age, get_tide_name はそのまま)
+
 def get_geotagging(exif):
     if not exif: return None
     gps_info = exif.get(34853)
@@ -51,7 +55,6 @@ def normalize_float(text):
     except ValueError:
         return 0.0
 
-# 距離判定付きの場所検索関数（500m制限）
 def find_nearest_place(lat, lon, df_master):
     if lat == 0.0 or lon == 0.0 or df_master.empty:
         return "新規地点", "default"
@@ -61,15 +64,12 @@ def find_nearest_place(lat, lon, df_master):
     nearest = valid_master.loc[valid_master['dist_m'].idxmin()]
     return (nearest['place_name'], nearest['group_id']) if nearest['dist_m'] <= 500 else ("新規地点", "default")
 
-# 月齢計算関数（修正版）
 def get_moon_age(date_obj):
     e_date = ephem.Date(date_obj)
     prev_new = ephem.previous_new_moon(e_date)
     return round(float(e_date - prev_new), 1)
 
-# 【追加】月齢から潮名を判定する関数
 def get_tide_name(moon_age):
-    # 月齢を整数に丸めて判定（一般的な釣り用カレンダーの基準）
     age = int(round(moon_age)) % 30
     if age in [30, 0, 1, 14, 15, 16]: return "大潮"
     elif age in [2, 3, 4, 11, 12, 13, 17, 18, 19, 26, 27, 28]: return "中潮"
@@ -77,6 +77,27 @@ def get_tide_name(moon_age):
     elif age in [9, 24]: return "長潮"
     elif age in [10, 25]: return "若潮"
     else: return "不明"
+
+# 【追加】天気取得関数
+def get_weather(lat, lon):
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={OWM_API_KEY}&units=metric&lang=ja"
+        res = requests.get(url).json()
+        
+        # 風向きを16方位の文字列に変換
+        def get_wind_dir(deg):
+            dirs = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
+            return dirs[int((deg + 11.25) / 22.5) % 16]
+
+        weather_info = {
+            "temp": res["main"]["temp"],
+            "wind_speed": res["wind"]["speed"],
+            "wind_dir": get_wind_dir(res["wind"]["deg"]),
+            "rain": res.get("rain", {}).get("1h", 0) # 過去1時間の降水量（なければ0）
+        }
+        return weather_info
+    except:
+        return {"temp": 0, "wind_speed": 0, "wind_dir": "不明", "rain": 0}
 
 # --- 3. 初期設定とセッション状態 ---
 st.set_page_config(page_title="釣果記録アプリ", layout="centered")
@@ -139,16 +160,13 @@ if st.session_state.data_ready:
     if c3.button("➕ 0.5", use_container_width=True):
         st.session_state.length_val += 0.5; st.rerun()
 
-   # --- 【改善】場所名の入力セクション ---
     st.markdown("---")
-    # 強制的に新規地点として入力するチェックボックス
     force_new = st.checkbox("🆕 新しい場所として登録する")
-    
     if force_new:
         place_name = st.text_input("📍 新しい場所名を入力してください", value="")
-        target_group_id = "default" # 保存時に新規発行
+        target_group_id = "default"
     else:
-        place_name = st.text_input("📍 場所名（すでに登録されたポイントは自動入力されます）", value=st.session_state.detected_place)
+        place_name = st.text_input("📍 場所名", value=st.session_state.detected_place)
         target_group_id = st.session_state.group_id
 
     lure = st.text_input("🪝 ルアー/仕掛け")
@@ -162,17 +180,14 @@ if st.session_state.data_ready:
             try:
                 with st.spinner("📊 保存中..."):
                     now = datetime.now()
-                    try:
-                        m_age = get_moon_age(now)
-                        t_name = get_tide_name(m_age)
-                    except:
-                        m_age = 0.0
-                        t_name = "不明"
+                    
+                    # --- 月齢/潮名/天気を取得 ---
+                    m_age = get_moon_age(now)
+                    t_name = get_tide_name(m_age)
+                    w_info = get_weather(st.session_state.lat, st.session_state.lon) # 【追加】
 
                     # マスター登録ロジック
-                    # 「新規登録にチェック」かつ「既存のマスターに同名がない」場合に登録
                     if force_new or (st.session_state.detected_place == "新規地点"):
-                        # すでに同じ名前がマスターにあるかチェック
                         if not df_master.empty and place_name in df_master['place_name'].values:
                             target_group_id = df_master[df_master['place_name'] == place_name]['group_id'].values[0]
                         else:
@@ -180,8 +195,8 @@ if st.session_state.data_ready:
                             new_place_df = pd.DataFrame([{"group_id": new_gid, "place_name": place_name, "latitude": st.session_state.lat, "longitude": st.session_state.lon}])
                             conn.update(spreadsheet=url, worksheet="place_master", data=pd.concat([df_master, new_place_df], ignore_index=True))
                             target_group_id = new_gid
-                            st.toast(f"📍 マスターに「{place_name}」を追加しました")
 
+                    # 画像/データ保存
                     uploaded_file.seek(0)
                     res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
                     
@@ -189,7 +204,10 @@ if st.session_state.data_ready:
                         "filename": res.get("secure_url"), "datetime": now.strftime("%Y-%m-%d %H:%M"),
                         "date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H:%M"),
                         "lat": float(st.session_state.lat), "lon": float(st.session_state.lon),
-                        "気温": 0, "風速": 0, "風向": "不明", "降水量": 0,
+                        "気温": w_info["temp"], # 【自動化】
+                        "風速": w_info["wind_speed"], # 【自動化】
+                        "風向": w_info["wind_dir"], # 【自動化】
+                        "降水量": w_info["rain"], # 【自動化】
                         "潮位_cm": 0, "月齢": m_age, "潮名": t_name, 
                         "次の満潮まで_分": 0, "次の干潮まで_分": 0,
                         "直前の満潮_時刻": "", "直前の干潮_時刻": "", "潮位フェーズ": "不明",
@@ -201,18 +219,12 @@ if st.session_state.data_ready:
                     df_main = conn.read(spreadsheet=url, ttl=0)
                     cols = ["filename","datetime","date","time","lat","lon","気温","風速","風向","降水量","潮位_cm","月齢","潮名","次の満潮まで_分","次の干潮まで_分","直前の満潮_時刻","直前の干潮_時刻","潮位フェーズ","場所","魚種","全長_cm","ルアー","備考","group_id","観測所","釣り人"]
                     new_row_df = pd.DataFrame([save_data])[cols]
-                    updated_main = pd.concat([df_main, new_row_df], ignore_index=True)
-                    conn.update(spreadsheet=url, data=updated_main)
+                    conn.update(spreadsheet=url, data=pd.concat([df_main, new_row_df], ignore_index=True))
                     
-                    st.success(f"🎉 記録完了！ ({t_name})")
+                    st.success(f"🎉 記録完了！ ({t_name} / {w_info['temp']}℃ / {w_info['wind_dir']}の風 {w_info['wind_speed']}m)")
                     st.balloons()
                     st.session_state.data_ready = False
                     st.session_state.length_val = 0.0
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
-
-
-
-
-
