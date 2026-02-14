@@ -268,7 +268,7 @@ if uploaded_file:
     st.image(img, use_container_width=True)
     
 if not st.session_state.data_ready:
-        exif = img._getexif()
+        exif = img_for_upload._getexif()
         
         # --- 撮影日時の取得（秒なし・エラー回避版） ---
         temp_dt = None
@@ -406,11 +406,12 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                     if next_l:
                         val_next_low = int((next_l - target_dt).total_seconds() / 60)
 
-                    # 6. 画像アップロード
                     # --- 6. 画像のリサイズと軽量化処理 (長辺800px) ---
+                    # uploaded_file を開き直す（ポインタを先頭に戻してから）
+                    uploaded_file.seek(0)
                     img_for_upload = Image.open(uploaded_file)
                     
-                    # スマホ写真の向き（回転情報）を正しく補正
+                    # スマホ写真の向き（回転情報）を補正
                     try:
                         exif = img_for_upload._getexif()
                         if exif:
@@ -420,14 +421,13 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                                 elif exif[orientation] == 6: img_for_upload = img_for_upload.rotate(270, expand=True)
                                 elif exif[orientation] == 8: img_for_upload = img_for_upload.rotate(90, expand=True)
                     except:
-                        pass
+                        pass # 補正に失敗してもリサイズ処理へ進む
 
                     # リサイズ：長辺を800pxに制限
                     img_for_upload.thumbnail((800, 800), Image.Resampling.LANCZOS)
 
                     # メモリ上でJPEG圧縮（画質70%）
                     img_bytes = io.BytesIO()
-                    # 透過情報（PNG等）がある場合のためにRGBに変換
                     if img_for_upload.mode != 'RGB':
                         img_for_upload = img_for_upload.convert('RGB')
                         
@@ -467,6 +467,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
