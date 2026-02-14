@@ -294,7 +294,33 @@ if uploaded_file:
                     temp_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
                 except:
                     pass
-    
+                     # --- 6. 画像のリサイズと軽量化処理 (長辺800px) ---
+                    # uploaded_file を開き直す（ポインタを先頭に戻してから）
+                    uploaded_file.seek(0)
+                    img_for_upload = Image.open(uploaded_file)
+                    
+                    # スマホ写真の向き（回転情報）を補正
+                    try:
+                        exif = img_for_upload._getexif()
+                        if exif:
+                            orientation = next((k for k, v in ExifTags.TAGS.items() if v == 'Orientation'), None)
+                            if orientation and orientation in exif:
+                                if exif[orientation] == 3: img_for_upload = img_for_upload.rotate(180, expand=True)
+                                elif exif[orientation] == 6: img_for_upload = img_for_upload.rotate(270, expand=True)
+                                elif exif[orientation] == 8: img_for_upload = img_for_upload.rotate(90, expand=True)
+                    except:
+                        pass # 補正に失敗してもリサイズ処理へ進む
+
+                    # リサイズ：長辺を800pxに制限
+                    img_for_upload.thumbnail((800, 800), Image.Resampling.LANCZOS)
+
+                    # メモリ上でJPEG圧縮（画質70%）
+                    img_bytes = io.BytesIO()
+                    if img_for_upload.mode != 'RGB':
+                        img_for_upload = img_for_upload.convert('RGB')
+                        
+                    img_for_upload.save(img_bytes, format='JPEG', quality=70, optimize=True)
+                    img_bytes.seek(0)   
         # 取得できたか判定
         if temp_dt:
             st.session_state.target_dt = temp_dt
@@ -404,34 +430,6 @@ if st.session_state.data_ready:
                     if next_l:
                         val_next_low = int((next_l - target_dt).total_seconds() / 60)
 
-                    # --- 6. 画像のリサイズと軽量化処理 (長辺800px) ---
-                    # uploaded_file を開き直す（ポインタを先頭に戻してから）
-                    uploaded_file.seek(0)
-                    img_for_upload = Image.open(uploaded_file)
-                    
-                    # スマホ写真の向き（回転情報）を補正
-                    try:
-                        exif = img_for_upload._getexif()
-                        if exif:
-                            orientation = next((k for k, v in ExifTags.TAGS.items() if v == 'Orientation'), None)
-                            if orientation and orientation in exif:
-                                if exif[orientation] == 3: img_for_upload = img_for_upload.rotate(180, expand=True)
-                                elif exif[orientation] == 6: img_for_upload = img_for_upload.rotate(270, expand=True)
-                                elif exif[orientation] == 8: img_for_upload = img_for_upload.rotate(90, expand=True)
-                    except:
-                        pass # 補正に失敗してもリサイズ処理へ進む
-
-                    # リサイズ：長辺を800pxに制限
-                    img_for_upload.thumbnail((800, 800), Image.Resampling.LANCZOS)
-
-                    # メモリ上でJPEG圧縮（画質70%）
-                    img_bytes = io.BytesIO()
-                    if img_for_upload.mode != 'RGB':
-                        img_for_upload = img_for_upload.convert('RGB')
-                        
-                    img_for_upload.save(img_bytes, format='JPEG', quality=70, optimize=True)
-                    img_bytes.seek(0)
-
                     if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
                     # 1. すべての変数を初期化
                     temp, wind_s, wind_d, rain_48 = 0, 0, "不明", 0
@@ -477,6 +475,7 @@ if st.session_state.data_ready:
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
