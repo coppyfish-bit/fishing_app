@@ -258,18 +258,24 @@ except Exception as e:
     st.error(f"接続エラー: {e}")
     st.stop()
 
-    # --- 1. まず最初に変数を準備しておく（これで NameError を防ぐ） ---
-    dt_object = datetime.now()
-    
-    uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png"])
-    
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    df_master = conn.read(spreadsheet=url, worksheet="place_master")
+except Exception as e:
+    st.error(f"接続エラー: {e}")
+    st.stop()
+
+# --- try-except の外に出して、確実に行が実行されるようにする ---
+uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png", "heic"])
+
 if uploaded_file:
-    # --- 1. 画像の読み込み ---
+    # 1. 画像の読み込み
     img_for_upload = Image.open(uploaded_file)
     
-    # --- 2. EXIFデータの解析 (インデントを揃える) ---
+    # 2. EXIFデータの解析
     exif = img_for_upload._getexif()
-    temp_dt = None # ← 274行目: ここを上の行とピッタリ揃える
+    temp_dt = None
     
     if exif:
         for tag_id, value in exif.items():
@@ -464,6 +470,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
