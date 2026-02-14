@@ -14,6 +14,7 @@ import requests
 from PIL import Image, ExifTags
 # app.py の冒頭に追加
 from edit_module import show_edit_page
+from gallery_module import show_gallery_page
 
 def safe_strptime(date_str, fmt='%Y/%m/%d %H:%M'):
     """ミリ秒などが混入していても、フォーマットに合う長さだけ切り取って解析する"""
@@ -429,6 +430,7 @@ with tab2:
 # --- 2. タブ3（ギャラリー）の記述 ---
 with tab3:
     show_gallery_page(df)
+
 
 
 
