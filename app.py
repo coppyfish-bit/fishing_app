@@ -258,14 +258,14 @@ except Exception as e:
     st.error(f"接続エラー: {e}")
     st.stop()
 
-# --- 1. まず最初に変数を準備しておく（これで NameError を防ぐ） ---
-dt_object = datetime.now()
-
-uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png"])
-
-if uploaded_file:
-    # 1. まず PIL Image として開く（ここで変数を作る！）
-    img_for_upload = Image.open(uploaded_file) 
+    # --- 1. まず最初に変数を準備しておく（これで NameError を防ぐ） ---
+    dt_object = datetime.now()
+    
+    uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png"])
+    
+    if uploaded_file:
+        # 1. まず PIL Image として開く（ここで変数を作る！）
+        img_for_upload = Image.open(uploaded_file) 
     
     # 2. その後で解析する
     exif = img_for_upload._getexif() 
@@ -467,6 +467,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
