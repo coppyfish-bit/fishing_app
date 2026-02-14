@@ -1,5 +1,4 @@
 # --- タブ3: ギャラリー ---
-with tab3:
     st.subheader("🖼️ 精密データオーバーレイ")
     
     # データを最新順にソート
@@ -40,4 +39,5 @@ with tab3:
                     st.markdown(overlay_html, unsafe_allow_html=True)
                 except Exception as e:
                     # エラー時は通常の画像表示を試みる
+
                     st.image(img_url, caption=f"Error: {row['魚種']}")
