@@ -248,7 +248,7 @@ def get_weather_data_openmeteo(lat, lon, dt):
     except Exception as e:
         return None, None, "不明", 0.0
 # --- タブの設定部分 ---
-tab1, tab2 = st.tabs(["📝 釣果記録", "🛠️ データ管理"])
+tab1, tab2, tab3 = st.tabs(["📝 釣果記録", "🛠️ データ管理", "🖼️ ギャラリー"])
 
 with tab1:
     # --- 3. 以降、初期設定・画像アップロード・入力画面は既存と同じ ---
@@ -426,4 +426,8 @@ with tab1:
 # app.py 内
 with tab2:
     show_edit_page(conn, url)
+# --- 2. タブ3（ギャラリー）の記述 ---
+with tab3:
+    show_tab3g_gallery_page(df)
+
 
