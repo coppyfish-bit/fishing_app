@@ -263,28 +263,25 @@ except Exception as e:
     
     uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png"])
     
-    if uploaded_file:
-        # 1. まず PIL Image として開く（ここで変数を作る！）
-        img_for_upload = Image.open(uploaded_file) 
+if uploaded_file:
+    # --- 1. 画像の読み込み ---
+    img_for_upload = Image.open(uploaded_file)
     
-    # 2. その後で解析する
-    exif = img_for_upload._getexif() 
-        
-        # --- 撮影日時の取得（秒なし・エラー回避版） ---
-        temp_dt = None
-        if exif:
-            for tag, value in exif.items():
-                tag_name = TAGS.get(tag, tag)
-                if tag_name == 'DateTimeOriginal':
-                    try:
-                        # 1. 文字列にして、分まで（最初の16文字）を切り出す
-                        # 例: "2025:12:29 15:17:00.4" -> "2025:12:29 15:17"
-                        clean_val = str(value).strip()[:16].replace(":", "/", 2)
-                        # 2. 秒なしのフォーマットで解析
-                        temp_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
-                    except:
-                        pass
-        
+    # --- 2. EXIFデータの解析 (インデントを揃える) ---
+    exif = img_for_upload._getexif()
+    temp_dt = None # ← 274行目: ここを上の行とピッタリ揃える
+    
+    if exif:
+        for tag_id, value in exif.items():
+            tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+            if tag_name == 'DateTimeOriginal':
+                try:
+                    # ミリ秒やゴミを物理的にカット（16文字）
+                    clean_val = str(value).strip()[:16].replace(":", "/", 2)
+                    temp_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
+                except:
+                    pass
+    
         # 取得できたか判定
         if temp_dt:
             st.session_state.target_dt = temp_dt
@@ -467,6 +464,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
