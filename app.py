@@ -413,7 +413,7 @@ with tab1:
                                 "group_id": target_group_id, "観測所": station_info['name'], "釣り人": angler
                             }
         
-                            df_main = conn.read(spreadsheet=url, ttl=0)
+                            df_main = conn.read(spreadsheet=url, ttl="1m")
                             new_row = pd.DataFrame([save_data])[df_main.columns.tolist() if not df_main.empty else list(save_data.keys())]
                             conn.update(spreadsheet=url, data=pd.concat([df_main, new_row], ignore_index=True))
                             
@@ -429,6 +429,7 @@ with tab2:
     show_edit_page(conn, url)
 with tab3:
     show_gallery_page(df) # 「tab3の中にこれを表示してね」と命令する
+
 
 
 
