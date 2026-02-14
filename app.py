@@ -248,6 +248,14 @@ def get_weather_data_openmeteo(lat, lon, dt):
         return temp, wind_speed, get_wind_dir(wind_deg), precip_48h
     except Exception as e:
         return None, None, "不明", 0.0
+
+# 1. 接続設定（既存のコード）
+conn = st.connection("gsheets", type=GSheetsConnection)
+url = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_FcoS8gFFyE/edit?gid=0#gid=0"
+
+# 2. データを読み込んで 'df' という名前の変数に入れる（★ここが重要！）
+# 先ほどのエラー(429)対策として ttl="1m" を推奨します
+df = conn.read(spreadsheet=url, ttl="1m")
 # --- タブの設定部分 ---
 tab1, tab2, tab3 = st.tabs(["📝 釣果記録", "🛠️ データ管理", "🖼️ ギャラリー"])
 
@@ -429,6 +437,7 @@ with tab2:
     show_edit_page(conn, url)
 with tab3:
     show_gallery_page(df) # 「tab3の中にこれを表示してね」と命令する
+
 
 
 
