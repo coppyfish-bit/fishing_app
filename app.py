@@ -428,6 +428,7 @@ with tab2:
     show_edit_page(conn, url)
 # --- 2. タブ3（ギャラリー）の記述 ---
 with tab3:
-    show_tab3g_gallery_page(df)
+    show_gallery_page(df)
+
 
 
