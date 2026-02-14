@@ -11,7 +11,7 @@ import io
 import numpy as np
 import ephem
 import requests
-from PIL.ExifTags import TAGS
+from PIL import Image, ExifTags
 
 def safe_strptime(date_str, fmt='%Y/%m/%d %H:%M'):
     """ミリ秒などが混入していても、フォーマットに合う長さだけ切り取って解析する"""
@@ -467,6 +467,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
