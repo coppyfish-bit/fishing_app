@@ -407,8 +407,35 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                         val_next_low = int((next_l - target_dt).total_seconds() / 60)
 
                     # 6. 画像アップロード
-                    uploaded_file.seek(0)
-                    res = cloudinary.uploader.upload(uploaded_file, folder="fishing_app")
+                    # --- 6. 画像のリサイズと軽量化処理 (長辺800px) ---
+                    img_for_upload = Image.open(uploaded_file)
+                    
+                    # スマホ写真の向き（回転情報）を正しく補正
+                    try:
+                        exif = img_for_upload._getexif()
+                        if exif:
+                            orientation = next((k for k, v in ExifTags.TAGS.items() if v == 'Orientation'), None)
+                            if orientation and orientation in exif:
+                                if exif[orientation] == 3: img_for_upload = img_for_upload.rotate(180, expand=True)
+                                elif exif[orientation] == 6: img_for_upload = img_for_upload.rotate(270, expand=True)
+                                elif exif[orientation] == 8: img_for_upload = img_for_upload.rotate(90, expand=True)
+                    except:
+                        pass
+
+                    # リサイズ：長辺を800pxに制限
+                    img_for_upload.thumbnail((800, 800), Image.Resampling.LANCZOS)
+
+                    # メモリ上でJPEG圧縮（画質70%）
+                    img_bytes = io.BytesIO()
+                    # 透過情報（PNG等）がある場合のためにRGBに変換
+                    if img_for_upload.mode != 'RGB':
+                        img_for_upload = img_for_upload.convert('RGB')
+                        
+                    img_for_upload.save(img_bytes, format='JPEG', quality=70, optimize=True)
+                    img_bytes.seek(0)
+
+                    # Cloudinaryへアップロード
+                    res = cloudinary.uploader.upload(img_bytes, folder="fishing_app")
                     
                     # 7. 保存データの作成
                     save_data = {
@@ -440,6 +467,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
