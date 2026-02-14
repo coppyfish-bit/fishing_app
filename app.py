@@ -427,9 +427,9 @@ with tab1:
 # app.py 内
 with tab2:
     show_edit_page(conn, url)
-# --- 2. タブ3（ギャラリー）の記述 ---
 with tab3:
-    show_gallery_page(df)
+    show_gallery_page(df) # 「tab3の中にこれを表示してね」と命令する
+
 
 
 
