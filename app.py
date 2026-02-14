@@ -351,18 +351,6 @@ if st.session_state.data_ready:
     angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"])
     memo = st.text_area("🗒️ 備考")
     
-if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
-        # 1. すべての変数を初期化
-        temp, wind_s, wind_d, rain_48 = 0, 0, "不明", 0
-        tide_cm, tide_phase = 0, "不明"
-        m_age, t_name = 0, "不明"
-        high_str, low_str = "", ""
-        val_next_high, val_next_low = "", ""
-        station_name = "不明"
-        
-        if place_name == "" or place_name == "新規地点":
-            st.error("⚠️ 場所名を入力してください。")
-        else:
             try:
                 with st.spinner("📊 前後3日間の潮汐データを解析中..."):
                     # --- 2. 撮影日時の確定（秒を物理的にカットしてエラー防止） ---
@@ -444,6 +432,18 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                     img_for_upload.save(img_bytes, format='JPEG', quality=70, optimize=True)
                     img_bytes.seek(0)
 
+                    if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
+        # 1. すべての変数を初期化
+        temp, wind_s, wind_d, rain_48 = 0, 0, "不明", 0
+        tide_cm, tide_phase = 0, "不明"
+        m_age, t_name = 0, "不明"
+        high_str, low_str = "", ""
+        val_next_high, val_next_low = "", ""
+        station_name = "不明"
+        
+        if place_name == "" or place_name == "新規地点":
+            st.error("⚠️ 場所名を入力してください。")
+        else:
                     # Cloudinaryへアップロード
                     res = cloudinary.uploader.upload(img_bytes, folder="fishing_app")
                     
@@ -477,6 +477,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
