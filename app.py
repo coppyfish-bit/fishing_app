@@ -264,11 +264,11 @@ dt_object = datetime.now()
 uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
-    img = Image.open(uploaded_file)
-    st.image(img, use_container_width=True)
+    # 1. まず PIL Image として開く（ここで変数を作る！）
+    img_for_upload = Image.open(uploaded_file) 
     
-if not st.session_state.data_ready:
-        exif = img_for_upload._getexif()
+    # 2. その後で解析する
+    exif = img_for_upload._getexif() 
         
         # --- 撮影日時の取得（秒なし・エラー回避版） ---
         temp_dt = None
@@ -467,6 +467,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
