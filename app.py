@@ -12,6 +12,8 @@ import numpy as np
 import ephem
 import requests
 from PIL import Image, ExifTags
+# app.py の冒頭に追加
+from edit_module import show_edit_page
 
 def safe_strptime(date_str, fmt='%Y/%m/%d %H:%M'):
     """ミリ秒などが混入していても、フォーマットに合う長さだけ切り取って解析する"""
@@ -245,7 +247,10 @@ def get_weather_data_openmeteo(lat, lon, dt):
         return temp, wind_speed, get_wind_dir(wind_deg), precip_48h
     except Exception as e:
         return None, None, "不明", 0.0
+# --- タブの設定部分 ---
+tab1, tab2 = st.tabs(["📝 釣果記録", "🛠️ データ管理"])
 
+with tab1:
 # --- 3. 以降、初期設定・画像アップロード・入力画面は既存と同じ ---
 st.set_page_config(page_title="釣果記録アプリ", layout="centered")
 st.title("🎣 釣果記録システム")
@@ -416,3 +421,9 @@ if uploaded_file:
                     time.sleep(2); st.rerun()
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
+                pass
+
+# app.py 内
+with tab2:
+    show_edit_page(conn, url)
+
