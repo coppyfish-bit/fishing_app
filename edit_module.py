@@ -15,7 +15,7 @@ def show_edit_page(conn, url):
     df = df.iloc[::-1].copy()
 
     # --- A. 直近5件の表示（最初から開いた状態） ---
-    st.markdown("### 📸 直近5件のクイック修正")
+    st.markdown("### 📸 修正")
     df_recent = df.head(5)
     
     for idx in df_recent.index:
@@ -84,3 +84,4 @@ def render_edit_form(df, idx, conn, url):
             conn.update(spreadsheet=url, data=save_df.iloc[::-1])
             st.warning("削除しました。")
             st.rerun()
+
