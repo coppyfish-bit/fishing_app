@@ -161,9 +161,9 @@ def get_tide_details(station_code, dt):
         t2 = hourly[base_dt.hour+1] if base_dt.hour < 23 else hourly[base_dt.hour]
         current_cm = int(round(t1 + (t2 - t1) * (base_dt.minute / 60.0)))
 
-        # 3. 満干潮時刻の抽出
+        # 3. 満干潮時刻の抽出 (満潮 81-108 / 干潮 109-136)
         event_times = []
-        today_prefix = base_dt.strftime('%Y%m%d')
+        today_prefix = dt.strftime('%Y%m%d')
 
         # 満潮 (index 80から7文字×4)
         for i in range(4):
@@ -171,9 +171,14 @@ def get_tide_details(station_code, dt):
             time_part = day_data[start : start+4].strip()
             if time_part and time_part != "9999":
                 clean_time = time_part.zfill(4)
-                # 秒を含まない形式で解析
-                ev_time = datetime.strptime(today_prefix + clean_time, '%Y%m%d%H%M')
-                event_times.append({"time": ev_time, "type": "満潮"})
+                # --- ここを修正：strptimeを物理的に安全にする ---
+                try:
+                    # 時刻文字列を確実に8文字(YYYYMMDD) + 4文字(HHMM) = 12文字で切り落とす
+                    raw_str = (today_prefix + clean_time)[:12]
+                    ev_time = datetime.strptime(raw_str, '%Y%m%d%H%M')
+                    event_times.append({"time": ev_time, "type": "満潮"})
+                except:
+                    continue
 
         # 干潮 (index 108から7文字×4)
         for i in range(4):
@@ -181,11 +186,13 @@ def get_tide_details(station_code, dt):
             time_part = day_data[start : start+4].strip()
             if time_part and time_part != "9999":
                 clean_time = time_part.zfill(4)
-                # 秒を含まない形式で解析
-                ev_time = datetime.strptime(today_prefix + clean_time, '%Y%m%d%H%M')
-                event_times.append({"time": ev_time, "type": "干潮"})
-        
-        event_times = sorted(event_times, key=lambda x: x['time'])
+                # --- ここを修正：strptimeを物理的に安全にする ---
+                try:
+                    raw_str = (today_prefix + clean_time)[:12]
+                    ev_time = datetime.strptime(raw_str, '%Y%m%d%H%M')
+                    event_times.append({"time": ev_time, "type": "干潮"})
+                except:
+                    continue
 
         # 4. フェーズ計算
         phase_text = "不明"
@@ -470,6 +477,7 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
             except Exception as e:
                 st.error(f"❌ 保存失敗: {e}")
     
+
 
 
 
