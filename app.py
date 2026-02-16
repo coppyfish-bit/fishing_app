@@ -383,44 +383,39 @@ with tab1:
 
                             tide_cm, tide_phase = 0, "不明"
 
-                            for delta in [-1, 0, 1]:
+                            # 1. 3日分のイベントをすべて収集
+for delta in [-1, 0, 1]:
+    day_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
+    if day_data:
+        if 'events' in day_data:
+            all_events.extend(day_data['events'])
+        if delta == 0:
+            tide_cm = day_data['cm'] # 当日の潮位(cm)を確保
 
-                                day_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
+# 2. 重複を排除して時間順にソート
+# (気象庁データは24時付近で翌日分を重複して持っている場合があるため)
+all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
 
-                                if day_data and 'events' in day_data:
+# 3. 解析対象時刻(target_dt)の「直前」と「直後」のイベントを特定
+prev_ev = next((e for e in reversed(all_events) if e['time'] <= target_dt), None)
+next_ev = next((e for e in all_events if e['time'] > target_dt), None)
 
-                                    all_events.extend(day_data['events'])
-
-                                    if delta == 0:
-
-                                        tide_cm, tide_phase = day_data['cm'], day_data['phase']
-
-                            
-
-                            all_events.sort(key=lambda x: x['time'])
-
-                            prev_h = prev_l = next_h = next_l = None
-
-                            for ev in all_events:
-
-                                if ev['time'] <= target_dt:
-
-                                    if '満' in ev['type']: prev_h = ev['time']
-
-                                    if '干' in ev['type']: prev_l = ev['time']
-
-                                elif not next_h or not next_l:
-
-                                    if '満' in ev['type'] and not next_h: next_h = ev['time']
-
-                                    if '干' in ev['type'] and not next_l: next_l = ev['time']
-
+tide_phase = "不明"
+if prev_ev and next_ev:
+    duration = (next_ev['time'] - prev_ev['time']).total_seconds()
+    elapsed = (target_dt - prev_ev['time']).total_seconds()
+    
+    if duration > 0:
+        # 0〜10の割合を計算し、1〜9に割り振る
+        fraction = elapsed / duration
+        step = int(fraction * 10)
+        step = max(1, min(9, step)) # 1〜9分に収める
         
-
-                            val_next_high = int((next_h - target_dt).total_seconds() / 60) if next_h else ""
-
-                            val_next_low = int((next_l - target_dt).total_seconds() / 60) if next_l else ""
-
+        # 直前のイベントが「干潮」なら、現在は「上げ」
+        if "干" in prev_ev['type']:
+            tide_phase = f"上げ{step}分"
+        else:
+            tide_phase = f"下げ{step}分"
         
 
                             # 画像のリサイズ（800px）
@@ -517,6 +512,7 @@ with tab2:
     show_edit_page(conn, url)
 with tab3:
     show_gallery_page(df) # 「tab3の中にこれを表示してね」と命令する
+
 
 
 
