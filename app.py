@@ -352,45 +352,33 @@ with tab1:
            # --- 3. 保存ボタン（アップロード後のみ表示） ---
 
             if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
-
                 if not place_name or place_name == "新規地点":
-
                     st.error("⚠️ 場所名を入力してください。")
-
                 else:
-
                     try:
-
                         with st.spinner("📊 気象・潮汐データを最終解析中..."):
 
-                            target_dt = st.session_state.target_dt
-
+                            target_dt = st.session_state.target_dt   
                             
-
                             # 気象・潮汐の取得（前後3日間スキャン）
-
                             temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(st.session_state.lat, st.session_state.lon, target_dt)
 
                             m_age = get_moon_age(target_dt)
 
                             t_name = get_tide_name(m_age)
-
-                            
-
                             station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
-
                             all_events = []
 
                             tide_cm, tide_phase = 0, "不明"
 
                             # 1. 3日分のイベントをすべて収集
-for delta in [-1, 0, 1]:
-    day_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
-    if day_data:
-        if 'events' in day_data:
-            all_events.extend(day_data['events'])
-        if delta == 0:
-            tide_cm = day_data['cm'] # 当日の潮位(cm)を確保
+                    for delta in [-1, 0, 1]:
+                        day_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
+                        if day_data:
+                            if 'events' in day_data:
+                                all_events.extend(day_data['events'])
+                            if delta == 0:
+                                tide_cm = day_data['cm'] # 当日の潮位(cm)を確保
 
 # 2. 重複を排除して時間順にソート
 # (気象庁データは24時付近で翌日分を重複して持っている場合があるため)
@@ -512,6 +500,7 @@ with tab2:
     show_edit_page(conn, url)
 with tab3:
     show_gallery_page(df) # 「tab3の中にこれを表示してね」と命令する
+
 
 
 
