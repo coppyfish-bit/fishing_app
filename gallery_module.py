@@ -9,19 +9,15 @@ def show_gallery_page(df):
         return
 
     # --- フィルター機能 ---
-    # 魚種のリストを取得（重複なし）
     fish_list = ["すべて"] + sorted(df["魚種"].unique().tolist())
     selected_fish = st.selectbox("🐟 魚種で絞り込み", fish_list)
 
-    # データのコピーと日付型への変換
     df_gallery = df.copy()
     df_gallery['datetime'] = pd.to_datetime(df_gallery['datetime'])
     
-    # フィルター適用
     if selected_fish != "すべて":
         df_gallery = df_gallery[df_gallery["魚種"] == selected_fish]
 
-    # 最新順にソート
     df_gallery = df_gallery.sort_values("datetime", ascending=False)
 
     if df_gallery.empty:
@@ -32,31 +28,38 @@ def show_gallery_page(df):
     cols = st.columns(3)
     
     for i, (idx, row) in enumerate(df_gallery.iterrows()):
-        img_url = row["filename"]  # CloudinaryのURL
+        img_url = row["filename"]
         
         if img_url:
             with cols[i % 3]:
                 try:
-                    # 潮汐ディテールの計算
-                    dt = row['datetime']
-                    prev_h = pd.to_datetime(row['直前の満潮_時刻']) if pd.notna(row['直前の満潮_時刻']) else None
-                    
-                    if prev_h:
-                        diff_mins = int((dt - prev_h).total_seconds() / 60)
-                        tide_detail = row.get('潮位フェーズ', f"{diff_mins}分経過")
-                    else:
-                        tide_detail = row.get('潮位フェーズ', "-")
+                    # データの取得
+                    dt_str = row['datetime'].strftime('%Y/%m/%d %H:%M')
+                    tide_phase = row.get('潮位フェーズ', '-')
+                    tide_name = row.get('潮名', '-')
+                    temp = row.get('気温', '-')
+                    wind_d = row.get('風向', '-')
+                    wind_s = row.get('風速', '-')
+                    lat = row.get('lat')
+                    lon = row.get('lon')
 
-                    # HTMLオーバーレイ表示
+                    # Googleマップのリンク作成
+                    map_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+
+                    # HTMLオーバーレイ表示（全体をaタグで囲んでタップ可能に）
                     overlay_html = f"""
-                    <div style="position: relative; width: 100%; margin-bottom: 20px; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 8px rgba(0,0,0,0.5);">
-                        <img src="{img_url}" style="width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block;">
-                        <div style="position: absolute; bottom: 0; width: 100%; padding: 8px; background: rgba(0,0,0,0.6); color: white; font-size: 0.7rem; backdrop-filter: blur(2px); line-height: 1.2;">
-                            <b style="color: #00ffd0; font-size: 0.8rem;">{row['魚種']} {row['全長_cm']}cm</b><br>
-                            📍 {row['場所']}<br>
-                            🕒 {tide_detail} / 🌡️ {row.get('気温','-')}℃
+                    <a href="{map_url}" target="_blank" style="text-decoration: none; color: inherit;">
+                        <div style="position: relative; width: 100%; margin-bottom: 20px; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.5); transition: transform 0.2s;">
+                            <img src="{img_url}" style="width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block;">
+                            <div style="position: absolute; bottom: 0; width: 100%; padding: 10px; background: rgba(0,0,0,0.7); color: white; font-size: 0.7rem; backdrop-filter: blur(4px); line-height: 1.4;">
+                                <b style="color: #00ffd0; font-size: 0.85rem;">{row['魚種']} {row['全長_cm']}cm</b><br>
+                                📅 {dt_str}<br>
+                                📍 {row['場所']} <span style="font-size: 0.6rem; color: #aaa;">(タップで地図)</span><br>
+                                🌊 {tide_name} / {tide_phase}<br>
+                                🌡️ {temp}℃ / 🚩 {wind_d} {wind_s}m/s
+                            </div>
                         </div>
-                    </div>"""
+                    </a>"""
                     st.markdown(overlay_html, unsafe_allow_html=True)
                 except Exception as e:
                     st.image(img_url, caption=f"{row['魚種']}")
