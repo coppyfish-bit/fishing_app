@@ -387,14 +387,6 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                 prev_ev = next((e for e in reversed(all_events) if e['time'] <= target_dt), None)
                 next_ev = next((e for e in all_events if e['time'] > target_dt), None)
                 
-                # 潮位フェーズの計算
-                tide_phase = "不明"
-                if prev_ev and next_ev:
-                    duration = (next_ev['time'] - prev_ev['time']).total_seconds()
-                    elapsed = (target_dt - prev_ev['time']).total_seconds()
-                    if duration > 0:
-                        step = max(1, min(9, int((elapsed / duration) * 10)))
-                        tide_phase = f"上げ{step}分" if prev_ev['type'] == "干潮" else f"下げ{step}分"
 
                 # ギャラリー表示用の「直前の満潮・干潮」を取得
                 prev_h = next((e['time'] for e in reversed(all_events) if e['time'] <= target_dt and '満' in e['type']), None)
@@ -457,6 +449,7 @@ with tab2:
     show_edit_page(conn, url)
 with tab3:
     show_gallery_page(df) # 「tab3の中にこれを表示してね」と命令する
+
 
 
 
