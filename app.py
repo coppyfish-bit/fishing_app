@@ -432,13 +432,12 @@ with tab1:
                         st.error(f"❌ 保存失敗: {e}")
                         pass
 
-保存ボタンの全文下さい
-
 # app.py 内
 with tab2:
     show_edit_page(conn, url)
 with tab3:
     show_gallery_page(df) # 「tab3の中にこれを表示してね」と命令する
+
 
 
 
