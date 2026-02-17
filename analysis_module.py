@@ -5,24 +5,33 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 時合精密解析（スプレッドシート連携・写真表示）")
+    st.subheader("📊 時合精密解析（魚種フィルタ・環境データ対応）")
 
     if df.empty:
         st.info("データがありません。")
         return
 
-    # 1. データの整理
-    selected_place = st.selectbox("📍 場所を選択", sorted(df["場所"].unique()))
-    df_p = df[df["場所"] == selected_place].copy()
+    # --- 1. フィルタリング設定 ---
+    col_f1, col_f2 = st.columns([1, 2])
+    with col_f1:
+        selected_place = st.selectbox("📍 場所を選択", sorted(df["場所"].unique()))
+    with col_f2:
+        # 魚種ごとに表示を切り替えられるようにマルチセレクトを追加
+        all_species = sorted(df[df["場所"] == selected_place]["魚種"].unique())
+        selected_species = st.multiselect("🐟 表示する魚種を選択", all_species, default=all_species)
+
+    # データの絞り込み
+    df_p = df[(df["場所"] == selected_place) & (df["魚種"].isin(selected_species))].copy()
     
-    # 日時変換
+    if df_p.empty:
+        st.warning("選択された条件のデータがありません。")
+        return
+
     df_p['datetime'] = pd.to_datetime(df_p['datetime'], errors='coerce')
     df_p = df_p.dropna(subset=['datetime'])
-    
-    # クリック判定用のID作成（日時＋魚種）
     df_p['fish_id'] = df_p['datetime'].dt.strftime('%Y%m%d%H%M%S') + "_" + df_p['魚種']
 
-    # --- 座標計算（シームレス・20時境界ロジック） ---
+    # --- 2. 座標計算ロジック（継承） ---
     def get_sync_coords(row):
         phase_str = str(row['潮位フェーズ'])
         nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
@@ -46,71 +55,68 @@ def show_analysis_page(df):
 
     df_p[['x_sync', 'y_sync']] = df_p.apply(get_sync_coords, axis=1)
 
-    # --- 2. グラフ描画 ---
+    # --- 3. グラフ描画 ---
     fig = go.Figure()
     x_line = np.linspace(8, 38, 1000)
     y_line = 100 * np.cos(2 * np.pi * (x_line - 24) / 12)
     fig.add_trace(go.Scatter(x=x_line, y=y_line, mode='lines', line=dict(color='rgba(100, 200, 255, 0.2)', width=2), hoverinfo='skip'))
 
-    fig.add_trace(go.Scatter(
-        x=df_p['x_sync'], y=df_p['y_sync'],
-        mode='markers+text',
-        marker=dict(size=22, 
-                    color=df_p['潮位フェーズ'].apply(lambda x: '#00ffd0' if '上げ' in x else '#ff4b4b'), 
-                    symbol=df_p['潮位フェーズ'].apply(lambda x: 'triangle-up' if '上げ' in x else 'triangle-down'),
-                    line=dict(width=2, color='white')),
-        text=df_p.apply(lambda r: f"{r['魚種']}{r['全長_cm']}cm", axis=1),
-        textposition="top center",
-        customdata=df_p['fish_id'], 
-        hovertemplate="<b>クリックして詳細を表示</b><extra></extra>"
-    ))
+    # 魚種ごとに色を変えてプロット（凡例は魚種名に）
+    colors = ['#00ffd0', '#ff4b4b', '#ffff00', '#ff00ff', '#0000ff'] # 魚種ごとの色
+    for i, species in enumerate(selected_species):
+        spec_df = df_p[df_p['魚種'] == species]
+        if spec_df.empty: continue
+        
+        fig.add_trace(go.Scatter(
+            x=spec_df['x_sync'], y=spec_df['y_sync'],
+            mode='markers',
+            name=species,
+            marker=dict(size=18, symbol='circle', line=dict(width=2, color='white')),
+            customdata=spec_df['fish_id'],
+            hovertemplate=f"<b>{species}</b><br>クリックで詳細表示<extra></extra>"
+        ))
 
     fig.update_layout(
         xaxis=dict(tickvals=[12, 18, 24, 30, 36], ticktext=["12:00", "18:00", "0:00", "6:00", "12:00"], range=[8.5, 37.5]),
         yaxis=dict(tickvals=[100, 0, -100], ticktext=["満潮", "中間", "干潮"], range=[-150, 220]),
-        template="plotly_dark", height=500, clickmode='event+select'
+        template="plotly_dark", height=500, clickmode='event+select', showlegend=True
     )
 
     event_data = st.plotly_chart(fig, use_container_width=True, on_select="rerun")
 
-    # --- 3. 詳細パネル（filename カラムから画像を表示） ---
+    # --- 4. 詳細パネル ---
     if event_data and "selection" in event_data and event_data["selection"]["points"]:
-        selected_fish_id = event_data["selection"]["points"][0]["customdata"]
-        item = df_p[df_p['fish_id'] == selected_fish_id].iloc[0]
+        selected_id = event_data["selection"]["points"][0]["customdata"]
+        item = df_p[df_p['fish_id'] == selected_id].iloc[0]
 
         st.markdown("---")
         col1, col2 = st.columns([1.5, 1])
 
         with col1:
-            # カラム名 'filename' からURLを取得
             img_url = item.get('filename')
-            
             if pd.notna(img_url) and str(img_url).startswith('http'):
                 url_str = str(img_url)
-                try:
-                    # Google Driveの共有URLを直リンク(uc?id=...)に変換
-                    if "drive.google.com" in url_str:
-                        file_id = None
-                        if "/d/" in url_str:
-                            file_id = url_str.split('/d/')[1].split('/')[0]
-                        elif "id=" in url_str:
-                            file_id = url_str.split('id=')[1].split('&')[0]
-                        
-                        if file_id:
-                            url_str = f"https://drive.google.com/uc?id={file_id}"
-                    
-                    st.image(url_str, caption=f"釣果写真: {item['魚種']}", use_container_width=True)
-                except Exception:
-                    st.error("⚠️ 画像の表示に失敗しました。Driveの共有設定を確認してください。")
+                if "drive.google.com" in url_str:
+                    file_id = url_str.split('/d/')[1].split('/')[0] if "/d/" in url_str else url_str.split('id=')[1].split('&')[0]
+                    url_str = f"https://drive.google.com/uc?id={file_id}"
+                st.image(url_str, use_container_width=True)
             else:
-                st.warning("📷 写真URLが見つかりません。 (列名: filename)")
+                st.info("📷 写真はありません")
 
         with col2:
             st.subheader(f"🐟 {item['魚種']} {item['全長_cm']}cm")
-            st.write(f"**⏰ 時刻:** {item['datetime'].strftime('%H:%M')}")
-            st.metric("🌡️ 気温", f"{item.get('気温', '--')}°C")
-            st.metric("💨 風速", f"{item.get('風速', '--')}m/s")
+            
+            # 環境データ表示
+            m1, m2 = st.columns(2)
+            m1.metric("🌡️ 気温", f"{item.get('気温', '--')}°C")
+            m2.metric("💨 風速", f"{item.get('風速', '--')}m/s")
+            
+            m3, m4 = st.columns(2)
+            m3.metric("🌊 潮位", f"{item.get('潮位_cm', '--')}cm")
+            m4.metric("🧭 風向き", f"{item.get('風向き', '--')}")
+
+            st.write(f"**⏰ 時刻:** {item['datetime'].strftime('%H:%M')} ({item['潮位フェーズ']})")
             if 'memo' in item and pd.notna(item['memo']):
                 st.info(f"📝 **メモ:**\n{item['memo']}")
     else:
-        st.info("💡 グラフ上のプロットをクリックすると、写真が表示されます。")
+        st.info("💡 グラフ上の点をクリックすると、写真と詳細データが表示されます。")
