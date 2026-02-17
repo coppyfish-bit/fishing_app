@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 時合精密解析（魚種フィルタ・環境データ対応）")
+    st.subheader("📊 時合精密解析（魚種セレクト版）")
 
     if df.empty:
         st.info("データがありません。")
@@ -15,23 +15,36 @@ def show_analysis_page(df):
     col_f1, col_f2 = st.columns([1, 2])
     with col_f1:
         selected_place = st.selectbox("📍 場所を選択", sorted(df["場所"].unique()))
+    
     with col_f2:
-        # 魚種ごとに表示を切り替えられるようにマルチセレクトを追加
+        # その場所に紐づく魚種リストを取得
         all_species = sorted(df[df["場所"] == selected_place]["魚種"].unique())
-        selected_species = st.multiselect("🐟 表示する魚種を選択", all_species, default=all_species)
+        
+        # 【ここを修正】default=all_species を削除し、空（default=[]）にします
+        # これにより、最初は何も選択されず、選んだ魚種だけが追加されていきます
+        selected_species = st.multiselect(
+            "🐟 表示する魚種を選択（追加したものが表示されます）", 
+            all_species, 
+            default=[]
+        )
 
-    # データの絞り込み
+    # 魚種が選択されていない場合の処理
+    if not selected_species:
+        st.info("👆 上のボックスから表示したい魚種を選択してください。")
+        return
+
+    # データの絞り込み（場所 ＋ 選択された魚種）
     df_p = df[(df["場所"] == selected_place) & (df["魚種"].isin(selected_species))].copy()
     
     if df_p.empty:
-        st.warning("選択された条件のデータがありません。")
+        st.warning("選択された魚種のデータが見つかりませんでした。")
         return
 
+    # --- 2. データの整理と座標計算 ---
     df_p['datetime'] = pd.to_datetime(df_p['datetime'], errors='coerce')
     df_p = df_p.dropna(subset=['datetime'])
     df_p['fish_id'] = df_p['datetime'].dt.strftime('%Y%m%d%H%M%S') + "_" + df_p['魚種']
 
-    # --- 2. 座標計算ロジック（継承） ---
     def get_sync_coords(row):
         phase_str = str(row['潮位フェーズ'])
         nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
@@ -59,11 +72,11 @@ def show_analysis_page(df):
     fig = go.Figure()
     x_line = np.linspace(8, 38, 1000)
     y_line = 100 * np.cos(2 * np.pi * (x_line - 24) / 12)
-    fig.add_trace(go.Scatter(x=x_line, y=y_line, mode='lines', line=dict(color='rgba(100, 200, 255, 0.2)', width=2), hoverinfo='skip'))
+    fig.add_trace(go.Scatter(x=x_line, y=y_line, mode='lines', 
+                             line=dict(color='rgba(100, 200, 255, 0.2)', width=2), hoverinfo='skip'))
 
-    # 魚種ごとに色を変えてプロット（凡例は魚種名に）
-    colors = ['#00ffd0', '#ff4b4b', '#ffff00', '#ff00ff', '#0000ff'] # 魚種ごとの色
-    for i, species in enumerate(selected_species):
+    # 選択された魚種ごとにプロット
+    for species in selected_species:
         spec_df = df_p[df_p['魚種'] == species]
         if spec_df.empty: continue
         
@@ -73,18 +86,18 @@ def show_analysis_page(df):
             name=species,
             marker=dict(size=18, symbol='circle', line=dict(width=2, color='white')),
             customdata=spec_df['fish_id'],
-            hovertemplate=f"<b>{species}</b><br>クリックで詳細表示<extra></extra>"
+            hovertemplate=f"<b>{species}</b><br>クリックで詳細を表示<extra></extra>"
         ))
 
     fig.update_layout(
         xaxis=dict(tickvals=[12, 18, 24, 30, 36], ticktext=["12:00", "18:00", "0:00", "6:00", "12:00"], range=[8.5, 37.5]),
         yaxis=dict(tickvals=[100, 0, -100], ticktext=["満潮", "中間", "干潮"], range=[-150, 220]),
-        template="plotly_dark", height=500, clickmode='event+select', showlegend=True
+        template="plotly_dark", height=500, showlegend=True, clickmode='event+select'
     )
 
     event_data = st.plotly_chart(fig, use_container_width=True, on_select="rerun")
 
-    # --- 4. 詳細パネル ---
+    # --- 4. 詳細パネル（写真・潮位・風向き表示） ---
     if event_data and "selection" in event_data and event_data["selection"]["points"]:
         selected_id = event_data["selection"]["points"][0]["customdata"]
         item = df_p[df_p['fish_id'] == selected_id].iloc[0]
@@ -106,7 +119,6 @@ def show_analysis_page(df):
         with col2:
             st.subheader(f"🐟 {item['魚種']} {item['全長_cm']}cm")
             
-            # 環境データ表示
             m1, m2 = st.columns(2)
             m1.metric("🌡️ 気温", f"{item.get('気温', '--')}°C")
             m2.metric("💨 風速", f"{item.get('風速', '--')}m/s")
@@ -119,4 +131,4 @@ def show_analysis_page(df):
             if 'memo' in item and pd.notna(item['memo']):
                 st.info(f"📝 **メモ:**\n{item['memo']}")
     else:
-        st.info("💡 グラフ上の点をクリックすると、写真と詳細データが表示されます。")
+        st.info("💡 グラフ上のプロットをクリックすると詳細が表示されます。")
