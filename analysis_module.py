@@ -11,19 +11,21 @@ def show_analysis_page(df):
         st.info("データがありません。")
         return
 
-    # 1. データの整理
+    # 1. データの整理（元のdfから必要な列を確実に保持する）
     selected_place = st.selectbox("📍 場所を選択", sorted(df["場所"].unique()))
+    
+    # 選択した場所のデータを抽出
     df_p = df[df["場所"] == selected_place].copy()
     
     # 日時変換
     df_p['datetime'] = pd.to_datetime(df_p['datetime'], errors='coerce')
     df_p = df_p.dropna(subset=['datetime'])
     
-    # 【重要】クリック判定用に現在のインデックスを新しい列として固定
-    df_p['plot_id'] = range(len(df_p))
+    # 【重要】クリック判定用にユニークIDを付与（元のIndexを保持）
+    df_p['unique_id'] = df_p.index 
     df_p = df_p.reset_index(drop=True)
 
-    # --- 座標計算（既存のシームレスロジック） ---
+    # --- 座標計算（シームレスロジック） ---
     def get_sync_coords(row):
         phase_str = str(row['潮位フェーズ'])
         nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
@@ -52,13 +54,13 @@ def show_analysis_page(df):
     fig.add_trace(go.Scatter(
         x=df_p['x_sync'], y=df_p['y_sync'],
         mode='markers+text',
-        marker=dict(size=22, color=df_p['潮位フェーズ'].apply(lambda x: '#00ffd0' if '上げ' in x else '#ff4b4b'), 
+        marker=dict(size=22, 
+                    color=df_p['潮位フェーズ'].apply(lambda x: '#00ffd0' if '上げ' in x else '#ff4b4b'), 
                     symbol=df_p['潮位フェーズ'].apply(lambda x: 'triangle-up' if '上げ' in x else 'triangle-down'),
                     line=dict(width=2, color='white')),
         text=df_p.apply(lambda r: f"{r['魚種']}{r['全長_cm']}cm", axis=1),
         textposition="top center",
-        # customdata に plot_id を渡す
-        customdata=df_p['plot_id'],
+        customdata=df_p['unique_id'], # ここで元のIndexを渡す
         hovertemplate="<b>クリックして詳細を表示</b><extra></extra>"
     ))
 
@@ -69,48 +71,42 @@ def show_analysis_page(df):
         clickmode='event+select'
     )
 
-    # グラフを表示（on_selectで再実行）
     event_data = st.plotly_chart(fig, use_container_width=True, on_select="rerun")
 
-    # --- 3. クリック詳細表示（写真表示の強化） ---
+    # --- 3. 詳細パネル ---
     if event_data and "selection" in event_data and event_data["selection"]["points"]:
-        # 選択されたIDを取得
-        selected_id = event_data["selection"]["points"][0]["customdata"]
-        item = df_p[df_p['plot_id'] == selected_id].iloc[0]
+        # 選択されたunique_idを取得
+        target_id = event_data["selection"]["points"][0]["customdata"]
+        
+        # オリジナルの df から直接データを取得（df_pではなく大元のdfを使うのが確実）
+        item = df.loc[target_id]
 
         st.markdown("---")
-        st.subheader(f"🖼️ {item['魚種']} の詳細データ")
-
+        
         col1, col2 = st.columns([1.5, 1])
 
         with col1:
-            # 【写真表示の徹底修正】
-            # データ保存時の候補となる列名をすべてチェックします
-            photo_keys = ['画像', 'image', '写真', 'photo']
-            img_data = None
-            for key in photo_keys:
-                if key in item and item[key] is not None:
-                    img_data = item[key]
-                    break
+            # 【画像表示ロジックの最強化】
+            # dfに存在するすべての列名から「画像っぽい」ものを自動抽出
+            img_column = next((c for c in df.columns if c in ['画像', '写真', 'image', 'photo', 'picture']), None)
             
-            if img_data:
+            if img_column and pd.notna(item[img_column]):
                 try:
-                    # bytes形式でもURL(パス)でも対応可能
-                    st.image(img_data, caption=f"釣果時刻: {item['datetime'].strftime('%H:%M')}", use_container_width=True)
+                    st.image(item[img_column], caption=f"釣果写真: {item['魚種']}", use_container_width=True)
                 except Exception as e:
-                    st.error(f"画像の読み込みに失敗しました。データ形式を確認してください。({e})")
+                    st.error(f"⚠️ 画像データの形式が正しくありません: {e}")
             else:
-                st.info("📷 この釣果に写真は登録されていません。")
-                # デバッグ用：現在どの列があるかを表示（必要なければ消してください）
-                # st.write("利用可能な列名:", list(item.index))
+                st.warning(f"📷 写真列「{img_column}」にデータがありません。")
+                # 念のため、全列名を確認用に表示
+                # st.write("データ列一覧:", list(df.columns))
 
         with col2:
+            st.subheader(f"🐟 {item['魚種']} {item['全長_cm']}cm")
             st.metric("🌡️ 気温", f"{item.get('気温', '--')}°C")
             st.metric("💨 風速", f"{item.get('風速', '--')}m/s")
+            st.write(f"**⏰ 時刻:** {pd.to_datetime(item['datetime']).strftime('%H:%M')}")
             st.write(f"**🌊 潮位:** {item['潮位フェーズ']}")
-            if '潮名' in item: st.write(f"**🌙 潮回り:** {item['潮名']}")
             if 'memo' in item and item['memo']:
                 st.info(f"📝 **メモ:**\n{item['memo']}")
-
     else:
-        st.info("💡 グラフ上の▲や▼をクリックすると、ここに写真が表示されます。")
+        st.info("💡 グラフ上のプロットをクリックすると、ここに写真が表示されます。")
