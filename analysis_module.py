@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 時合精密解析（20時基準・フェーズ同期）")
+    st.subheader("📊 時合精密解析（昼・夜・深夜全対応版）")
 
     if df.empty:
         st.info("データがありません。")
@@ -18,7 +18,7 @@ def show_analysis_page(df):
     # --- 1. 座標計算ロジック ---
     def get_sync_coords(row):
         phase_str = str(row['潮位フェーズ'])
-        # 数字を抽出（全角・半角対応）
+        # 数字を抽出
         nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
         step = int(nums[0]) if nums else 5
         
@@ -26,7 +26,7 @@ def show_analysis_page(df):
         h = row['datetime'].hour + row['datetime'].minute / 60
         shifted_h = h if h >= 12 else h + 24
 
-        # 【上げ・下げの基本Y座標】
+        # 上げ・下げの高さ(Y)
         if "上げ" in phase_str:
             y = -100 + (step * 20)
             is_up = True
@@ -34,27 +34,25 @@ def show_analysis_page(df):
             y = 100 - (step * 20)
             is_up = False
 
-        # --- 【判定ロジック：20時を境にする】 ---
-        # 20時より前 (12:00〜20:00)
+        # --- 【波の振り分けロジック】 ---
+        # 1. 20時より前 (昼の波) -> 頂点を15時に設定して表示を安定させる
         if shifted_h < 20.0:
+            peak = 15.0 
             if is_up:
-                # 12時の満潮付近の上り坂（グラフ左端）
-                sync_x = 12.0 - ((10 - step) * 0.6)
+                sync_x = peak - ((10 - step) * 0.6) # 15時の左側(上り)
             else:
-                # 12時の満潮からの下り坂
-                sync_x = 12.0 + (step * 0.6)
+                sync_x = peak + (step * 0.6)        # 15時の右側(下り)
         
-        # 20時以降 (20:00〜翌12:00 / グラフの20h〜36h)
+        # 2. 20時以降 (夜の波) -> 頂点は24時
         else:
+            peak = 24.0
             if is_up:
-                # 24時の山の左側（21時など）または、24時を過ぎた後の次の上げ坂（深夜3時以降など）
+                # 24時より前なら中央の波の上り坂、24時を過ぎていれば右端の上り坂
                 if shifted_h < 24.0:
                     sync_x = 24.0 - ((10 - step) * 0.6)
                 else:
-                    # 24時を過ぎている場合の上げは、右端（36時＝翌12時）に向かう上り坂
                     sync_x = 36.0 - ((10 - step) * 0.6)
             else:
-                # 24時の山からの下り坂
                 sync_x = 24.0 + (step * 0.6)
 
         return pd.Series([sync_x, y])
@@ -65,12 +63,13 @@ def show_analysis_page(df):
     # --- 2. グラフ描画 ---
     fig = go.Figure()
 
-    # 背景：24時を満潮の頂点とする曲線
-    x_line = np.linspace(12, 36, 1000)
-    y_line = 100 * np.cos(2 * np.pi * (x_line - 24) / 12)
+    # 背景：15時と27時(深夜3時)を頂点にする波形 (昼夜のバランスを調整)
+    x_line = np.linspace(10, 38, 1000)
+    y_line = 100 * np.cos(2 * np.pi * (x_line - 15) / 12)
+    
     fig.add_trace(go.Scatter(
         x=x_line, y=y_line, mode='lines', 
-        line=dict(color='rgba(100, 200, 255, 0.4)', width=3),
+        line=dict(color='rgba(100, 200, 255, 0.3)', width=2),
         hoverinfo='skip'
     ))
 
@@ -85,19 +84,19 @@ def show_analysis_page(df):
                 x=curr_df['x_sync'], y=curr_df['y_sync'],
                 mode='markers+text',
                 name=name,
-                marker=dict(size=18, color=color, symbol=symbol, line=dict(width=1.5, color='white')),
+                marker=dict(size=18, color=color, symbol=symbol, line=dict(width=1, color='white')),
                 text=curr_df.apply(lambda r: f"{r['魚種']}{r['全長_cm']}cm", axis=1),
                 textposition="top center",
                 customdata=curr_df['潮位フェーズ'],
-                hovertemplate="<b>%{customdata}</b><br>判定位置: %{x:.2f}h<extra></extra>"
+                hovertemplate="<b>%{customdata}</b><br>判定時刻: %{x:.2f}h<extra></extra>"
             ))
 
     # レイアウト
     fig.update_layout(
         xaxis=dict(
-            tickvals=[12, 18, 20, 24, 27, 30, 36], 
-            ticktext=["12:00", "18:00", "20:00", "0:00(満潮)", "3:00", "6:00", "12:00"], 
-            range=[11, 37] # 少し余裕を持たせる
+            tickvals=[12, 15, 18, 21, 24, 27, 30, 33, 36], 
+            ticktext=["12:00", "15:00(満)", "18:00", "21:00", "0:00(満)", "3:00", "6:00", "9:00", "12:00"], 
+            range=[11, 37]
         ),
         yaxis=dict(
             tickvals=[100, 0, -100], 
@@ -110,5 +109,7 @@ def show_analysis_page(df):
         height=650,
         showlegend=False
     )
+    # 20時の境界線を薄く表示（デバッグ・確認用）
+    fig.add_vline(x=20, line_width=1, line_dash="dot", line_color="gray")
 
     st.plotly_chart(fig, use_container_width=True)
