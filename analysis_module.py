@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 時合精密解析")
+    st.subheader("📊 時合精密解析 (タイドグラフ)")
 
     if df.empty:
         st.info("データがありません。")
@@ -14,17 +14,15 @@ def show_analysis_page(df):
     # --- 1. フィルタリング設定 ---
     col_f1, col_f2 = st.columns([1, 2])
     with col_f1:
-        selected_place = st.selectbox("📍 場所を選択", sorted(df["場所"].unique()))
+        selected_place = st.selectbox("📍 場所を選択", sorted(df["場所"].unique()), key="ana_place")
     
     with col_f2:
         all_species = sorted(df[df["場所"] == selected_place]["魚種"].unique())
         initial_targets = ["スズキ", "ヒラスズキ"]
         default_selection = [s for s in initial_targets if s in all_species]
-        
         if not default_selection and all_species:
             default_selection = [all_species[0]]
-            
-        selected_species = st.multiselect("🐟 表示する魚種を選択", all_species, default=default_selection)
+        selected_species = st.multiselect("🐟 表示する魚種を選択", all_species, default=default_selection, key="ana_species")
 
     # データの前処理
     df_p = df[df["場所"] == selected_place].copy()
@@ -63,7 +61,6 @@ def show_analysis_page(df):
         for species in selected_species:
             spec_df = df_p[df_p['魚種'] == species]
             if spec_df.empty: continue
-            
             is_up_list = spec_df['潮位フェーズ'].str.contains('上げ')
             symbols = is_up_list.apply(lambda x: 'triangle-up' if x else 'triangle-down')
             colors = is_up_list.apply(lambda x: '#00d4ff' if x else '#ff4b4b')
@@ -72,14 +69,9 @@ def show_analysis_page(df):
                 x=spec_df['x_sync'], y=spec_df['y_sync'],
                 mode='markers',
                 name=species,
-                marker=dict(
-                    size=20, 
-                    symbol=symbols,
-                    color=colors,
-                    line=dict(width=1.5, color='white')
-                ),
+                marker=dict(size=18, symbol=symbols, color=colors, line=dict(width=1.5, color='white')),
                 customdata=spec_df['fish_id'],
-                hovertemplate=f"<b>{species}</b><br>%{{text}}<br>クリックで詳細表示<extra></extra>",
+                hovertemplate=f"<b>{species}</b><br>%{{text}}<extra></extra>",
                 text=spec_df['潮位フェーズ']
             ))
 
@@ -89,142 +81,4 @@ def show_analysis_page(df):
         template="plotly_dark", height=500, clickmode='event+select'
     )
 
-    event_data = st.plotly_chart(fig, use_container_width=True, on_select="rerun")
-
-    # --- 4. 詳細パネル ---
-    if event_data and "selection" in event_data and event_data["selection"]["points"]:
-        selected_id = event_data["selection"]["points"][0]["customdata"]
-        items = df_p[df_p['fish_id'] == selected_id]
-        
-        if not items.empty:
-            item = items.iloc[0]
-            st.markdown("---")
-            col1, col2 = st.columns([1.5, 1])
-
-            with col1:
-                img_url = item.get('filename')
-                if pd.notna(img_url) and str(img_url).startswith('http'):
-                    url_str = str(img_url)
-                    if "drive.google.com" in url_str:
-                        fid = url_str.split('/d/')[1].split('/')[0] if "/d/" in url_str else url_str.split('id=')[1].split('&')[0]
-                        url_str = f"https://drive.google.com/uc?id={fid}"
-                    st.image(url_str, use_container_width=True)
-                else:
-                    st.info("📷 写真データがありません")
-
-            with col2:
-                st.subheader(f"🐟 {item['魚種']} {item['全長_cm']}cm")
-                phase = str(item['潮位フェーズ'])
-                icon = "▲" if "上げ" in phase else "▼"
-                st.markdown(f"#### {icon} {phase}")
-                
-                m1, m2 = st.columns(2)
-                m1.metric("🌡️ 気温", f"{item.get('気温', '--')}°C")
-                m2.metric("💨 風速", f"{item.get('風速', '--')}m/s")
-                
-                m3, m4 = st.columns(2)
-                m3.metric("🌊 潮位", f"{item.get('潮位_cm', '--')}cm")
-                m4.metric("🧭 風向", f"{item.get('風向', item.get('風向き', '--'))}")
-                
-                st.write(f"**⏰ 釣れた時刻:** {item['datetime'].strftime('%H:%M')}")
-                if 'memo' in item and pd.notna(item['memo']):
-                    st.info(f"📝 **メモ:**\n{item['memo']}")
-    else:
-        st.info("💡 グラフ上のプロットをクリックすると詳細が表示されます。")
-
-# --- 新しい関数：潮位フェーズ別分析（独立した階層で定義） ---
-def show_phase_analysis_page(df):
-    st.subheader("🌊 潮位フェーズ別・釣果集中度分析")
-
-    if df.empty:
-        st.info("データがありません。")
-        return
-
-    # 1. フィルタリング設定
-    col1, col2 = st.columns(2)
-    with col1:
-        # 重複を避けるため key を指定
-        selected_place = st.selectbox("📍 場所を選択", sorted(df["場所"].unique()), key="phase_analysis_place")
-    with col2:
-        all_species = sorted(df[df["場所"] == selected_place]["魚種"].unique())
-        initial_targets = ["スズキ", "ヒラスズキ"]
-        default_selection = [s for s in initial_targets if s in all_species]
-        if not default_selection and all_species:
-            default_selection = [all_species[0]]
-            
-        selected_species = st.multiselect(
-            "🐟 魚種を選択", 
-            all_species, 
-            default=default_selection,
-            key="phase_analysis_species"
-        )
-
-    if not selected_species:
-        st.info("魚種を選択してください。")
-        return
-
-    # データの絞り込み
-    df_f = df[(df["場所"] == selected_place) & (df["魚種"].isin(selected_species))].copy()
-
-    # 「潮位フェーズ」列が空、または存在しない場合の対策
-    if "潮位フェーズ" not in df_f.columns or df_f["潮位フェーズ"].isnull().all():
-        st.warning("「潮位フェーズ」のデータが入力されていないため、分析できません。")
-        return
-
-    # 空白などを除外
-    df_f = df_f.dropna(subset=['潮位フェーズ'])
-
-    if df_f.empty:
-        st.warning("該当する条件のデータがありません。")
-        return
-
-    # 2. 潮位フェーズの並び順（どんな表記でも対応できるように修正）
-    phase_order = [
-        "干潮", "上げ1分", "上げ2分", "上げ3分", "上げ4分", "上げ5分", 
-        "上げ6分", "上げ7分", "上げ8分", "上げ9分", "満潮",
-        "下げ1分", "下げ2分", "下げ3分", "下げ4分", "下げ5分", 
-        "下げ6分", "下げ7分", "下げ8分", "下げ9分", "上げ", "下げ"
-    ]
-
-    # 集計
-    phase_counts = df_f.groupby('潮位フェーズ').size().reset_index(name='釣果数')
-    
-    # 並び替え（リストにない名前は後ろに送る）
-    def get_sort_idx(x):
-        try:
-            return phase_order.index(x)
-        except:
-            return 99
-            
-    phase_counts['sort_idx'] = phase_counts['潮位フェーズ'].apply(get_sort_idx)
-    phase_counts = phase_counts.sort_values('sort_idx')
-
-    # 3. グラフ作成
-    # 「上げ」を含むなら水色、それ以外は赤系
-    colors = ['#00d4ff' if '上げ' in str(p) or p == '干潮' else '#ff4b4b' for p in phase_counts['潮位フェーズ']]
-
-    fig = go.Figure(data=[
-        go.Bar(
-            x=phase_counts['潮位フェーズ'],
-            y=phase_counts['釣果数'],
-            marker_color=colors,
-            text=phase_counts['釣果数'],
-            textposition='auto',
-        )
-    ])
-
-    fig.update_layout(
-        title=f"【{selected_place}】フェーズ別釣果数",
-        xaxis_title="潮位フェーズ",
-        yaxis_title="釣果数（本）",
-        template="plotly_dark",
-        height=450,
-        margin=dict(l=20, r=20, t=50, b=50)
-    )
-
     st.plotly_chart(fig, use_container_width=True)
-
-    # 4. 分析のヒント表示
-    if not phase_counts.empty:
-        top_phase = phase_counts.loc[phase_counts['釣果数'].idxmax(), '潮位フェーズ']
-        st.info(f"💡 分析結果：**{selected_place}** では **{top_phase}** 付近が最も釣れています。")
