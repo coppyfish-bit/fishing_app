@@ -17,35 +17,26 @@ def show_analysis_page(df):
         selected_place = st.selectbox("📍 場所を選択", sorted(df["場所"].unique()))
     
     with col_f2:
-        # その場所に紐づく全魚種リスト
         all_species = sorted(df[df["場所"] == selected_place]["魚種"].unique())
-        
-        # デフォルト選択のロジックを改善
         initial_targets = ["スズキ", "ヒラスズキ"]
         default_selection = [s for s in initial_targets if s in all_species]
         
-        # もしスズキ・ヒラスズキがいなければ、リストの最初の魚種をデフォルトにする（グラフ消滅防止）
+        # スズキらがいなければ最初の1種を選択
         if not default_selection and all_species:
             default_selection = [all_species[0]]
             
-        selected_species = st.multiselect(
-            "🐟 表示する魚種を選択", 
-            all_species, 
-            default=default_selection
-        )
+        selected_species = st.multiselect("🐟 表示する魚種を選択", all_species, default=default_selection)
 
-    # データの絞り込み（魚種が未選択でも、場所だけのデータフレームをベースにする）
+    # データの前処理
     df_p = df[df["場所"] == selected_place].copy()
-    
-    # 日時変換などの前処理
     df_p['datetime'] = pd.to_datetime(df_p['datetime'], errors='coerce')
     df_p = df_p.dropna(subset=['datetime'])
+    # クリック判定用のユニークID（重要：これをcustomdataに渡す）
     df_p['fish_id'] = df_p['datetime'].dt.strftime('%Y%m%d%H%M%S') + "_" + df_p['魚種']
 
-    # --- 2. 座標計算ロジック（ここが抜けているとエラーになります） ---
+    # --- 2. 座標計算ロジック ---
     def get_sync_coords(row):
         phase_str = str(row['潮位フェーズ'])
-        # 数字抽出
         nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
         step = int(nums[0]) if nums else 5
         h = row['datetime'].hour + row['datetime'].minute / 60
@@ -57,28 +48,19 @@ def show_analysis_page(df):
             peak = 12.0
             sync_x = peak - ((10 - step) * 0.3) if is_up else peak + (step * 0.6)
         else:
-            if is_up:
-                peak = 24.0 if shifted_h < 24.0 else 36.0
-                sync_x = peak - ((10 - step) * 0.6)
-            else:
-                peak = 24.0
-                sync_x = peak + (step * 0.6)
+            peak = 24.0 if not is_up else (24.0 if shifted_h < 24.0 else 36.0)
+            sync_x = peak + (step * 0.6) if not is_up else peak - ((10 - step) * 0.6)
         return pd.Series([sync_x, y])
 
-    # 座標計算を実行
     if not df_p.empty:
         df_p[['x_sync', 'y_sync']] = df_p.apply(get_sync_coords, axis=1)
 
-    # --- 3. グラフ描画（常に枠組みを表示する） ---
+    # --- 3. グラフ描画 ---
     fig = go.Figure()
-    
-    # 背景の波形（これは常に表示）
     x_line = np.linspace(8, 38, 1000)
     y_line = 100 * np.cos(2 * np.pi * (x_line - 24) / 12)
-    fig.add_trace(go.Scatter(x=x_line, y=y_line, mode='lines', 
-                             line=dict(color='rgba(100, 200, 255, 0.2)', width=2), hoverinfo='skip'))
+    fig.add_trace(go.Scatter(x=x_line, y=y_line, mode='lines', line=dict(color='rgba(100, 200, 255, 0.2)', width=2), hoverinfo='skip'))
 
-    # 選択された魚種がある場合のみプロットを追加
     if selected_species:
         for species in selected_species:
             spec_df = df_p[df_p['魚種'] == species]
@@ -89,18 +71,54 @@ def show_analysis_page(df):
                 mode='markers',
                 name=species,
                 marker=dict(size=18, symbol='circle', line=dict(width=2, color='white')),
-                customdata=spec_df['fish_id'],
-                hovertemplate=f"<b>{species}</b><br>クリックで詳細表示<extra></extra>"
+                customdata=spec_df['fish_id'], # これがクリック時に渡される
+                hovertemplate=f"<b>{species}</b><br>クリックで詳細を表示<extra></extra>"
             ))
 
     fig.update_layout(
         xaxis=dict(tickvals=[12, 18, 24, 30, 36], ticktext=["12:00", "18:00", "0:00", "6:00", "12:00"], range=[8.5, 37.5]),
         yaxis=dict(tickvals=[100, 0, -100], ticktext=["満潮", "中間", "干潮"], range=[-150, 220]),
-        template="plotly_dark", height=500, showlegend=True, clickmode='event+select'
+        template="plotly_dark", height=500, clickmode='event+select'
     )
 
-    # グラフの表示
+    # グラフ表示とクリックイベント取得
     event_data = st.plotly_chart(fig, use_container_width=True, on_select="rerun")
 
-    # --- 4. 詳細パネル（以前のロジックと同じ） ---
-    # （ここには画像表示や風向きのコードが入ります）
+    # --- 4. 詳細パネル（修復ポイント） ---
+    if event_data and "selection" in event_data and event_data["selection"]["points"]:
+        # クリックされた点の ID を取得
+        selected_id = event_data["selection"]["points"][0]["customdata"]
+        # df_p から該当する行を特定
+        items = df_p[df_p['fish_id'] == selected_id]
+        
+        if not items.empty:
+            item = items.iloc[0]
+            st.markdown("---")
+            col1, col2 = st.columns([1.5, 1])
+
+            with col1:
+                # 画像表示 (filename列)
+                img_url = item.get('filename')
+                if pd.notna(img_url) and str(img_url).startswith('http'):
+                    url_str = str(img_url)
+                    if "drive.google.com" in url_str:
+                        # DriveのID抽出ロジック
+                        fid = url_str.split('/d/')[1].split('/')[0] if "/d/" in url_str else url_str.split('id=')[1].split('&')[0]
+                        url_str = f"https://drive.google.com/uc?id={fid}"
+                    st.image(url_str, use_container_width=True)
+                else:
+                    st.info("📷 写真データがありません")
+
+            with col2:
+                st.subheader(f"🐟 {item['魚種']} {item['全長_cm']}cm")
+                m1, m2 = st.columns(2)
+                m1.metric("🌡️ 気温", f"{item.get('気温', '--')}°C")
+                m2.metric("💨 風速", f"{item.get('風速', '--')}m/s")
+                m3, m4 = st.columns(2)
+                m3.metric("🌊 潮位", f"{item.get('潮位_cm', '--')}cm")
+                m4.metric("🧭 風向き", f"{item.get('風向き', '--')}")
+                st.write(f"**⏰ 時刻:** {item['datetime'].strftime('%H:%M')}")
+                if 'memo' in item and pd.notna(item['memo']):
+                    st.info(f"📝 **メモ:**\n{item['memo']}")
+    else:
+        st.info("💡 グラフ上の点をクリックすると詳細が表示されます。")
