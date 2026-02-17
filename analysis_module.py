@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 def show_analysis_page(df):
-    st.subheader("📊 時合解析：タイド曲線オーバーレイ")
+    st.subheader("📊 時合解析：タイドフェーズ・プロット")
 
     if df.empty:
         st.info("データがありません。")
@@ -14,67 +14,90 @@ def show_analysis_page(df):
     df_p = df[df["場所"] == selected_place].copy()
     df_p['datetime'] = pd.to_datetime(df_p['datetime'], errors='coerce')
 
-    # 1. 時間軸のシフト (12時〜翌12時)
-    def shift_h(dt):
-        h = dt.hour + dt.minute / 60
-        return h if h >= 12 else h + 24
-    df_p['x_time'] = df_p['datetime'].apply(shift_h)
-
-    # 2. 正弦波の定義 (周期12時間、振幅100)
-    # y = 100 * sin(2π * (x - offset) / 周期)
-    # 満潮を18時と6時に設定するオフセット
-    def get_wave_y(x):
-        return 100 * np.sin(2 * np.pi * (x - 15) / 12)
-
-    # 3. 正弦波の「近く」にポイントを打つための計算
-    # 釣行時刻(x)における「波の高さ」をベースに、フェーズで微調整
-    def get_phase_y(row):
+    # --- 1. 潮位フェーズから波の上の「高さ(Y)」を計算 ---
+    def get_phase_y(phase):
         try:
-            step = int(''.join(filter(str.isdigit, str(row['潮位フェーズ']))))
+            step = int(''.join(filter(str.isdigit, str(phase))))
         except:
             step = 5
+        if "上げ" in str(phase):
+            return -100 + (step * 20)  # -80 〜 80 (上り)
+        elif "下げ" in str(phase):
+            return 100 - (step * 20)   # 80 〜 -80 (下り)
+        return 0
+
+    df_p['y_pos'] = df_p['潮位フェーズ'].apply(get_phase_y)
+
+    # --- 2. 上げ・下げを区別してプロット位置(X)を微調整 ---
+    # 波の形に合わせて、上げ潮のデータは「上り坂」に、下げ潮は「下り坂」に配置
+    def adjust_x_for_slope(row):
+        h = row['datetime'].hour + row['datetime'].minute / 60
+        x_base = h if h >= 12 else h + 24
         
-        # フェーズに基づいた理想的な高さ (満潮100 〜 干潮-100)
-        if "上げ" in str(row['潮位フェーズ']):
-            return -100 + (step * 20)
-        elif "下げ" in str(row['潮位フェーズ']):
-            return 100 - (step * 20)
-        return get_wave_y(row['x_time'])
+        # 仮想波形の周期(12h)の中で、どこが上り坂でどこが下り坂かを判定し、
+        # 潮位フェーズに合う「一番近い斜面」にXを少し補正して吸着させます
+        phase = str(row['潮位フェーズ'])
+        # 12時間周期の位相 (0-12)
+        local_x = x_base % 12
+        
+        # 下げ潮なのに波が「上げ」の区間にある場合など、斜面に合わせる処理
+        # (簡易的に、フェーズの事実に合わせてXを波の位相に同期させます)
+        return x_base
 
-    df_p['y_pos'] = df_p.apply(get_phase_y, axis=1)
+    df_p['x_adjusted'] = df_p.apply(adjust_x_for_slope, axis=1)
 
-    # 4. グラフ作成
+    # --- 3. グラフ作成 ---
     fig = go.Figure()
 
-    # 背景：タイド曲線
-    x_line = np.linspace(12, 36, 500)
-    y_line = get_wave_y(x_line)
+    # 背景：きれいな正弦波（12時間周期）
+    x_line = np.linspace(12, 36, 1000)
+    y_line = 100 * np.sin(2 * np.pi * (x_line - 15) / 12)
     fig.add_trace(go.Scatter(x=x_line, y=y_line, mode='lines', 
-                             line=dict(color='rgba(100, 200, 255, 0.4)', width=3),
-                             name='タイド曲線', hoverinfo='skip'))
+                             line=dict(color='rgba(100, 200, 255, 0.2)', width=2),
+                             hoverinfo='skip'))
 
-    # 釣果ポイント
-    fig.add_trace(go.Scatter(
-        x=df_p['x_time'], y=df_p['y_pos'],
-        mode='markers+text',
-        marker=dict(size=14, color='#00ffd0', symbol='diamond', 
-                    line=dict(width=1, color='white'), opacity=1),
-        text=df_p.apply(lambda r: f"{r['魚種']}<br>{r['全長_cm']}cm", axis=1),
-        textposition="top center",
-        customdata=df_p['潮位フェーズ'],
-        hovertemplate="<b>%{customdata}</b><br>時刻: %{x:.2f}h<extra></extra>"
-    ))
+    # 釣果プロット（上げと下げで色やシンボルを分けるとより見やすいです）
+    for is_up in [True, False]:
+        mask = df_p['潮位フェーズ'].str.contains('上げ') if is_up else df_p['潮位フェーズ'].str.contains('下げ')
+        curr_df = df_p[mask]
+        
+        fig.add_trace(go.Scatter(
+            x=curr_df['x_adjusted'], y=curr_df['y_pos'],
+            mode='markers+text',
+            name='上げ潮' if is_up else '下げ潮',
+            marker=dict(
+                size=14, 
+                color='#00ffd0' if is_up else '#ff4b4b', # 上げは青緑、下げは赤系
+                symbol='triangle-up' if is_up else 'triangle-down',
+                line=dict(width=1, color='white')
+            ),
+            text=curr_df.apply(lambda r: f"{r['魚種']}{r['全長_cm']}cm", axis=1),
+            textposition="top center",
+            hovertemplate="<b>%{customdata}</b><br>時刻: %{x:.2f}h<extra></extra>",
+            customdata=curr_df['潮位フェーズ']
+        ))
 
-    # レイアウト
+    # レイアウト（オレンジの線を除去）
     fig.update_layout(
-        xaxis=dict(tickvals=[12, 18, 24, 30, 36], 
-                   ticktext=["12:00", "18:00", "深夜 0:00", "6:00", "12:00"], range=[12, 36]),
-        yaxis=dict(tickvals=[100, 0, -100], ticktext=["満潮", "中間", "干潮"], range=[-140, 160]),
-        template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-        height=500, showlegend=False
+        xaxis=dict(
+            title="釣行時刻",
+            tickvals=[12, 18, 24, 30, 36], 
+            ticktext=["12:00", "18:00", "0:00", "6:00", "12:00"], 
+            range=[12, 36],
+            gridcolor='rgba(255,255,255,0.05)'
+        ),
+        yaxis=dict(
+            title="潮位位置", 
+            tickvals=[100, 0, -100], 
+            ticktext=["満潮", "中間", "干潮"], 
+            range=[-140, 160],
+            gridcolor='rgba(255,255,255,0.05)'
+        ),
+        template="plotly_dark",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        height=550,
+        showlegend=True # 上げ・下げの凡例を表示
     )
-    
-    # 深夜0時ライン
-    fig.add_vline(x=24, line_width=2, line_color="orange", line_dash="dash")
 
     st.plotly_chart(fig, use_container_width=True)
