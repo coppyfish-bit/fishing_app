@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 def show_analysis_page(df):
-    st.subheader("📊 夜間・深夜中心の時合解析")
+    st.subheader("📊 24hタイド・フェーズ解析")
 
     if df.empty:
         st.info("解析するデータがまだありません。")
@@ -16,69 +16,90 @@ def show_analysis_page(df):
     df_place = df[df["場所"] == selected_place].copy()
     df_place['datetime'] = pd.to_datetime(df_place['datetime'])
 
-    # --- 1. 時間軸のシフト (12時開始 〜 翌12時終了) ---
-    # 0〜12時を24〜36時として扱い、グラフの中央を24時にする
-    def shift_hour(dt):
+    # --- 1. 時間軸（X軸）の計算 (12:00開始 〜 翌12:00終了) ---
+    def get_shifted_hour(dt):
         h = dt.hour + dt.minute / 60
         return h if h >= 12 else h + 24
 
-    df_place['hour_shifted'] = df_place['datetime'].apply(shift_hour)
+    df_place['x_time'] = df_place['datetime'].apply(get_shifted_hour)
 
-    # --- 2. 仮想タイドグラフの作成 (12時〜36時) ---
-    x_tide = np.linspace(12, 36, 500)
-    # 周期12.4時間。24時（深夜）付近で変化が見えるよう調整
-    y_tide = 80 * np.sin(2 * np.pi * (x_tide - 18) / 12.4) 
+    # --- 2. 潮位フェーズから高さ（Y軸）を計算 ---
+    # 頂点=100(満潮), 底=-100(干潮)
+    def calculate_y_from_phase(phase):
+        try:
+            step = int(''.join(filter(str.isdigit, phase)))
+        except:
+            step = 5
+            
+        if "上げ" in phase:
+            # 上げ1分(-80) 〜 上げ9分(80)
+            return -100 + (step * 20)
+        elif "下げ" in phase:
+            # 下げ1分(80) 〜 下げ9分(-80)
+            return 100 - (step * 20)
+        return 0
+
+    df_place['y_pos'] = df_place['潮位フェーズ'].apply(calculate_y_from_phase)
+
+    # --- 3. グラフ描画 ---
+    # 12時から翌12時までの24時間分
+    x_line = np.linspace(12, 36, 500)
+    
+    # 24時間でちょうど2サイクル（12時間周期）のサインカーブを作成
+    # 18時付近と6時付近を山（満潮）に見立てた仮想カーブ
+    y_line = 100 * np.sin(2 * np.pi * (x_line - 15) / 12)
 
     fig = go.Figure()
 
-    # 背景の潮位曲線
+    # 背景のベース波形
     fig.add_trace(go.Scatter(
-        x=x_tide, y=y_tide,
+        x=x_line, y=y_line,
         mode='lines',
-        line=dict(color='rgba(100, 200, 255, 0.3)', width=2),
-        name='潮位イメージ'
+        line=dict(color='rgba(100, 200, 255, 0.25)', width=2),
+        hoverinfo='skip',
+        name='潮汐リズム'
     ))
 
-    # --- 3. 釣果プロットの計算 ---
-    def get_y_pos(phase):
-        step = int(''.join(filter(str.isdigit, phase))) if any(c.isdigit() for c in phase) else 5
-        if "上げ" in phase: return -80 + (step * 16)
-        if "下げ" in phase: return 80 - (step * 16)
-        return 0
-
-    df_place['y_pos'] = df_place['潮位フェーズ'].apply(get_y_pos)
-
-    # プロット
+    # 釣果ポイント
     fig.add_trace(go.Scatter(
-        x=df_place['hour_shifted'],
+        x=df_place['x_time'],
         y=df_place['y_pos'],
-        mode='markers+text',
-        marker=dict(size=14, color='#00ffd0', symbol='diamond', line=dict(width=1, color='white')),
-        text=df_place['魚種'] + df_place['全長_cm'].astype(str) + "cm",
-        textposition="top center",
-        name='釣果'
+        mode='markers',
+        marker=dict(
+            size=16,
+            color='#00ffd0',
+            symbol='diamond',
+            line=dict(width=1, color='white'),
+            opacity=0.8
+        ),
+        text=df_place.apply(lambda r: f"{r['魚種']} {r['全長_cm']}cm<br>{r['潮位フェーズ']}", axis=1),
+        hovertemplate="%{text}<br>時刻: %{x:.2f}h<extra></extra>"
     ))
 
-    # --- 4. X軸のラベルを読みやすく書き換える ---
-    tick_vals = [12, 15, 18, 21, 24, 27, 30, 33, 36]
-    tick_text = ["12:00", "15:00", "18:00", "21:00", "深夜0:00", "3:00", "6:00", "9:00", "12:00"]
+    # レイアウト
+    tick_vals = [12, 18, 24, 30, 36]
+    tick_text = ["12:00", "18:00", "深夜 0:00", "6:00", "12:00"]
 
     fig.update_layout(
         xaxis=dict(
-            title="時刻 (深夜0時を中央に表示)",
-            tickvals=tick_vals,
-            ticktext=tick_text,
-            range=[12, 36],
-            gridcolor='rgba(255,255,255,0.1)'
+            title="釣行時刻",
+            tickvals=tick_vals, ticktext=tick_text,
+            range=[12, 36], gridcolor='rgba(255,255,255,0.1)'
         ),
-        yaxis=dict(showticklabels=False, range=[-110, 110]),
-        height=450,
-        showlegend=False,
+        yaxis=dict(
+            title="潮位フェーズ (干潮 ↔ 満潮)",
+            tickvals=[100, 0, -100],
+            ticktext=["満潮", "中間", "干潮"],
+            range=[-120, 120], gridcolor='rgba(255,255,255,0.1)'
+        ),
+        template="plotly_dark",
         paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)'
+        plot_bgcolor='rgba(0,0,0,0)',
+        height=500,
+        showlegend=False
     )
 
-    # 24時（深夜0時）に目立つ縦線を引く
-    fig.add_vline(x=24, line_width=2, line_dash="dash", line_color="orange")
+    # 深夜0時ライン
+    fig.add_vline(x=24, line_width=2, line_color="orange", line_dash="dash")
 
     st.plotly_chart(fig, use_container_width=True)
