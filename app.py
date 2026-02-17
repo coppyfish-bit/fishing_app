@@ -451,8 +451,8 @@ with tab2:
 with tab3:
     show_gallery_page(df) # 「tab3の中にこれを表示してね」と命令する
 with tab4:
-    # 潮位フェーズ別の集中度分析を表示
-    show_phase_analysis_page(df)
+    # ここを show_analysis_page に変更
+    show_analysis_page(df)
 
 
 
