@@ -263,7 +263,7 @@ tab1, tab2, tab3, tab4 = st.tabs(["記録", "編集", "ギャラリー", "時合
 with tab1:
     # --- 3. 以降、初期設定・画像アップロード・入力画面は既存と同じ ---
     st.set_page_config(page_title="釣果記録アプリ", layout="centered")
-    st.title("🎣 釣果記録システム")
+    st.title("🎣 KTDシステム")
     
     if "data_ready" not in st.session_state: st.session_state.data_ready = False
     if "lat" not in st.session_state: st.session_state.lat = 0.0
@@ -435,7 +435,7 @@ with tab1:
                                 "group_id": target_group_id, "観測所": station_info['name'], "釣り人": angler
                             }
 
-                            df_main = conn.read(spreadsheet=url, ttl="1m")
+                            df_main = conn.read(spreadsheet=url, ttl="5m")
                             new_row = pd.DataFrame([save_data])[df_main.columns.tolist() if not df_main.empty else list(save_data.keys())]
                             conn.update(spreadsheet=url, data=pd.concat([df_main, new_row], ignore_index=True))
                             
@@ -452,6 +452,7 @@ with tab3:
     show_gallery_page(df) # 「tab3の中にこれを表示してね」と命令する
 with tab4:
     show_analysis_page(df)
+
 
 
 
