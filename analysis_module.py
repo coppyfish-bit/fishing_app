@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 def show_analysis_page(df):
-    st.subheader("📊 時合精密解析（24時満潮・フェーズ同期）")
+    st.subheader("📊 時合精密解析（24時満潮・フェーズ完全同期）")
 
     if df.empty:
         st.info("データがありません。")
@@ -15,60 +15,61 @@ def show_analysis_page(df):
     df_p['datetime'] = pd.to_datetime(df_p['datetime'], errors='coerce')
 
     # --- 1. 定数定義 ---
-    # 深夜24:00を頂点（山）とする設定
     CYCLE = 12
-    CENTER_PEAK = 24.0
+    CENTER_PEAK = 24.0  # 深夜0時を頂点とする
 
-    # --- 2. 座標計算ロジック（上げ・下げを区別して波に吸着） ---
+    # --- 2. 座標計算ロジック（時刻でエリアを決め、フェーズで座標を固定） ---
     def get_sync_coords(row):
-        phase = str(row['潮位フェーズ'])
-        try:
-            step = int(''.join(filter(str.isdigit, phase)))
-        except:
-            step = 5
+        phase_str = str(row['潮位フェーズ'])
+        # 数字を抽出（全角・半角両対応）
+        import re
+        nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
+        step = int(nums[0]) if nums else 5
         
-        # 釣行時刻を 12h〜36h スケールに変換
+        # 時刻を12h〜36hスケールに変換
         h = row['datetime'].hour + row['datetime'].minute / 60
         shifted_h = h if h >= 12 else h + 24
 
-        # Y軸の高さ計算（-100〜100）
-        if "上げ" in phase:
-            y = -100 + (step * 20)
-            # 上げ潮は山の「左側」に配置。頂点（24時）から最大3時間前まで。
-            # sin波の性質を利用してXを逆算： y = 100 * cos( (x-24)*2π/12 )
-            # 簡略化してフェーズで横位置を決定
-            sync_x = CENTER_PEAK - ((10 - step) * 0.6)
-        elif "下げ" in phase:
-            y = 100 - (step * 20)
-            # 下げ潮は山の「右側」に配置。頂点（24時）から最大3時間後まで。
-            sync_x = CENTER_PEAK + (step * 0.6)
+        # 【エリア判定】どの山（Peak）に乗せるかだけを時刻で決める
+        # 18:00〜30:00(翌6:00)の間なら、中央の24時満潮の山
+        if 18.0 <= shifted_h < 30.0:
+            target_peak = 24.0
+        elif shifted_h < 18.0:
+            target_peak = 12.0
         else:
+            target_peak = 36.0
+
+        # 【座標決定】上げ・下げのフェーズ情報から、target_peakに対する相対位置を決める
+        # 潮位フェーズ1〜9分を、満潮(Peak)から前後3時間の範囲に均等配置
+        # 上げ潮(上り坂)はPeakの左側、下げ潮(下り坂)はPeakの右側
+        if "上げ" in phase_str:
+            # 上げ1分 = Peakの3時間前 / 上げ9分 = Peakの0.6時間前
+            # 頂点に近いほどstepが大きい(上げ7分 > 上げ3分)
+            x_offset = - (10 - step) * 0.6 
+            y = -100 + (step * 20)
+        elif "下げ" in phase_str:
+            # 下げ1分 = Peakの0.6時間後 / 下げ9分 = Peakの3時間後
+            # 頂点に近いほどstepが小さい(下げ3分 < 下げ7分)
+            x_offset = step * 0.6
+            y = 100 - (step * 20)
+        else:
+            x_offset = 0
             y = 0
-            sync_x = shifted_h # 判定不能時は時刻に従う
 
-        # 18時より前、または30時(朝6時)以降のデータは別の山へシフト
-        if shifted_h < 18.0:
-            sync_x -= 12.0
-        elif shifted_h >= 30.0:
-            sync_x += 12.0
-            
-        return pd.Series([sync_x, y])
+        return pd.Series([target_peak + x_offset, y])
 
-    # 座標計算を一括適用
+    # 座標計算を実行
     df_p[['x_sync', 'y_sync']] = df_p.apply(get_sync_coords, axis=1)
 
     # --- 3. グラフ描画 ---
     fig = go.Figure()
 
-    # 背景：24時を満潮の頂点とする曲線
+    # 背景：24時を満潮の頂点とする一定のサインカーブ
     x_line = np.linspace(12, 36, 1000)
     y_line = 100 * np.cos(2 * np.pi * (x_line - 24) / 12)
-    
-    fig.add_trace(go.Scatter(
-        x=x_line, y=y_line, mode='lines', 
-        line=dict(color='rgba(100, 200, 255, 0.4)', width=3),
-        hoverinfo='skip'
-    ))
+    fig.add_trace(go.Scatter(x=x_line, y=y_line, mode='lines', 
+                             line=dict(color='rgba(100, 200, 255, 0.4)', width=3),
+                             hoverinfo='skip'))
 
     # 釣果プロット
     for p_type, color, symbol, name in [('上げ', '#00ffd0', 'triangle-up', '上げ潮'), 
@@ -81,14 +82,14 @@ def show_analysis_page(df):
                 x=curr_df['x_sync'], y=curr_df['y_sync'],
                 mode='markers+text',
                 name=name,
-                marker=dict(size=16, color=color, symbol=symbol, line=dict(width=1, color='white')),
+                marker=dict(size=18, color=color, symbol=symbol, line=dict(width=1.5, color='white')),
                 text=curr_df.apply(lambda r: f"{r['魚種']}{r['全長_cm']}cm", axis=1),
                 textposition="top center",
                 customdata=curr_df['潮位フェーズ'],
-                hovertemplate="<b>%{customdata}</b><br>判定位置: %{x:.2f}h<extra></extra>"
+                hovertemplate="<b>%{customdata}</b><br>時刻判定エリア: %{x:.2f}h<extra></extra>"
             ))
 
-    # レイアウト設定
+    # レイアウト
     fig.update_layout(
         xaxis=dict(
             tickvals=[12, 18, 21, 24, 27, 30, 36], 
@@ -98,7 +99,7 @@ def show_analysis_page(df):
         yaxis=dict(
             tickvals=[100, 0, -100], 
             ticktext=["満潮", "中間", "干潮"], 
-            range=[-150, 180]
+            range=[-150, 200]
         ),
         template="plotly_dark",
         paper_bgcolor='rgba(0,0,0,0)',
