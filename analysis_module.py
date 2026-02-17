@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 時合精密解析（波形完全同期プロット）")
+    st.subheader("📊 時合精密解析（24hシームレス・プロット）")
 
     if df.empty:
         st.info("データがありません。")
@@ -18,14 +18,12 @@ def show_analysis_page(df):
     # --- 1. 定数と座標計算関数 ---
     def get_sync_coords(row):
         phase_str = str(row['潮位フェーズ'])
-        import re
         nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
         step = int(nums[0]) if nums else 5
         
         h = row['datetime'].hour + row['datetime'].minute / 60
         shifted_h = h if h >= 12 else h + 24
 
-        # Y軸高さ（フェーズ1〜9を -80〜80 にマッピング）
         if "上げ" in phase_str:
             y = -100 + (step * 20)
             is_up = True
@@ -33,25 +31,19 @@ def show_analysis_page(df):
             y = 100 - (step * 20)
             is_up = False
 
-        # --- 波の頂点(peak)と横位置(x)の決定 ---
-        # 20時を境界に、昼の波(頂点15時)と夜の波(頂点24時)を切り替え
+        # --- 20時を境にターゲットにする満潮(Peak)を切り替え ---
         if shifted_h < 20.0:
-            peak = 15.0
-            if is_up:
-                sync_x = peak - ((10 - step) * 0.6)
-            else:
-                sync_x = peak + (step * 0.6)
+            peak = 15.0  # 昼の山
+        elif shifted_h < 30.0:
+            peak = 24.0  # 夜の山（24時）
         else:
-            # 夜の波。24時を過ぎた上げは翌朝の山(36時)に向かわせる
-            if is_up and shifted_h >= 24.0:
-                peak = 36.0
-                sync_x = peak - ((10 - step) * 0.6)
-            else:
-                peak = 24.0
-                if is_up:
-                    sync_x = peak - ((10 - step) * 0.6)
-                else:
-                    sync_x = peak + (step * 0.6)
+            peak = 36.0  # 翌朝の山（翌12時）
+
+        # ピークを基準に、フェーズに合わせてX位置を強制吸着
+        if is_up:
+            sync_x = peak - ((10 - step) * 0.6)
+        else:
+            sync_x = peak + (step * 0.6)
 
         return pd.Series([sync_x, y])
 
@@ -60,18 +52,20 @@ def show_analysis_page(df):
     # --- 2. グラフ描画 ---
     fig = go.Figure()
 
-    # 背景の波（2つの波形を繋いで描画）
-    # 昼の波 (10h-20h, 頂点15h)
-    x_day = np.linspace(10, 20, 200)
-    y_day = 100 * np.cos(2 * np.pi * (x_day - 15) / 12)
-    fig.add_trace(go.Scatter(x=x_day, y=y_day, mode='lines', 
-                             line=dict(color='rgba(100, 200, 255, 0.3)', width=2), hoverinfo='skip'))
-
-    # 夜の波 (20h-38h, 頂点24h & 36h)
-    x_night = np.linspace(20, 38, 400)
-    y_night = 100 * np.cos(2 * np.pi * (x_night - 24) / 12)
-    fig.add_trace(go.Scatter(x=x_night, y=y_night, mode='lines', 
-                             line=dict(color='rgba(100, 200, 255, 0.3)', width=2), hoverinfo='skip'))
+    # 背景の波：20時で昼の波と夜の波を無理やり繋ぐ
+    x_full = np.linspace(11, 37, 1000)
+    y_full = []
+    for x in x_full:
+        if x < 20:
+            # 昼の波 (頂点15時)
+            y_full.append(100 * np.cos(2 * np.pi * (x - 15) / 12))
+        else:
+            # 夜の波 (頂点24時)
+            y_full.append(100 * np.cos(2 * np.pi * (x - 24) / 12))
+    
+    fig.add_trace(go.Scatter(x=x_full, y=y_full, mode='lines', 
+                             line=dict(color='rgba(100, 200, 255, 0.4)', width=3),
+                             hoverinfo='skip'))
 
     # 釣果プロット
     for p_type, color, symbol, name in [('上げ', '#00ffd0', 'triangle-up', '上げ潮'), 
@@ -95,12 +89,21 @@ def show_analysis_page(df):
     fig.update_layout(
         xaxis=dict(
             tickvals=[12, 15, 18, 20, 21, 24, 27, 30, 33, 36], 
-            ticktext=["12:00", "15:00(満)", "18:00", "20:00切替", "21:00", "0:00(満)", "3:00", "6:00", "9:00", "12:00"], 
-            range=[11, 37]
+            ticktext=["12:00", "15(満)", "18:00", "20:00", "21:00", "0:00(満)", "3:00", "6:00", "9:00", "12:00"], 
+            range=[11, 37],
+            gridcolor='rgba(255,255,255,0.05)'
         ),
-        yaxis=dict(tickvals=[100, 0, -100], ticktext=["満潮", "中間", "干潮"], range=[-150, 200]),
-        template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-        height=650, showlegend=False
+        yaxis=dict(
+            tickvals=[100, 0, -100], 
+            ticktext=["満潮", "中間", "干潮"], 
+            range=[-150, 200],
+            gridcolor='rgba(255,255,255,0.05)'
+        ),
+        template="plotly_dark",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        height=650,
+        showlegend=False
     )
     
     st.plotly_chart(fig, use_container_width=True)
