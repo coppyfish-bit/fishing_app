@@ -116,9 +116,10 @@ def show_analysis_page(df):
                 m2.metric("💨 風速", f"{item.get('風速', '--')}m/s")
                 m3, m4 = st.columns(2)
                 m3.metric("🌊 潮位", f"{item.get('潮位_cm', '--')}cm")
-                m4.metric("🧭 風向き", f"{item.get('風向き', '--')}")
+                m4.metric("🧭 風向", f"{item.get('風向', '--')}")
                 st.write(f"**⏰ 時刻:** {item['datetime'].strftime('%H:%M')}")
                 if 'memo' in item and pd.notna(item['memo']):
                     st.info(f"📝 **メモ:**\n{item['memo']}")
     else:
         st.info("💡 グラフ上の点をクリックすると詳細が表示されます。")
+
