@@ -257,7 +257,7 @@ url = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_
 # 先ほどのエラー(429)対策として ttl="1m" を推奨します
 df = conn.read(spreadsheet=url, ttl="1m")
 # --- タブの設定部分 ---
-tab1, tab2, tab3 = st.tabs(["📝 釣果記録", "🛠️ データ管理", "🖼️ ギャラリー"])
+tab1, tab2, tab3, tab4 = st.tabs(["記録", "編集", "ギャラリー", "時合解析"])
 
 with tab1:
     # --- 3. 以降、初期設定・画像アップロード・入力画面は既存と同じ ---
@@ -449,6 +449,9 @@ with tab2:
     show_edit_page(conn, url)
 with tab3:
     show_gallery_page(df) # 「tab3の中にこれを表示してね」と命令する
+with tab4:
+    show_analysis_page(df)
+
 
 
 
