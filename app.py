@@ -451,7 +451,7 @@ with tab2:
 with tab3:
     show_gallery_page(df) # 「tab3の中にこれを表示してね」と命令する
 with tab4:
-    show_analysis_page(df)
+    show_phase_analysis_page(df)
 
 
 
