@@ -45,21 +45,14 @@ def show_gallery_page(df):
                 # Googleマップのリンク
                 map_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
 
-               # HTMLオーバーレイ表示（透明度アップ版）
+                # HTMLオーバーレイ表示（フォントサイズ調整版）
                 overlay_html = f"""
                 <a href="{map_url}" target="_blank" style="text-decoration: none; color: inherit;">
                     <div style="position: relative; width: 100%; margin-bottom: 20px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
                         <img src="{img_url}" style="width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block;">
-                        
-                        <div style="position: absolute; bottom: 0; width: 100%; padding: 12px 10px; 
-                                    background: linear-gradient(transparent, rgba(0,0,0,0.4) 20%, rgba(0,0,0,0.7)); 
-                                    color: white; line-height: 1.5;">
-                            
-                            <b style="color: #00ffd0; font-size: 1.1rem; display: block; margin-bottom: 2px; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">
-                                {fish_name} {size}cm
-                            </b>
-                            
-                            <span style="font-size: 0.85rem; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">
+                        <div style="position: absolute; bottom: 0; width: 100%; padding: 12px 10px; background: linear-gradient(transparent, rgba(0,0,0,0.8) 20%, rgba(0,0,0,0.95)); color: white; line-height: 1.5;">
+                            <b style="color: #00ffd0; font-size: 1.1rem; display: block; margin-bottom: 2px;">{fish_name} {size}cm</b>
+                            <span style="font-size: 0.85rem;">
                                 🕒 {dt_str}<br>
                                 📍 {place}<br>
                                 🌊 {tide_name} ({tide_phase})<br>
@@ -72,4 +65,3 @@ def show_gallery_page(df):
                 
             except Exception as e:
                 st.image(img_url, caption=f"{row.get('魚種','-')}")
-
