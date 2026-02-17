@@ -53,7 +53,7 @@ def show_analysis_page(df):
     if not df_p.empty:
         df_p[['x_sync', 'y_sync']] = df_p.apply(get_sync_coords, axis=1)
 
-    # --- 3. グラフ描画（プロット形状の変更） ---
+    # --- 3. グラフ描画（色と形状の変更） ---
     fig = go.Figure()
     x_line = np.linspace(8, 38, 1000)
     y_line = 100 * np.cos(2 * np.pi * (x_line - 24) / 12)
@@ -64,9 +64,13 @@ def show_analysis_page(df):
             spec_df = df_p[df_p['魚種'] == species]
             if spec_df.empty: continue
             
-            # 「上げ」か「下げ」かで形（symbol）を分ける
-            # 上げ: triangle-up (▲), 下げ: triangle-down (▼)
-            symbols = spec_df['潮位フェーズ'].apply(lambda x: 'triangle-up' if '上げ' in x else 'triangle-down')
+            # 上げ下げ判定
+            is_up_list = spec_df['潮位フェーズ'].str.contains('上げ')
+            
+            # 形状: 上げ▲ / 下げ▼
+            symbols = is_up_list.apply(lambda x: 'triangle-up' if x else 'triangle-down')
+            # 色: 上げ水色 (#00d4ff) / 下げ赤 (#ff4b4b)
+            colors = is_up_list.apply(lambda x: '#00d4ff' if x else '#ff4b4b')
             
             fig.add_trace(go.Scatter(
                 x=spec_df['x_sync'], y=spec_df['y_sync'],
@@ -74,12 +78,13 @@ def show_analysis_page(df):
                 name=species,
                 marker=dict(
                     size=20, 
-                    symbol=symbols, # ここで▲/▼を指定
+                    symbol=symbols,
+                    color=colors,
                     line=dict(width=1.5, color='white')
                 ),
                 customdata=spec_df['fish_id'],
                 hovertemplate=f"<b>{species}</b><br>%{{text}}<br>クリックで詳細表示<extra></extra>",
-                text=spec_df['潮位フェーズ'] # ホバー時にフェーズを表示
+                text=spec_df['潮位フェーズ']
             ))
 
     fig.update_layout(
@@ -90,7 +95,7 @@ def show_analysis_page(df):
 
     event_data = st.plotly_chart(fig, use_container_width=True, on_select="rerun")
 
-    # --- 4. 詳細パネル（潮位フェーズ表示追加） ---
+    # --- 4. 詳細パネル（「風向」に統一） ---
     if event_data and "selection" in event_data and event_data["selection"]["points"]:
         selected_id = event_data["selection"]["points"][0]["customdata"]
         items = df_p[df_p['fish_id'] == selected_id]
@@ -114,7 +119,6 @@ def show_analysis_page(df):
             with col2:
                 st.subheader(f"🐟 {item['魚種']} {item['全長_cm']}cm")
                 
-                # フェーズ表示（▲▼付き）
                 phase = str(item['潮位フェーズ'])
                 icon = "▲" if "上げ" in phase else "▼"
                 st.markdown(f"#### {icon} {phase}")
@@ -125,11 +129,11 @@ def show_analysis_page(df):
                 
                 m3, m4 = st.columns(2)
                 m3.metric("🌊 潮位", f"{item.get('潮位_cm', '--')}cm")
-                m4.metric("🧭 風向", f"{item.get('風向', '--')}")
+                # 「風向き」から「風向」にラベルを統一
+                m4.metric("🧭 風向", f"{item.get('風向', item.get('風向き', '--'))}")
                 
                 st.write(f"**⏰ 釣れた時刻:** {item['datetime'].strftime('%H:%M')}")
                 if 'memo' in item and pd.notna(item['memo']):
                     st.info(f"📝 **メモ:**\n{item['memo']}")
     else:
         st.info("💡 グラフ上のプロットをクリックすると詳細が表示されます。")
-
