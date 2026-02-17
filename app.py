@@ -15,7 +15,7 @@ from PIL import Image, ExifTags
 # app.py の冒頭に追加
 from edit_module import show_edit_page
 from gallery_module import show_gallery_page
-from analysis_module import show_phase_analysis_page
+from analysis_module import show_phase_analysis_page(df)
 
 def safe_strptime(date_str, fmt='%Y/%m/%d %H:%M'):
     """ミリ秒などが混入していても、フォーマットに合う長さだけ切り取って解析する"""
@@ -452,6 +452,7 @@ with tab3:
     show_gallery_page(df) # 「tab3の中にこれを表示してね」と命令する
 with tab4:
     show_analysis_page(df)
+
 
 
 
