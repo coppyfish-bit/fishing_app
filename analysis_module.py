@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 def show_analysis_page(df):
-    st.subheader("📊 時合精密解析（昼夜別・曲線吸着プロット）")
+    st.subheader("📊 時合精密解析（昼夜波・フェーズ同期）")
 
     if df.empty:
         st.info("データがありません。")
@@ -15,12 +15,11 @@ def show_analysis_page(df):
     df_p['datetime'] = pd.to_datetime(df_p['datetime'], errors='coerce')
 
     # --- 1. 定数定義 ---
-    # 周期12時間。15時（昼の波の頂点）と27時（＝深夜3時：夜の波の頂点）を満潮に設定
     CYCLE = 12
-    PEAK_DAY = 15.0
-    PEAK_NIGHT = 27.0
+    PEAK_LEFT = 15.0   # 昼の波(12h-24h)の満潮：15時
+    PEAK_RIGHT = 27.0  # 夜の波(24h-36h)の満潮：深夜3時
 
-    # --- 2. 座標計算ロジック ---
+    # --- 2. 座標計算ロジック (時刻で波を決め、フェーズで座標を決める) ---
     def get_sync_coords(row):
         phase = str(row['潮位フェーズ'])
         try:
@@ -28,45 +27,47 @@ def show_analysis_page(df):
         except:
             step = 5
         
-        # 釣行時刻から昼の波(12-24h)か夜の波(24-36h)かを判定
+        # 写真が撮られた時刻を取得
         h = row['datetime'].hour + row['datetime'].minute / 60
+        # 0時〜12時のデータは24時〜36時として扱う
         shifted_h = h if h >= 12 else h + 24
         
-        is_daytime = shifted_h < 24
-        base_peak = PEAK_DAY if is_daytime else PEAK_NIGHT
+        # 時刻を参照して、左の波か右の波かを決定
+        is_left_wave = shifted_h < 24
+        base_peak = PEAK_LEFT if is_left_wave else PEAK_RIGHT
 
-        # 1分〜9分を、満潮(peak)から前後3時間の範囲にマッピング
-        # 上げ潮は満潮より前（左側）、下げ潮は満潮より後（右側）
+        # 潮位フェーズ(1-9分)を、満潮(peak)を起点に左右0.6時間ずつの範囲にマッピング
+        # 上げ潮は満潮の左側（上りスロープ）、下げ潮は満潮の右側（下りスロープ）
         if "上げ" in phase:
             sync_x = base_peak - ((10 - step) * 0.6)
             y = -100 + (step * 20)
-        else:
+        elif "下げ" in phase:
             sync_x = base_peak + (step * 0.6)
             y = 100 - (step * 20)
+        else:
+            sync_x = base_peak
+            y = 0
             
-        return pd.Series([sync_x, y, is_daytime])
+        return pd.Series([sync_x, y])
 
-    # 座標と昼夜フラグを計算
-    df_p[['x_sync', 'y_sync', 'is_daytime']] = df_p.apply(get_sync_coords, axis=1)
+    # 計算実行
+    df_p[['x_sync', 'y_sync']] = df_p.apply(get_sync_coords, axis=1)
 
     # --- 3. グラフ描画 ---
     fig = go.Figure()
 
-    # 背景：昼の波 (12:00 - 0:00) 赤系
-    x_day = np.linspace(12, 24, 500)
-    y_day = 100 * np.cos(2 * np.pi * (x_day - PEAK_DAY) / CYCLE)
-    fig.add_trace(go.Scatter(x=x_day, y=y_day, mode='lines', 
-                             line=dict(color='#ff4b4b', width=3), # 赤色の波
-                             name='昼の波', hoverinfo='skip'))
+    # 背景：2つの正弦波（12:00-24:00 と 24:00-36:00）
+    x_line = np.linspace(12, 36, 1000)
+    # cosを使って15時と27時を頂点にする
+    y_line = 100 * np.cos(2 * np.pi * (x_line - 15) / 12)
+    
+    fig.add_trace(go.Scatter(
+        x=x_line, y=y_line, mode='lines', 
+        line=dict(color='rgba(100, 200, 255, 0.3)', width=2),
+        hoverinfo='skip', showlegend=False
+    ))
 
-    # 背景：夜の波 (0:00 - 12:00) 黄色
-    x_night = np.linspace(24, 36, 500)
-    y_night = 100 * np.cos(2 * np.pi * (x_night - PEAK_NIGHT) / CYCLE)
-    fig.add_trace(go.Scatter(x=x_night, y=y_night, mode='lines', 
-                             line=dict(color='#f1c40f', width=3), # 黄色の波
-                             name='夜の波', hoverinfo='skip'))
-
-    # 釣果プロット
+    # 釣果プロット（上げ・下げで分ける）
     for p_type in ['上げ', '下げ']:
         mask = df_p['潮位フェーズ'].str.contains(p_type)
         curr_df = df_p[mask]
@@ -76,7 +77,7 @@ def show_analysis_page(df):
             mode='markers+text',
             name=f'{p_type}潮',
             marker=dict(
-                size=14, 
+                size=16, 
                 color='#00ffd0' if p_type == '上げ' else '#ff4b4b',
                 symbol='triangle-up' if p_type == '上げ' else 'triangle-down',
                 line=dict(width=1, color='white')
@@ -84,17 +85,19 @@ def show_analysis_page(df):
             text=curr_df.apply(lambda r: f"{r['魚種']}{r['全長_cm']}cm", axis=1),
             textposition="top center",
             customdata=curr_df['潮位フェーズ'],
-            hovertemplate="<b>%{customdata}</b><br>判定: %{x:.2f}h<extra></extra>"
+            hovertemplate="<b>%{customdata}</b><br>本来の時刻: %{text}<extra></extra>"
         ))
 
     # レイアウト
     fig.update_layout(
         xaxis=dict(
+            title="時刻判定 (左:12-24h / 右:0-12h)",
             tickvals=[12, 18, 24, 30, 36], 
             ticktext=["12:00", "18:00", "0:00", "6:00", "12:00"], 
             range=[12, 36]
         ),
         yaxis=dict(
+            title="潮位位置 (フェーズ同期)",
             tickvals=[100, 0, -100], 
             ticktext=["満潮", "中間", "干潮"], 
             range=[-150, 180]
@@ -102,8 +105,7 @@ def show_analysis_page(df):
         template="plotly_dark",
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
-        height=600,
-        showlegend=False
+        height=600
     )
 
     st.plotly_chart(fig, use_container_width=True)
