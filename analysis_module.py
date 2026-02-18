@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 魚種別・最多釣果フォーカス解析")
+    st.subheader("📊 魚種別・時合解析 (スズキ・ヒラスズキ優先版)")
 
     if df.empty:
         st.info("データがありません。")
@@ -18,24 +18,25 @@ def show_analysis_page(df):
         places = sorted(df["場所"].unique())
         selected_place = st.selectbox("📍 場所を選択", places, key="ana_place")
     
-    # 選択された場所のデータをベースにする
     df_p_base = df[df["場所"] == selected_place].copy()
 
     with col_f2:
-        # その場所で釣れている魚種のリスト
+        # その場所で釣れている全魚種のリスト
         all_species = sorted(df_p_base["魚種"].unique())
         
-        # --- 最多釣果の魚種を特定 ---
-        if not df_p_base.empty:
-            # 魚種ごとの件数を数え、最大件数の名前を取得
+        # --- デフォルト選択のロジック ---
+        # 1. まず、その場所に存在する魚種の中から「スズキ」「ヒラスズキ」を探す
+        priority_species = ["スズキ", "ヒラスズキ"]
+        default_selection = [s for s in priority_species if s in all_species]
+        
+        # 2. もしスズキ系が1つもいなければ、その場所の最多釣果種をデフォルトにする（空欄回避）
+        if not default_selection and not df_p_base.empty:
             top_species = df_p_base["魚種"].value_counts().idxmax()
             default_selection = [top_species]
-        else:
-            default_selection = []
         
-        # マルチセレクトにデフォルト値を適用
+        # マルチセレクトに適用（ユーザーが後から自由に追加・削除可能）
         selected_species = st.multiselect(
-            "🐟 魚種を選択 (初期表示: 最多釣果)", 
+            "🐟 魚種を選択", 
             all_species, 
             default=default_selection, 
             key="ana_species"
@@ -75,7 +76,6 @@ def show_analysis_page(df):
         step = max(0, min(10, step))
         is_up = "下げ" not in phase_str
         
-        # x=0:満潮, x=6:干潮, x=12:満潮
         x_val = step * 0.6 if not is_up else 6 + (step * 0.6)
         h = row['datetime'].hour
         offset = 0 if 4 <= h <= 19 else 12.5
@@ -98,26 +98,29 @@ def show_analysis_page(df):
         line=dict(color='#00d4ff', width=3, shape='spline'),
         fill='tozeroy', 
         fillcolor='rgba(0, 212, 255, 0.2)',
-        hoverinfo='skip'
+        hoverinfo='skip',
+        name='潮位'
     ))
 
     fig.add_vline(x=12.25, line_width=1, line_dash="dot", line_color="rgba(255,255,255,0.3)")
 
     if selected_species and not df_p.empty:
-        display_df = df_p[df_p['魚種'].isin(selected_species)]
-        
-        if not display_df.empty:
-            is_up_list = display_df['潮位フェーズ'].apply(lambda x: "下げ" not in str(x))
+        # 選択された魚種ごとにプロットを重ねる
+        for species in selected_species:
+            spec_df = df_p[df_p['魚種'] == species]
+            if spec_df.empty: continue
+            
+            is_up_list = spec_df['潮位フェーズ'].apply(lambda x: "下げ" not in str(x))
             symbols = is_up_list.apply(lambda x: 'triangle-up' if x else 'triangle-down')
             colors = is_up_list.apply(lambda x: '#00ffd0' if x else '#ff4b4b')
             
             fig.add_trace(go.Scatter(
-                x=display_df['x_sync'], y=display_df['y_sync'],
+                x=spec_df['x_sync'], y=spec_df['y_sync'],
                 mode='markers',
-                name="釣果データ",
+                name=species,
                 marker=dict(size=18, symbol=symbols, color=colors, line=dict(width=1.5, color='white')),
-                text=display_df['datetime'].dt.strftime('%m/%d %H:%M'),
-                hovertemplate="<b>%{text}</b><extra></extra>"
+                text=spec_df['datetime'].dt.strftime('%m/%d %H:%M'),
+                hovertemplate="<b>%{name}</b><br>%{text}<extra></extra>"
             ))
 
     fig.update_layout(
