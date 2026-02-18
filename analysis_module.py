@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 シームレス・時合精密解析")
+    st.subheader("📊 シームレス・時合精密解析 (座標同期修正版)")
 
     if df.empty:
         st.info("データがありません。")
@@ -22,24 +22,16 @@ def show_analysis_page(df):
 
     with col_f2:
         all_species = sorted(df_p_base["魚種"].unique())
-        
-        # デフォルト選択のロジック（スズキ・ヒラスズキ優先）
         priority_species = ["スズキ", "ヒラスズキ"]
         default_selection = [s for s in priority_species if s in all_species]
         
-        # スズキ系がいなければ最多魚種を選択
         if not default_selection and not df_p_base.empty:
             top_species = df_p_base["魚種"].value_counts().idxmax()
             default_selection = [top_species]
         
-        selected_species = st.multiselect(
-            "🐟 魚種を選択", 
-            all_species, 
-            default=default_selection, 
-            key="ana_species"
-        )
+        selected_species = st.multiselect("🐟 魚種を選択", all_species, default=default_selection, key="ana_species")
 
-    # --- 2. データの前処理 (秒なし・日本語表記対応) ---
+    # --- 2. データの前処理 ---
     df_p = df_p_base.copy()
     
     def clean_datetime_safe(val):
@@ -65,14 +57,13 @@ def show_analysis_page(df):
     df_p['datetime'] = df_p['datetime_str'].apply(parse_dt)
     df_p = df_p.dropna(subset=['datetime'])
 
-    # --- 3. 座標計算ロジック (重なり回避・自動散らし) ---
+    # --- 3. 座標計算ロジック (同期バグ修正版) ---
     def process_coordinates(target_df):
         if target_df.empty:
             return target_df
         
         res_df = target_df.copy()
         
-        # ステップ数抽出
         def extract_step(phase_str):
             nums = re.findall(r'\d+', str(phase_str).translate(str.maketrans('０１２３４５６７８９', '0123456789')))
             step = int(nums[0]) if nums else 5
@@ -82,20 +73,23 @@ def show_analysis_page(df):
         res_df['is_up'] = res_df['潮位フェーズ'].apply(lambda x: "下げ" not in str(x))
         res_df['hour_cat'] = res_df['datetime'].dt.hour.apply(lambda h: 0 if 4 <= h <= 19 else 1)
         
-        # 重なり判定用インデックス（同じ位置に来るデータに連番を振る）
+        # 重なり判定用
         res_df['repeat_idx'] = res_df.groupby(['step_val', 'is_up', 'hour_cat']).cumcount()
 
-        def calculate_x(row):
-            # 基本x座標
+        def calculate_coords(row):
+            # X軸の計算
             x_base = row['step_val'] * 0.6 if not row['is_up'] else 6 + (row['step_val'] * 0.6)
             area_offset = 0 if row['hour_cat'] == 0 else 12.5
-            # 重なり回避のための微調整
             jitter = row['repeat_idx'] * 0.15
-            return x_base + area_offset + jitter
+            final_x = x_base + area_offset + jitter
+            
+            # Y軸の計算 (重要: x_baseをそのままcosに入れることで、背景の波形と完全同期させる)
+            # 背景波形は y = 100 * cos(x * pi / 6)
+            final_y = 100 * np.cos(x_base * np.pi / 6)
+            
+            return pd.Series([final_x, final_y])
 
-        res_df['x_sync'] = res_df.apply(calculate_x, axis=1)
-        res_df['y_sync'] = res_df.apply(lambda r: 100 * np.cos((r['step_val'] * 0.6) * np.pi / 6), axis=1)
-        
+        res_df[['x_sync', 'y_sync']] = res_df.apply(calculate_coords, axis=1)
         return res_df
 
     if not df_p.empty:
@@ -110,7 +104,8 @@ def show_analysis_page(df):
         
         # 背景のシームレス曲線 (x=0〜25)
         x_line = np.linspace(0, 25, 1000)
-        y_line = [100 * np.cos(x * np.pi / 6) if x <= 12.5 else 100 * np.cos((x - 12.5) * np.pi / 6) for x in x_line]
+        # y = 100 * cos( (x % 12.5) * pi / 6 ) とすることで、0-12.5 と 12.5-25 で同じ波形を繰り返す
+        y_line = 100 * np.cos((x_line % 12.5) * np.pi / 6)
         
         fig.add_trace(go.Scatter(
             x=x_line, y=y_line, 
@@ -122,15 +117,13 @@ def show_analysis_page(df):
             name='潮位'
         ))
 
-        # 境界線
         fig.add_vline(x=12.25, line_width=1, line_dash="dot", line_color="rgba(255,255,255,0.3)")
 
-        # 魚種ごとにプロット
         for species in selected_species:
             spec_df = display_df[display_df['魚種'] == species]
             if spec_df.empty: continue
             
-            is_up_list = spec_df['潮位フェーズ'].apply(lambda x: "下げ" not in str(x))
+            is_up_list = spec_df['is_up']
             symbols = is_up_list.apply(lambda x: 'triangle-up' if x else 'triangle-down')
             colors = is_up_list.apply(lambda x: '#00ffd0' if x else '#ff4b4b')
             
