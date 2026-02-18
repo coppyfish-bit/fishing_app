@@ -139,19 +139,21 @@ def show_analysis_page(df):
         st.plotly_chart(fig, use_container_width=True)
 
         # --- 5. 棒グラフ (上げ左:緑 / 下げ右:赤 / 下げ10削除) ---
+# --- 5. 棒グラフ (上げ左:緑 / 下げ右:赤 / 順序強制) ---
         st.write("📈 **フェーズ別ボリューム**")
         
-        # 強制的に左から右へ並べる順序を定義
+        # 順序定義: 上げ1〜10分 -> 下げ0〜9分
         phase_order = [f"上げ{i}分" for i in range(1, 11)] + [f"下げ{i}分" for i in range(10)]
         
         display_df_copy = display_df.copy()
-        display_df_copy['norm_phase'] = display_df_copy.apply(lambda r: f"{'上げ' if r['is_up'] else '下げ'}{r['step_val']}分", axis=1)
+        display_df_copy['norm_phase'] = display_df_copy.apply(
+            lambda r: f"{'上げ' if r['is_up'] else '下げ'}{r['step_val']}分", axis=1
+        )
         
         counts = display_df_copy['norm_phase'].value_counts().reindex(phase_order, fill_value=0).reset_index()
         counts.columns = ['フェーズ', '件数']
 
         fig_bar = go.Figure()
-        # 色設定を上げ下げに連動
         colors_bar = ['#00ffd0' if '上げ' in p else '#ff4b4b' for p in counts['フェーズ']]
         
         fig_bar.add_trace(go.Bar(
@@ -161,21 +163,24 @@ def show_analysis_page(df):
         ))
 
         fig_bar.update_layout(
-            template="plotly_dark", height=250, margin=dict(l=5, r=5, t=10, b=30),
+            template="plotly_dark", 
+            height=250, 
+            margin=dict(l=5, r=5, t=10, b=30),
+            # ↓ categoryorder類は必ず xaxis の中に記述します
             xaxis=dict(
                 title=None,
                 tickmode='array',
-                # 表示したい主要なラベルのインデックスを指定
-                tickvals=["上げ5分", "下げ5分", "上げ1分", "上げ10分", "下げ0分", "下げ9分"],
-                ticktext=["上げ5", "下げ5", "干潮", "満潮", "満潮", "干潮前"],
-                tickfont=dict(size=10)
+                tickvals=["上げ1分", "上げ5分", "上げ10分", "下げ0分", "下げ5分", "下げ9分"],
+                ticktext=["干潮", "上げ5", "満潮", "満潮", "下げ5", "干潮前"],
+                tickfont=dict(size=10),
+                categoryorder='array',       # 順序を配列で指定するモード
+                categoryarray=phase_order    # 具体的な並び順
             ),
             yaxis=dict(title=None, showgrid=False), 
-            showlegend=False,
-            categoryorder='array',
-            categoryarray=phase_order # ここで順序を厳密に固定
+            showlegend=False
         )
         st.plotly_chart(fig_bar, use_container_width=True)
 
     else:
         st.info("魚種を選択してください。")
+
