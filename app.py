@@ -255,8 +255,8 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 url = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_FcoS8gFFyE/edit?gid=0#gid=0"
 
 # 2. データを読み込んで 'df' という名前の変数に入れる（★ここが重要！）
-# 先ほどのエラー(429)対策として ttl="1m" を推奨します
-df = conn.read(spreadsheet=url, ttl="0s")
+# 先ほどのエラー(429)対策として ="1m" を推奨します
+df = conn.read(spreadsheet=url, ttl="10m")
 # --- タブの設定部分 ---
 tab1, tab2, tab3, tab4 = st.tabs(["記録", "編集", "ギャラリー", "分析（時合・フェーズ）"])
 
@@ -442,7 +442,7 @@ with tab1:
                         st.balloons()
                         
                         # 2秒待ってから、強制的にアプリを再起動して最新データを読み込ませる
-                        time.sleep(2)
+                        time.sleep(1)
                         st.rerun()
 
                 except Exception as e:
@@ -457,6 +457,7 @@ with tab3:
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
