@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 時合精密解析 (棒グラフ順序修正版)")
+    st.subheader("📊 時合精密解析 (スマホ最適化版)")
 
     if df.empty:
         st.info("データがありません。")
@@ -51,7 +51,7 @@ def show_analysis_page(df):
     df_p['datetime'] = df_p['datetime_str'].apply(parse_dt)
     df_p = df_p.dropna(subset=['datetime'])
 
-    # --- 3. 座標計算ロジック ---
+    # --- 3. 座標計算ロジック (タイドグラフ用: 左下げ・右上げのシームレス) ---
     def process_coordinates(target_df):
         res_df = target_df.copy()
         
@@ -71,8 +71,8 @@ def show_analysis_page(df):
         res_df['repeat_idx'] = res_df.groupby(['step_val', 'is_up', 'hour_cat']).cumcount()
 
         def calculate_coords(row):
-            # 左側:上げ(0-6) / 右側:下げ(6-12)
-            if row['is_up']:
+            # 元のロジックに戻す: 下げ(0-6) / 上げ(6-12)
+            if not row['is_up']:
                 x_pos = row['step_val'] * 0.6
             else:
                 x_pos = 6 + (row['step_val'] * 0.6)
@@ -80,7 +80,8 @@ def show_analysis_page(df):
             area_offset = 0 if row['hour_cat'] == 0 else 12.5
             jitter = row['repeat_idx'] * 0.18
             final_x = x_pos + area_offset + jitter
-            final_y = -100 * np.cos(x_pos * np.pi / 6) # 山型
+            # 元の cos 波形に戻す
+            final_y = 100 * np.cos(x_pos * np.pi / 6)
             return pd.Series([final_x, final_y])
 
         res_df[['x_sync', 'y_sync']] = res_df.apply(calculate_coords, axis=1)
@@ -89,14 +90,14 @@ def show_analysis_page(df):
     if not df_p.empty:
         df_p = process_coordinates(df_p)
 
-    # --- 4. タイドグラフ描画 ---
+    # --- 4. メイン・タイドグラフ描画 (シームレス表示) ---
     if selected_species and not df_p.empty:
         display_df = df_p[df_p['魚種'].isin(selected_species)]
         st.caption(f"💡 表示件数: {len(display_df)} 件")
         
         fig = go.Figure()
         x_plot = np.linspace(0, 25, 1000)
-        y_plot = -100 * np.cos((x_plot % 12.5) * np.pi / 6)
+        y_plot = [100 * np.cos((x % 12.5) * np.pi / 6) if (x % 12.5) <= 12 else 100 for x in x_plot]
         
         fig.add_trace(go.Scatter(
             x=x_plot, y=y_plot, mode='lines', 
@@ -128,18 +129,16 @@ def show_analysis_page(df):
 
         fig.update_layout(
             xaxis=dict(
-                tickvals=[0, 3, 6, 9, 12, 12.5, 15.5, 18.5, 21.5, 24.5],
-                ticktext=["干潮", "上げ5", "満潮", "下げ5", "干潮", "|", "上げ5", "満潮", "下げ5", "干潮"],
-                range=[-0.5, 25.5], gridcolor='rgba(255,255,255,0.05)', zeroline=False, tickfont=dict(size=9)
+                tickvals=[6, 18.5], ticktext=["☀️ 昼 エリア", "🌙 夜 エリア"],
+                range=[-0.5, 25.5], gridcolor='rgba(255,255,255,0)', zeroline=False
             ),
-            yaxis=dict(showticklabels=False, range=[-120, 150], gridcolor='rgba(0,0,0,0)'),
-            template="plotly_dark", height=320, margin=dict(l=10, r=10, t=10, b=10),
+            yaxis=dict(tickvals=[100, 0, -100], ticktext=["満", "中", "干"], range=[-120, 150], gridcolor='rgba(255,255,255,0.1)'),
+            template="plotly_dark", height=350, margin=dict(l=10, r=10, t=10, b=10),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        # --- 5. 棒グラフ (上げ左:緑 / 下げ右:赤 / 下げ10削除) ---
-# --- 5. 棒グラフ (上げ左:緑 / 下げ右:赤 / 順序強制) ---
+        # --- 5. 棒グラフ (上げ左:緑 / 下げ右:赤 / 順序強制) ---
         st.write("📈 **フェーズ別ボリューム**")
         
         # 順序定義: 上げ1〜10分 -> 下げ0〜9分
@@ -166,15 +165,14 @@ def show_analysis_page(df):
             template="plotly_dark", 
             height=250, 
             margin=dict(l=5, r=5, t=10, b=30),
-            # ↓ categoryorder類は必ず xaxis の中に記述します
             xaxis=dict(
                 title=None,
                 tickmode='array',
                 tickvals=["上げ1分", "上げ5分", "上げ10分", "下げ0分", "下げ5分", "下げ9分"],
                 ticktext=["干潮", "上げ5", "満潮", "満潮", "下げ5", "干潮前"],
                 tickfont=dict(size=10),
-                categoryorder='array',       # 順序を配列で指定するモード
-                categoryarray=phase_order    # 具体的な並び順
+                categoryorder='array',
+                categoryarray=phase_order 
             ),
             yaxis=dict(title=None, showgrid=False), 
             showlegend=False
@@ -183,4 +181,3 @@ def show_analysis_page(df):
 
     else:
         st.info("魚種を選択してください。")
-
