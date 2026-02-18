@@ -432,16 +432,14 @@ with tab1:
                         new_row = pd.DataFrame([save_data])
                         updated_df = pd.concat([df_main, new_row], ignore_index=True)
     # app.py の「保存完了しました！」のメッセージ周辺を修正
-# ---------------------------------------------------------
+# (中略) スプレッドシートを更新した直後
                         conn.update(spreadsheet=url, data=updated_df)
                         
-                        # 重要：キャッシュを物理的に消去
-                        st.cache_data.clear()
+                        # 保存した時だけ、古いキャッシュを捨てる
+                        st.cache_data.clear() 
                         
-                        st.success("✅ スプレッドシートへの書き込みが完了しました！")
+                        st.success("✅ 記録完了しました！")
                         st.balloons()
-                        
-                        # 2秒待ってから、強制的にアプリを再起動して最新データを読み込ませる
                         time.sleep(1)
                         st.rerun()
 
@@ -453,21 +451,14 @@ with tab2:
     show_edit_page(conn, url)
 
 with tab3:
-    # 1. 既存のキャッシュをこの瞬間だけ完全にクリア
-    st.cache_data.clear() 
-    
-    # 2. 乱数（タイムスタンプ）をパラメータに混ぜることで、
-    # Google側に「全く新しいリクエスト」だと思わせて最新データを強制取得
-    import time
-    df_latest = conn.read(spreadsheet=url, ttl=0)
-    
-    # 診断用：これを出して116行目まで増えるか確認してください
-    st.caption(f"最終更新確認: {len(df_latest)} 件のデータを読み込みました")
-    
-    show_gallery_page(df_latest)
+    # 保存時にキャッシュをクリアする設定にしていれば、ここは ttl="10m" のままでも
+    # 保存直後は最新が表示されます。念を入れるなら今のまま ttl="0s" でもOKです。
+    df_for_gallery = conn.read(spreadsheet=url, ttl="0s")
+    show_gallery_page(df_for_gallery)
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
