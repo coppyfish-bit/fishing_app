@@ -289,7 +289,7 @@ with tab1:
         st.stop()
     
     # --- try-except の外に出して、確実に行が実行されるようにする ---
-uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png", "heic"])
+    uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png", "heic"])
     
     # 画像が選択されたら情報を解析してセッションに保存
     if uploaded_file:
@@ -440,6 +440,7 @@ uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg
 
                 except Exception as e:
                     st.error(f"❌ 保存失敗: {e}")
+
 
 
 
