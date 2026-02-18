@@ -6,16 +6,7 @@ import re
 import base64
 
 def show_analysis_page(df):
-    # CSSでページ全体の「意図しないズーム」を抑制
-    st.markdown("""
-        <style>
-        [data-testid="stMarkdownContainer"] {
-            user-select: none;
-            -webkit-touch-callout: none;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
+    # タブ内のタイトルを更新して、古いコードでないことを明示
     st.subheader("📊 時合精密解析 (完全画像化版)")
 
     if df.empty:
@@ -26,6 +17,7 @@ def show_analysis_page(df):
     places = sorted(df["場所"].unique())
     if "prev_place" not in st.session_state:
         st.session_state.prev_place = places[0]
+    
     selected_place = st.selectbox("📍 場所を選択", places, key="ana_place")
     df_p_base = df[df["場所"] == selected_place].copy()
     
@@ -37,6 +29,7 @@ def show_analysis_page(df):
         else:
             st.session_state.selected_species = []
         st.session_state.prev_place = selected_place
+
     selected_species = st.multiselect("🐟 魚種を選択", all_species, key="selected_species")
 
     # --- 2. データ前処理 ---
@@ -45,6 +38,7 @@ def show_analysis_page(df):
         if pd.isna(val): return None
         s = str(val).strip().translate(str.maketrans('０１２３４５６７８９：／－', '0123456789:/-'))
         return re.sub(r'[^0-9:/\-\s]', '', s.replace('年','/').replace('月','/').replace('日',' ').replace('時',':'))
+    
     df_p['datetime'] = df_p['datetime'].apply(clean_dt).apply(lambda x: pd.to_datetime(x, errors='coerce'))
     df_p = df_p.dropna(subset=['datetime'])
 
@@ -71,6 +65,7 @@ def show_analysis_page(df):
 
     # --- 3. 画像出力用ヘルパー関数 ---
     def fig_to_base64_img(fig):
+        # グラフをバイナリ画像に変換
         img_bytes = fig.to_image(format="png", scale=2)
         encoded = base64.b64encode(img_bytes).decode()
         return f"data:image/png;base64,{encoded}"
@@ -93,10 +88,10 @@ def show_analysis_page(df):
         
         fig.update_layout(xaxis=dict(tickvals=[6, 18.5], ticktext=["☀️ 昼", "🌙 夜"], range=[-0.5, 25.5], gridcolor='rgba(255,255,255,0.1)'), yaxis=dict(showticklabels=False, range=[-120, 150]), template="plotly_dark", height=320, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
         
-        # 🌊 タイド分布をHTML背景画像として表示
         st.write("🌊 タイド分布")
         img_url = fig_to_base64_img(fig)
-        st.markdown(f'<div style="width:100%; height:320px; background: url({img_url}) center/contain no-repeat; pointer-events: none;"></div>', unsafe_allow_html=True)
+        # 背景画像として埋め込み。pointer-events: none でタッチを完全に無効化
+        st.markdown(f'<div style="width:100%; height:320px; background: url({img_url}) center/contain no-repeat; pointer-events: none !important;"></div>', unsafe_allow_html=True)
 
         # 棒グラフ
         st.write("📈 フェーズ別ボリューム")
@@ -111,9 +106,4 @@ def show_analysis_page(df):
         fig_bar.add_trace(go.Bar(x=counts['フェーズ'], y=counts['件数'], marker_color=colors_bar))
         fig_bar.update_layout(template="plotly_dark", height=230, margin=dict(l=5, r=5, t=10, b=30), xaxis=dict(tickmode='array', tickvals=["下げ0分", "下げ5分", "下げ9分", "上げ1分", "上げ5分", "上げ10分"], ticktext=["満", "下5", "干前", "干", "上5", "満"], categoryorder='array', categoryarray=phase_order), yaxis=dict(showgrid=False), showlegend=False)
         
-        # 📈 棒グラフをHTML背景画像として表示
-        img_url_bar = fig_to_base64_img(fig_bar)
-        st.markdown(f'<div style="width:100%; height:230px; background: url({img_url_bar}) center/contain no-repeat; pointer-events: none;"></div>', unsafe_allow_html=True)
-
-    else:
-        st.info("魚種を選択してください。")
+        img_url_bar = fig_to_
