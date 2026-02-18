@@ -30,37 +30,52 @@ def show_analysis_page(df):
     df_p = df_p.dropna(subset=['datetime'])
     df_p['fish_id'] = df_p['datetime'].dt.strftime('%Y%m%d%H%M%S') + "_" + df_p['魚種']
 
-    # --- 2. 座標計算ロジック ---
+    # --- 2. 座標計算ロジック (日中対応版) ---
     def get_sync_coords(row):
         phase_str = str(row['潮位フェーズ'])
+        # 数字を抽出（全角対応）
         nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
         step = int(nums[0]) if nums else 5
+        
+        # 時刻を数値化 (0.0 ～ 24.0)
         h = row['datetime'].hour + row['datetime'].minute / 60
-        shifted_h = h if h >= 12 else h + 24
+        
+        # 潮位の高さ(y軸)を計算
+        # 満潮=100, 干潮=-100。上げなら下から上へ、下げなら上から下へ。
         is_up = "上げ" in phase_str
         y = (-100 + (step * 20)) if is_up else (100 - (step * 20))
-
-        if shifted_h < 20.0:
-            peak = 12.0
-            sync_x = peak - ((10 - step) * 0.3) if is_up else peak + (step * 0.6)
-        else:
-            peak = 24.0 if not is_up else (24.0 if shifted_h < 24.0 else 36.0)
-            sync_x = peak + (step * 0.6) if not is_up else peak - ((10 - step) * 0.6)
-        return pd.Series([sync_x, y])
+        
+        # x軸はそのままの時刻(h)を使用。
+        # ただし、夜間の釣果(0時～6時)をグラフ右側に繋げたい場合は +24 する
+        # 今回は 0:00～24:00 をメインに、前後数時間をカバーする設定にします
+        x = h if h >= 4 else h + 24 # 朝4時以降はそのまま、深夜0〜3時は24以降に配置
+        
+        return pd.Series([x, y])
 
     if not df_p.empty:
         df_p[['x_sync', 'y_sync']] = df_p.apply(get_sync_coords, axis=1)
 
     # --- 3. グラフ描画 ---
     fig = go.Figure()
-    x_line = np.linspace(8, 38, 1000)
-    y_line = 100 * np.cos(2 * np.pi * (x_line - 24) / 12)
-    fig.add_trace(go.Scatter(x=x_line, y=y_line, mode='lines', line=dict(color='rgba(100, 200, 255, 0.2)', width=2), hoverinfo='skip'))
+    
+    # グラフの背景曲線 (0時～30時くらいまで描画)
+    x_line = np.linspace(0, 28, 1000)
+    # 潮位周期（約12時間）に合わせたコス曲線
+    y_line = 100 * np.cos(2 * np.pi * (x_line - 4) / 12.4) 
+    
+    fig.add_trace(go.Scatter(
+        x=x_line, y=y_line, 
+        mode='lines', 
+        line=dict(color='rgba(100, 200, 255, 0.3)', width=2), 
+        hoverinfo='skip',
+        name='タイドイメージ'
+    ))
 
     if selected_species:
         for species in selected_species:
             spec_df = df_p[df_p['魚種'] == species]
             if spec_df.empty: continue
+            
             is_up_list = spec_df['潮位フェーズ'].str.contains('上げ')
             symbols = is_up_list.apply(lambda x: 'triangle-up' if x else 'triangle-down')
             colors = is_up_list.apply(lambda x: '#00d4ff' if x else '#ff4b4b')
@@ -72,13 +87,24 @@ def show_analysis_page(df):
                 marker=dict(size=18, symbol=symbols, color=colors, line=dict(width=1.5, color='white')),
                 customdata=spec_df['fish_id'],
                 hovertemplate=f"<b>{species}</b><br>%{{text}}<extra></extra>",
-                text=spec_df['潮位フェーズ']
+                text=spec_df['datetime'].dt.strftime('%H:%M') + " (" + spec_df['潮位フェーズ'] + ")"
             ))
 
     fig.update_layout(
-        xaxis=dict(tickvals=[12, 18, 24, 30, 36], ticktext=["12:00", "18:00", "0:00", "6:00", "12:00"], range=[8.5, 37.5]),
-        yaxis=dict(tickvals=[100, 0, -100], ticktext=["満潮", "中間", "干潮"], range=[-150, 220]),
-        template="plotly_dark", height=500, clickmode='event+select'
+        xaxis=dict(
+            title="時刻",
+            tickvals=[0, 6, 12, 18, 24, 28], 
+            ticktext=["0:00", "6:00", "12:00", "18:00", "0:00", "4:00"], 
+            range=[0, 28]
+        ),
+        yaxis=dict(
+            tickvals=[100, 0, -100], 
+            ticktext=["満潮", "中間", "干潮"], 
+            range=[-150, 150]
+        ),
+        template="plotly_dark", 
+        height=500, 
+        showlegend=True
     )
 
     st.plotly_chart(fig, use_container_width=True)
