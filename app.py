@@ -11,7 +11,7 @@ import io
 import numpy as np
 import ephem
 import requests
-from PIL import Image, ExifTagsdf_main = conn.read
+from PIL import Image, ExifTags
 # app.py の冒頭に追加
 from edit_module import show_edit_page
 from gallery_module import show_gallery_page
@@ -452,6 +452,7 @@ with tab3:
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
