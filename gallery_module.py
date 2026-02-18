@@ -10,15 +10,13 @@ def show_gallery_page(df):
 
     df_gallery = df.copy()
 
-    # --- 重要：日付の読み込みを柔軟にする ---
-    # formatを指定せず、Pandasに自動判別させることで「秒あり/なし」が混在してもOKにします
+    # --- 重要：日付の読み込みを柔軟にする (NaT対策) ---
+    # formatを指定せず自動判別に任せ、エラー行があっても全体を止めない
     df_gallery['datetime'] = pd.to_datetime(df_gallery['datetime'], errors='coerce')
 
-    # datetimeが空の行（変換失敗）があるとソートでエラーになる可能性があるため
-    # 保存されていない分も確実に拾うために、一度並び替えをせずに最新行を上に持ってくる工夫をします
-    df_gallery = df_gallery.iloc[::-1] # 単純に「スプレッドシートの下の行」を上にする
+    # スプレッドシートの下の行（最新）を上にする
+    df_gallery = df_gallery.iloc[::-1]
 
-    # --- ギャラリー表示 ---
     cols = st.columns(3)
     display_count = 0
     
@@ -28,26 +26,33 @@ def show_gallery_page(df):
             continue
         
         with cols[display_count % 3]:
-            try:
-                # 日付の表示形式を統一
-                dt_val = row['datetime']
-                dt_str = dt_val.strftime('%y/%m/%d %H:%M') if pd.notnull(dt_val) else str(row.get('datetime', '-'))
-                
-                fish_name = row.get('魚種', '-')
-                size = row.get('全長_cm', '-')
+            # --- 日付・時刻の表示処理 (NaT対策) ---
+            dt_val = row['datetime']
+            if pd.notnull(dt_val):
+                dt_str = dt_val.strftime('%y/%m/%d %H:%M')
+            else:
+                # NaTの場合は、元の値（文字列）をそのまま使う
+                dt_str = str(row.get('datetime', '-'))
 
-                overlay_html = f"""
-                <div style="position: relative; width: 100%; margin-bottom: 20px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
-                    <img src="{img_url}" style="width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block;">
-                    <div style="position: absolute; bottom: 0; width: 100%; padding: 8px; background: linear-gradient(transparent, rgba(0,0,0,0.9)); color: white; font-size: 0.8rem;">
-                        <b style="color: #00ffd0;">{fish_name} {size}cm</b><br>
-                        {dt_str}
-                    </div>
+            # --- 気象・潮汐情報の取得 ---
+            temp = f"{row.get('気温', '-')}℃"
+            wind = f"{row.get('風向', '')}{row.get('風速', '-')}m"
+            tide_name = row.get('潮名', '-')
+            tide_phase = row.get('潮位フェーズ', '-')
+
+            fish_info = f"{row.get('魚種', '-')} {row.get('全長_cm', '-')}cm"
+
+            # HTMLでのカード表示（気象・潮汐情報を追加）
+            overlay_html = f"""
+            <div style="position: relative; width: 100%; margin-bottom: 20px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
+                <img src="{img_url}" style="width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block;">
+                <div style="position: absolute; bottom: 0; width: 100%; padding: 8px; background: linear-gradient(transparent, rgba(0,0,0,0.9)); color: white; font-size: 0.75rem;">
+                    <b style="color: #00ffd0; font-size: 0.9rem;">{fish_info}</b><br>
+                    📅 {dt_str}<br>
+                    🌡️ {temp} / 💨 {wind}<br>
+                    🌊 {tide_name} ({tide_phase})
                 </div>
-                """
-                st.markdown(overlay_html, unsafe_allow_html=True)
-                display_count += 1
-                
-            except Exception as e:
-                st.image(str(img_url))
-                display_count += 1
+            </div>
+            """
+            st.markdown(overlay_html, unsafe_allow_html=True)
+            display_count += 1
