@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 潮位フェーズ完全同期解析（10段階精密プロット）")
+    st.subheader("📊 シームレス・時合精密解析")
 
     if df.empty:
         st.info("データがありません。")
@@ -29,31 +29,28 @@ def show_analysis_page(df):
     df_p['datetime'] = pd.to_datetime(df_p['datetime'], errors='coerce')
     df_p = df_p.dropna(subset=['datetime'])
 
-    # --- 2. 座標計算ロジック (0-10段階 完全同期版) ---
+    # --- 2. 座標計算ロジック (シームレス接続版) ---
     def get_sync_coords(row):
         phase_str = str(row['潮位フェーズ']).strip()
         nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
         step = int(nums[0]) if nums else 5
-        step = max(0, min(10, step)) # 0〜10に制限
+        step = max(0, min(10, step))
         is_up = "下げ" not in phase_str
         
-        # 波の周期を12ユニットとする (下げ6 + 上げ6)
-        # x=0:満潮, x=6:干潮, x=12:満潮
+        # 基本の波形位置計算 (x=0:満潮, x=6:干潮, x=12:満潮)
         if not is_up:
-            # 下げ: 満潮(0) -> 干潮(6) を10段階で割る (1ステップ 0.6進む)
             x_val = step * 0.6
         else:
-            # 上げ: 干潮(6) -> 満潮(12) を10段階で割る (1ステップ 0.6進む)
             x_val = 6 + (step * 0.6)
 
-        # 4時-19時は左(昼エリア)、それ以外は右(夜エリア)へ15ユニットずらす
         h = row['datetime'].hour
-        offset = 0 if 4 <= h <= 19 else 15
+        # 昼夜の判定とオフセット
+        is_day = 4 <= h <= 19
+        offset = 0 if is_day else 12.5 # 少し隙間を空けて接続を調整
         final_x = x_val + offset
         
-        # y = 100 * cos(x * pi / 6) により、
-        # x=0(満潮)=100, x=3(中間)=0, x=6(干潮)=-100, x=9(中間)=0, x=12(満潮)=100
-        # この式に合わせてy座標を直接計算し、曲線上への固定を保証する
+        # シームレスな高さ補正: 昼夜のつなぎ目に向けて山の高さを変える
+        # y = 100 * cos(x...) の式で曲線上へ
         final_y = 100 * np.cos(x_val * np.pi / 6)
         
         return pd.Series([final_x, final_y])
@@ -64,22 +61,32 @@ def show_analysis_page(df):
     # --- 3. グラフ描画 ---
     fig = go.Figure()
     
-    # 背景の面グラフ (2つのサイクルを描画)
-    x_line = np.linspace(0, 30, 1000)
-    # y座標の基準。x=0, 12, 15, 27 辺りで満潮になる波
-    y_line_bg = 100 * np.cos((x_line % 15) * np.pi / 6)
+    # 背景のシームレス曲線作成
+    # 0-12(昼) と 12.5-24.5(夜) を繋ぐ
+    x_line = np.linspace(0, 25, 1000)
+    
+    # 昼の波と夜の波を滑らかにつなぐための条件付き合成波形
+    y_line = []
+    for x in x_line:
+        if x <= 12.5:
+            # 昼のサイクル
+            val = 100 * np.cos(x * np.pi / 6)
+        else:
+            # 夜のサイクル (起点をずらして接続)
+            val = 100 * np.cos((x - 12.5) * np.pi / 6)
+        y_line.append(val)
     
     fig.add_trace(go.Scatter(
-        x=x_line, y=y_line_bg, 
+        x=x_line, y=y_line, 
         mode='lines', 
-        line=dict(color='#00d4ff', width=3),
+        line=dict(color='#00d4ff', width=3, shape='spline'), # shape='spline'でより滑らかに
         fill='tozeroy', 
         fillcolor='rgba(0, 212, 255, 0.2)',
         hoverinfo='skip'
     ))
 
-    # 昼夜の境界線
-    fig.add_vline(x=13.5, line_width=2, line_dash="solid", line_color="rgba(255,255,255,0.5)")
+    # エリア境界のガイド線
+    fig.add_vline(x=12.25, line_width=1, line_dash="dot", line_color="rgba(255,255,255,0.3)")
 
     if selected_species:
         for species in selected_species:
@@ -95,15 +102,15 @@ def show_analysis_page(df):
                 mode='markers',
                 name=species,
                 marker=dict(size=18, symbol=symbols, color=colors, line=dict(width=1.5, color='white')),
-                text=spec_df['datetime'].dt.strftime('%m/%d %H:%M') + "<br>" + spec_df['潮位フェーズ'],
+                text=spec_df['datetime'].dt.strftime('%m/%d %H:%M'),
                 hovertemplate="<b>%{name}</b><br>%{text}<extra></extra>"
             ))
 
     fig.update_layout(
         xaxis=dict(
-            tickvals=[6, 21],
-            ticktext=["☀️ 昼 エリア (4:00-19:59)", "🌙 夜 エリア (20:00-3:59)"],
-            range=[-0.5, 29],
+            tickvals=[6, 18.5],
+            ticktext=["☀️ 昼 エリア", "🌙 夜 エリア"],
+            range=[-0.5, 25.5],
             gridcolor='rgba(255,255,255,0)',
             zeroline=False
         ),
