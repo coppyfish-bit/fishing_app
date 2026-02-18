@@ -3,11 +3,26 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import re
+import base64
 
 def show_analysis_page(df):
-    st.subheader("📊 時合精密解析 (スマホ完全固定・画像版)")
+    # CSSでページ全体の「意図しないズーム」を抑制
+    st.markdown("""
+        <style>
+        [data-testid="stMarkdownContainer"] {
+            user-select: none;
+            -webkit-touch-callout: none;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-    # --- 1. 場所・魚種の選択ロジック (変更なし) ---
+    st.subheader("📊 時合精密解析 (完全画像化版)")
+
+    if df.empty:
+        st.info("データがありません。")
+        return
+
+    # --- 1. 場所・魚種の選択ロジック ---
     places = sorted(df["場所"].unique())
     if "prev_place" not in st.session_state:
         st.session_state.prev_place = places[0]
@@ -24,7 +39,7 @@ def show_analysis_page(df):
         st.session_state.prev_place = selected_place
     selected_species = st.multiselect("🐟 魚種を選択", all_species, key="selected_species")
 
-    # --- 2. データ前処理 (計算ロジックのみ) ---
+    # --- 2. データ前処理 ---
     df_p = df_p_base.copy()
     def clean_dt(val):
         if pd.isna(val): return None
@@ -38,8 +53,8 @@ def show_analysis_page(df):
         def extract_step(ph):
             nums = re.findall(r'\d+', str(ph).translate(str.maketrans('０１２３４５６７８９', '0123456789')))
             return max(0, min(10, int(nums[0]))) if nums else 5
-        res_df['step_val'] = res_df['潮位フェーズ'].apply(extract_step)
         res_df['is_up'] = res_df['潮位フェーズ'].apply(lambda x: "下げ" not in str(x))
+        res_df['step_val'] = res_df['潮位フェーズ'].apply(extract_step)
         res_df['hour_cat'] = res_df['datetime'].dt.hour.apply(lambda h: 0 if 4 <= h <= 19 else 1)
         res_df['repeat_idx'] = res_df.groupby(['step_val', 'is_up', 'hour_cat']).cumcount()
         def calc(row):
@@ -54,7 +69,13 @@ def show_analysis_page(df):
     if not df_p.empty:
         df_p = process_coords(df_p)
 
-    # --- 3. グラフ生成と表示 ---
+    # --- 3. 画像出力用ヘルパー関数 ---
+    def fig_to_base64_img(fig):
+        img_bytes = fig.to_image(format="png", scale=2)
+        encoded = base64.b64encode(img_bytes).decode()
+        return f"data:image/png;base64,{encoded}"
+
+    # --- 4. グラフ描画 ---
     if selected_species and not df_p.empty:
         display_df = df_p[df_p['魚種'].isin(selected_species)]
         
@@ -70,11 +91,12 @@ def show_analysis_page(df):
             colors = spec_df['is_up'].apply(lambda x: '#00ffd0' if x else '#ff4b4b')
             fig.add_trace(go.Scatter(x=spec_df['x_sync'], y=spec_df['y_sync'], mode='markers', name=species, marker=dict(size=14, symbol=symbols, color=colors, line=dict(width=1, color='white'))))
         
-        fig.update_layout(xaxis=dict(tickvals=[6, 18.5], ticktext=["☀️ 昼", "🌙 夜"], range=[-0.5, 25.5], gridcolor='rgba(0,0,0,0)'), yaxis=dict(showticklabels=False, range=[-120, 150]), template="plotly_dark", height=320, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig.update_layout(xaxis=dict(tickvals=[6, 18.5], ticktext=["☀️ 昼", "🌙 夜"], range=[-0.5, 25.5], gridcolor='rgba(255,255,255,0.1)'), yaxis=dict(showticklabels=False, range=[-120, 150]), template="plotly_dark", height=320, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
         
-        # 【重要】グラフを「画像」として表示
+        # 🌊 タイド分布をHTML背景画像として表示
         st.write("🌊 タイド分布")
-        st.image(fig.to_image(format="png", scale=2), use_container_width=True)
+        img_url = fig_to_base64_img(fig)
+        st.markdown(f'<div style="width:100%; height:320px; background: url({img_url}) center/contain no-repeat; pointer-events: none;"></div>', unsafe_allow_html=True)
 
         # 棒グラフ
         st.write("📈 フェーズ別ボリューム")
@@ -89,8 +111,9 @@ def show_analysis_page(df):
         fig_bar.add_trace(go.Bar(x=counts['フェーズ'], y=counts['件数'], marker_color=colors_bar))
         fig_bar.update_layout(template="plotly_dark", height=230, margin=dict(l=5, r=5, t=10, b=30), xaxis=dict(tickmode='array', tickvals=["下げ0分", "下げ5分", "下げ9分", "上げ1分", "上げ5分", "上げ10分"], ticktext=["満", "下5", "干前", "干", "上5", "満"], categoryorder='array', categoryarray=phase_order), yaxis=dict(showgrid=False), showlegend=False)
         
-        # 【重要】棒グラフも「画像」として表示
-        st.image(fig_bar.to_image(format="png", scale=2), use_container_width=True)
+        # 📈 棒グラフをHTML背景画像として表示
+        img_url_bar = fig_to_base64_img(fig_bar)
+        st.markdown(f'<div style="width:100%; height:230px; background: url({img_url_bar}) center/contain no-repeat; pointer-events: none;"></div>', unsafe_allow_html=True)
 
     else:
         st.info("魚種を選択してください。")
