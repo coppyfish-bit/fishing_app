@@ -5,6 +5,17 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
+    # グラフ領域でのタッチ操作を「スルー」させるCSS
+    st.markdown("""
+        <style>
+        .js-plotly-plot {
+            pointer-events: none; /* グラフへの操作をすべて無視して背景へ流す */
+        }
+        .main {
+            overflow-x: hidden;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     st.subheader("📊 時合精密解析 (スクロール固定版)")
 
     if df.empty:
