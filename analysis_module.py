@@ -142,41 +142,48 @@ def show_analysis_page(df):
         st.plotly_chart(fig, use_container_width=True)
 
         # --- 5. 潮位フェーズ別ボリューム集計 (下げ10分を削除) ---
+       # --- 5. 棒グラフ (上げ左・下げ右 / ラベル簡略化) ---
         st.write("📈 **フェーズ別・釣果ボリューム**")
         
-        # 下げ10分を除外したオーダー
-        phase_order = [f"下げ{i}分" for i in range(10)] + [f"上げ{i}分" for i in range(1, 11)]
+        # 潮の流れに沿った順序: 上げ1〜10分 -> 下げ0〜9分
+        phase_order = [f"上げ{i}分" for i in range(1, 11)] + [f"下げ{i}分" for i in range(10)]
         
-        def normalize_phase_name(row):
-            prefix = "上げ" if row['is_up'] else "下げ"
-            return f"{prefix}{row['step_val']}分"
-
         display_df_copy = display_df.copy()
-        display_df_copy['norm_phase'] = display_df_copy.apply(normalize_phase_name, axis=1)
+        display_df_copy['norm_phase'] = display_df_copy.apply(lambda r: f"{'上げ' if r['is_up'] else '下げ'}{r['step_val']}分", axis=1)
         
-        # 下げ10分は集計から除外（スルー）される
         counts = display_df_copy['norm_phase'].value_counts().reindex(phase_order, fill_value=0).reset_index()
-        counts.columns = ['フェーズ', '釣果件数']
+        counts.columns = ['フェーズ', '件数']
 
         fig_bar = go.Figure()
-        colors_bar = ['#ff4b4b' if '下げ' in p else '#00ffd0' for p in counts['フェーズ']]
+        # 上げ＝緑系、下げ＝赤系
+        colors_bar = ['#00ffd0' if '上げ' in p else '#ff4b4b' for p in counts['フェーズ']]
         
         fig_bar.add_trace(go.Bar(
             x=counts['フェーズ'],
-            y=counts['釣果件数'],
+            y=counts['件数'],
             marker_color=colors_bar,
             hovertemplate="<b>%{x}</b><br>釣果: %{y}件<extra></extra>"
         ))
 
         fig_bar.update_layout(
             template="plotly_dark",
-            height=280, # 棒グラフも高さを抑える
-            margin=dict(l=5, r=5, t=10, b=30),
-            xaxis=dict(title=None, tickangle=45, tickfont=dict(size=10)),
-            yaxis=dict(title=None, gridcolor='rgba(255,255,255,0.1)'),
-            showlegend=False
+            height=250, 
+            margin=dict(l=10, r=10, t=10, b=30),
+            xaxis=dict(
+                title=None,
+                # 特定のラベルだけ表示し、他は非表示にする
+                tickmode='array',
+                tickvals=["上げ1分", "上げ5分", "上げ10分", "下げ0分", "下げ5分", "下げ9分"],
+                ticktext=["干潮(上げ始め)", "上げ5分", "満潮", "満潮(下げ始め)", "下げ5分", "干潮前"],
+                tickfont=dict(size=10)
+            ),
+            yaxis=dict(title=None, showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
+            showlegend=False,
+            # バー同士の隙間を調整（スマホで見やすく）
+            bargap=0.1
         )
         st.plotly_chart(fig_bar, use_container_width=True)
 
     else:
         st.info("表示する魚種を選択してください。")
+
