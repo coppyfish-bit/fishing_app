@@ -441,6 +441,16 @@ with tab1:
                 except Exception as e:
                     st.error(f"❌ 保存失敗: {e}")
 
+# ↓ ここから下の「with tab...」が、すべて同じ左端の高さにあるか確認してください
+with tab2:
+    show_edit_page(conn, url)
+
+with tab3:
+    show_gallery_page(df)
+
+with tab4:
+    show_analysis_page(df)
+
 
 
 
