@@ -3,11 +3,26 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import re
-import base64
 
 def show_analysis_page(df):
-    # タブ内のタイトルを更新して、古いコードでないことを明示
-    st.subheader("📊 時合精密解析 (完全画像化版)")
+    # 【最重要】グラフへのタッチを100%遮断するCSS
+    # 環境エラーが起きないよう、画像を生成せずにCSSだけでガードします。
+    st.markdown("""
+        <style>
+        /* グラフを包むコンテナの操作を完全に無効化 */
+        [data-testid="stPlotlyChart"] {
+            pointer-events: none !important;
+            touch-action: none !important;
+        }
+        /* グラフ本体の操作も念のため無効化 */
+        .js-plotly-plot {
+            pointer-events: none !important;
+            touch-action: none !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.subheader("📊 時合精密解析 (スマホ完全固定版)")
 
     if df.empty:
         st.info("データがありません。")
@@ -63,18 +78,11 @@ def show_analysis_page(df):
     if not df_p.empty:
         df_p = process_coords(df_p)
 
-    # --- 3. 画像出力用ヘルパー関数 ---
-    def fig_to_base64_img(fig):
-        # グラフをバイナリ画像に変換
-        img_bytes = fig.to_image(format="png", scale=2)
-        encoded = base64.b64encode(img_bytes).decode()
-        return f"data:image/png;base64,{encoded}"
-
-    # --- 4. グラフ描画 ---
+    # --- 3. グラフ描画 ---
     if selected_species and not df_p.empty:
         display_df = df_p[df_p['魚種'].isin(selected_species)]
         
-        # タイドグラフ
+        # 1. タイドグラフ
         fig = go.Figure()
         x_plot = np.linspace(0, 25, 1000)
         y_plot = [100 * np.cos((x % 12.5) * np.pi / 6) if (x % 12.5) <= 12 else 100 for x in x_plot]
@@ -88,12 +96,11 @@ def show_analysis_page(df):
         
         fig.update_layout(xaxis=dict(tickvals=[6, 18.5], ticktext=["☀️ 昼", "🌙 夜"], range=[-0.5, 25.5], gridcolor='rgba(255,255,255,0.1)'), yaxis=dict(showticklabels=False, range=[-120, 150]), template="plotly_dark", height=320, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
         
+        # 🌊 グラフとして表示するが、上のCSSで触れないようにガード
         st.write("🌊 タイド分布")
-        img_url = fig_to_base64_img(fig)
-        # 背景画像として埋め込み。pointer-events: none でタッチを完全に無効化
-        st.markdown(f'<div style="width:100%; height:320px; background: url({img_url}) center/contain no-repeat; pointer-events: none !important;"></div>', unsafe_allow_html=True)
+        st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True, 'displayModeBar': False})
 
-        # 棒グラフ
+        # 2. 棒グラフ
         st.write("📈 フェーズ別ボリューム")
         phase_order = [f"下げ{i}分" for i in range(10)] + [f"上げ{i}分" for i in range(1, 11)]
         display_df_copy = display_df.copy()
@@ -106,4 +113,7 @@ def show_analysis_page(df):
         fig_bar.add_trace(go.Bar(x=counts['フェーズ'], y=counts['件数'], marker_color=colors_bar))
         fig_bar.update_layout(template="plotly_dark", height=230, margin=dict(l=5, r=5, t=10, b=30), xaxis=dict(tickmode='array', tickvals=["下げ0分", "下げ5分", "下げ9分", "上げ1分", "上げ5分", "上げ10分"], ticktext=["満", "下5", "干前", "干", "上5", "満"], categoryorder='array', categoryarray=phase_order), yaxis=dict(showgrid=False), showlegend=False)
         
-        img_url_bar = fig_to_
+        st.plotly_chart(fig_bar, use_container_width=True, config={'staticPlot': True, 'displayModeBar': False})
+
+    else:
+        st.info("魚種を選択してください。")
