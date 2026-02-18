@@ -5,24 +5,22 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    # 【最重要】グラフへのタッチを100%遮断するCSS
-    # 環境エラーが起きないよう、画像を生成せずにCSSだけでガードします。
+    # 【最重要】CSSでグラフを「透明な板」で覆う設定
+    # pointer-events: none により、指の動きがグラフを通り抜けて背景に届きます
     st.markdown("""
         <style>
-        /* グラフを包むコンテナの操作を完全に無効化 */
         [data-testid="stPlotlyChart"] {
             pointer-events: none !important;
-            touch-action: none !important;
+            touch-action: auto !important;
         }
-        /* グラフ本体の操作も念のため無効化 */
+        /* グラフを囲む親要素も確実に固定 */
         .js-plotly-plot {
             pointer-events: none !important;
-            touch-action: none !important;
         }
         </style>
     """, unsafe_allow_html=True)
 
-    st.subheader("📊 時合精密解析 (スマホ完全固定版)")
+    st.subheader("📊 時合精密解析 (スマホ固定版)")
 
     if df.empty:
         st.info("データがありません。")
@@ -32,7 +30,6 @@ def show_analysis_page(df):
     places = sorted(df["場所"].unique())
     if "prev_place" not in st.session_state:
         st.session_state.prev_place = places[0]
-    
     selected_place = st.selectbox("📍 場所を選択", places, key="ana_place")
     df_p_base = df[df["場所"] == selected_place].copy()
     
@@ -44,7 +41,6 @@ def show_analysis_page(df):
         else:
             st.session_state.selected_species = []
         st.session_state.prev_place = selected_place
-
     selected_species = st.multiselect("🐟 魚種を選択", all_species, key="selected_species")
 
     # --- 2. データ前処理 ---
@@ -53,7 +49,6 @@ def show_analysis_page(df):
         if pd.isna(val): return None
         s = str(val).strip().translate(str.maketrans('０１２３４５６７８９：／－', '0123456789:/-'))
         return re.sub(r'[^0-9:/\-\s]', '', s.replace('年','/').replace('月','/').replace('日',' ').replace('時',':'))
-    
     df_p['datetime'] = df_p['datetime'].apply(clean_dt).apply(lambda x: pd.to_datetime(x, errors='coerce'))
     df_p = df_p.dropna(subset=['datetime'])
 
@@ -79,14 +74,17 @@ def show_analysis_page(df):
         df_p = process_coords(df_p)
 
     # --- 3. グラフ描画 ---
+    # staticPlot: True を設定して、Plotly自体のインタラクションを最小化
+    config = {'staticPlot': True, 'displayModeBar': False}
+
     if selected_species and not df_p.empty:
         display_df = df_p[df_p['魚種'].isin(selected_species)]
         
-        # 1. タイドグラフ
+        # タイドグラフ
         fig = go.Figure()
         x_plot = np.linspace(0, 25, 1000)
         y_plot = [100 * np.cos((x % 12.5) * np.pi / 6) if (x % 12.5) <= 12 else 100 for x in x_plot]
-        fig.add_trace(go.Scatter(x=x_plot, y=y_plot, mode='lines', line=dict(color='#00d4ff', width=2), fill='tozeroy', fillcolor='rgba(0, 212, 255, 0.1)'))
+        fig.add_trace(go.Scatter(x=x_plot, y=y_plot, mode='lines', line=dict(color='#00d4ff', width=2), fill='tozeroy', fillcolor='rgba(0, 212, 255, 0.1)', hoverinfo='skip'))
         for species in selected_species:
             spec_df = display_df[display_df['魚種'] == species]
             if spec_df.empty: continue
@@ -96,11 +94,10 @@ def show_analysis_page(df):
         
         fig.update_layout(xaxis=dict(tickvals=[6, 18.5], ticktext=["☀️ 昼", "🌙 夜"], range=[-0.5, 25.5], gridcolor='rgba(255,255,255,0.1)'), yaxis=dict(showticklabels=False, range=[-120, 150]), template="plotly_dark", height=320, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
         
-        # 🌊 グラフとして表示するが、上のCSSで触れないようにガード
         st.write("🌊 タイド分布")
-        st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True, 'displayModeBar': False})
+        st.plotly_chart(fig, use_container_width=True, config=config)
 
-        # 2. 棒グラフ
+        # 棒グラフ
         st.write("📈 フェーズ別ボリューム")
         phase_order = [f"下げ{i}分" for i in range(10)] + [f"上げ{i}分" for i in range(1, 11)]
         display_df_copy = display_df.copy()
@@ -113,7 +110,6 @@ def show_analysis_page(df):
         fig_bar.add_trace(go.Bar(x=counts['フェーズ'], y=counts['件数'], marker_color=colors_bar))
         fig_bar.update_layout(template="plotly_dark", height=230, margin=dict(l=5, r=5, t=10, b=30), xaxis=dict(tickmode='array', tickvals=["下げ0分", "下げ5分", "下げ9分", "上げ1分", "上げ5分", "上げ10分"], ticktext=["満", "下5", "干前", "干", "上5", "満"], categoryorder='array', categoryarray=phase_order), yaxis=dict(showgrid=False), showlegend=False)
         
-        st.plotly_chart(fig_bar, use_container_width=True, config={'staticPlot': True, 'displayModeBar': False})
-
+        st.plotly_chart(fig_bar, use_container_width=True, config=config)
     else:
         st.info("魚種を選択してください。")
