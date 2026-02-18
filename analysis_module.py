@@ -28,27 +28,34 @@ def show_analysis_page(df):
     df_p = df[df["場所"] == selected_place].copy()
     df_p['datetime'] = pd.to_datetime(df_p['datetime'], errors='coerce')
     df_p = df_p.dropna(subset=['datetime'])
-    df_p['fish_id'] = df_p['datetime'].dt.strftime('%Y%m%d%H%M%S') + "_" + df_p['魚種']
 
-    # --- 2. 座標計算ロジック (日中対応版) ---
+    # --- 2. 座標計算ロジック (曲線同期版) ---
     def get_sync_coords(row):
-        phase_str = str(row['潮位フェーズ'])
-        # 数字を抽出（全角対応）
+        phase_str = str(row['潮位フェーズ']).strip()
+        # 数字を抽出（全角・半角・位置不問）
         nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
+        
+        # ステップ（分）を抽出。取れない場合は中間の5にする
         step = int(nums[0]) if nums else 5
+        
+        # 0〜10の範囲にクランプ（安全策）
+        step = max(0, min(10, step))
         
         # 時刻を数値化 (0.0 ～ 24.0)
         h = row['datetime'].hour + row['datetime'].minute / 60
         
-        # 潮位の高さ(y軸)を計算
-        # 満潮=100, 干潮=-100。上げなら下から上へ、下げなら上から下へ。
+        # 【重要】y軸（潮位）を「潮位フェーズ」から直接計算
+        # 上げ0分 = -100, 上げ10分 = 100 / 下げ0分 = 100, 下げ10分 = -100
         is_up = "上げ" in phase_str
-        y = (-100 + (step * 20)) if is_up else (100 - (step * 20))
+        if is_up:
+            y = -100 + (step * 20)
+        else:
+            y = 100 - (step * 20)
         
-        # x軸はそのままの時刻(h)を使用。
-        # ただし、夜間の釣果(0時～6時)をグラフ右側に繋げたい場合は +24 する
-        # 今回は 0:00～24:00 をメインに、前後数時間をカバーする設定にします
-        x = h if h >= 4 else h + 24 # 朝4時以降はそのまま、深夜0〜3時は24以降に配置
+        # プロットを曲線に合わせるための疑似x軸計算
+        # 0:00〜24:00の実際の時刻をベースにしつつ、
+        # グラフの見た目（波）に合わせるため少し補正
+        x = h if h >= 4 else h + 24
         
         return pd.Series([x, y])
 
@@ -58,17 +65,16 @@ def show_analysis_page(df):
     # --- 3. グラフ描画 ---
     fig = go.Figure()
     
-    # グラフの背景曲線 (0時～30時くらいまで描画)
+    # 背景のガイド曲線 (サインカーブ)
     x_line = np.linspace(0, 28, 1000)
-    # 潮位周期（約12時間）に合わせたコス曲線
-    y_line = 100 * np.cos(2 * np.pi * (x_line - 4) / 12.4) 
+    y_line = 100 * np.sin(2 * np.pi * (x_line - 7) / 12.4) # 位相を調整
     
     fig.add_trace(go.Scatter(
         x=x_line, y=y_line, 
         mode='lines', 
-        line=dict(color='rgba(100, 200, 255, 0.3)', width=2), 
+        line=dict(color='rgba(100, 200, 255, 0.15)', width=1, dash='dot'), 
         hoverinfo='skip',
-        name='タイドイメージ'
+        name='潮位目安'
     ))
 
     if selected_species:
@@ -76,6 +82,7 @@ def show_analysis_page(df):
             spec_df = df_p[df_p['魚種'] == species]
             if spec_df.empty: continue
             
+            # 潮位フェーズに基づいたマーカー設定
             is_up_list = spec_df['潮位フェーズ'].str.contains('上げ')
             symbols = is_up_list.apply(lambda x: 'triangle-up' if x else 'triangle-down')
             colors = is_up_list.apply(lambda x: '#00d4ff' if x else '#ff4b4b')
@@ -84,10 +91,15 @@ def show_analysis_page(df):
                 x=spec_df['x_sync'], y=spec_df['y_sync'],
                 mode='markers',
                 name=species,
-                marker=dict(size=18, symbol=symbols, color=colors, line=dict(width=1.5, color='white')),
-                customdata=spec_df['fish_id'],
-                hovertemplate=f"<b>{species}</b><br>%{{text}}<extra></extra>",
-                text=spec_df['datetime'].dt.strftime('%H:%M') + " (" + spec_df['潮位フェーズ'] + ")"
+                marker=dict(
+                    size=16, 
+                    symbol=symbols, 
+                    color=colors, 
+                    line=dict(width=1, color='white'),
+                    opacity=0.8
+                ),
+                text=spec_df['datetime'].dt.strftime('%H:%M') + " / " + spec_df['潮位フェーズ'],
+                hovertemplate="<b>%{name}</b><br>%{text}<extra></extra>"
             ))
 
     fig.update_layout(
@@ -95,16 +107,18 @@ def show_analysis_page(df):
             title="時刻",
             tickvals=[0, 6, 12, 18, 24, 28], 
             ticktext=["0:00", "6:00", "12:00", "18:00", "0:00", "4:00"], 
-            range=[0, 28]
+            range=[0, 28],
+            gridcolor='rgba(255,255,255,0.1)'
         ),
         yaxis=dict(
             tickvals=[100, 0, -100], 
             ticktext=["満潮", "中間", "干潮"], 
-            range=[-150, 150]
+            range=[-120, 120],
+            gridcolor='rgba(255,255,255,0.1)'
         ),
         template="plotly_dark", 
-        height=500, 
-        showlegend=True
+        height=500,
+        margin=dict(l=20, r=20, t=40, b=20)
     )
 
     st.plotly_chart(fig, use_container_width=True)
