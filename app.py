@@ -256,7 +256,7 @@ url = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_
 
 # 2. データを読み込んで 'df' という名前の変数に入れる（★ここが重要！）
 # 先ほどのエラー(429)対策として ttl="1m" を推奨します
-df = conn.read(spreadsheet=url, ttl="1m")
+df = conn.read(spreadsheet=url, ttl="0s")
 # --- タブの設定部分 ---
 tab1, tab2, tab3, tab4 = st.tabs(["記録", "編集", "ギャラリー", "分析（時合・フェーズ）"])
 
@@ -450,6 +450,7 @@ with tab3:
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
