@@ -325,7 +325,7 @@ with tab1:
                 st.map(pd.DataFrame({'lat': [st.session_state.lat], 'lon': [st.session_state.lon]}), zoom=14)
         
         st.subheader("📝 釣果の詳細")
-        fish_options = ["スズキ", "ヒラスズキ", "ボウズ", "バラシ","タチウオ", "マダイ", "チヌ", "ブリ", "アジ", "（手入力）"]
+        fish_options = ["スズキ", "ヒラスズキ", "ボウズ", "バラシ", "カサゴ", "ターポン", "タチウオ", "マダイ", "チヌ", "キビレ", "ブリ", "アジ", "（手入力）"]
         selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
         final_fish_name = st.text_input("魚種名を入力") if selected_fish == "（手入力）" else selected_fish
     
@@ -458,6 +458,7 @@ with tab3:
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
