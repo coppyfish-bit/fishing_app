@@ -31,11 +31,20 @@ def show_analysis_page(df):
     # --- デバッグ表示（エラー回避のため定義の後に配置） ---
     # st.caption(f"DEBUG: 全 {len(df)} 件中、この場所のデータは {len(df_p_base)} 件です。")
 
-    # データの前処理
+   # --- データの前処理 (柔軟な日付解析モード) ---
     df_p = df_p_base.copy()
+    
+    # 柔軟に日付を読み込む（dayfirst=False, yearfirst=True など自動推論）
+    # errors='coerce' は維持しつつ、読み込み前に文字列のクリーンアップを行う
+    df_p['datetime'] = df_p['datetime'].astype(str).str.strip() # 前後の空白を削除
     df_p['datetime'] = pd.to_datetime(df_p['datetime'], errors='coerce')
     
-    # 日付エラーで消えるデータを特定するためのカウント
+    # 【追加】それでもエラーになる場合、一度だけ「日付のみ」で再試行する救済処置
+    if df_p['datetime'].isna().any():
+        idx = df_p['datetime'].isna()
+        # エラーになった行だけ別の解析を試みる（日付として認識できる部分だけ抽出）
+        df_p.loc[idx, 'datetime'] = pd.to_datetime(df_p_base.loc[idx, 'datetime'], errors='coerce', fuzzy=True)
+
     before_drop = len(df_p)
     df_p = df_p.dropna(subset=['datetime'])
     after_drop = len(df_p)
@@ -120,3 +129,4 @@ def show_analysis_page(df):
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
