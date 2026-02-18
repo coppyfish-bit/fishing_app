@@ -104,11 +104,15 @@ def show_analysis_page(df):
 
     fig.add_vline(x=12.25, line_width=1, line_dash="dot", line_color="rgba(255,255,255,0.3)")
 
+    # --- グラフ描画の直前に追加 ---
     if selected_species and not df_p.empty:
-        # 選択された魚種ごとにプロットを重ねる
-        for species in selected_species:
-            spec_df = df_p[df_p['魚種'] == species]
-            if spec_df.empty: continue
+        display_df = df_p[df_p['魚種'].isin(selected_species)]
+        
+        # 実際にプロットされる件数を表示
+        st.write(f"💡 現在表示中のデータ: {len(display_df)} 件")
+        
+        if not display_df.empty:
+            for species in selected_species:
             
             is_up_list = spec_df['潮位フェーズ'].apply(lambda x: "下げ" not in str(x))
             symbols = is_up_list.apply(lambda x: 'triangle-up' if x else 'triangle-down')
@@ -141,3 +145,4 @@ def show_analysis_page(df):
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
