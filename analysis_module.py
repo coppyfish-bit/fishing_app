@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 シームレス・時合精密解析 (座標同期修正版)")
+    st.subheader("📊 シームレス・時合精密解析 (上げ潮同期修正済)")
 
     if df.empty:
         st.info("データがありません。")
@@ -13,7 +13,6 @@ def show_analysis_page(df):
 
     # --- 1. フィルタリング設定 ---
     col_f1, col_f2 = st.columns([1, 2])
-    
     with col_f1:
         places = sorted(df["場所"].unique())
         selected_place = st.selectbox("📍 場所を選択", places, key="ana_place")
@@ -24,11 +23,9 @@ def show_analysis_page(df):
         all_species = sorted(df_p_base["魚種"].unique())
         priority_species = ["スズキ", "ヒラスズキ"]
         default_selection = [s for s in priority_species if s in all_species]
-        
         if not default_selection and not df_p_base.empty:
             top_species = df_p_base["魚種"].value_counts().idxmax()
             default_selection = [top_species]
-        
         selected_species = st.multiselect("🐟 魚種を選択", all_species, default=default_selection, key="ana_species")
 
     # --- 2. データの前処理 ---
@@ -47,21 +44,16 @@ def show_analysis_page(df):
         dt = pd.to_datetime(s, errors='coerce')
         if pd.notna(dt): return dt
         for fmt in ('%Y-%m-%d %H:%M', '%Y/%m/%d %H:%M'):
-            try:
-                return pd.to_datetime(s, format=fmt)
-            except:
-                continue
+            try: return pd.to_datetime(s, format=fmt)
+            except: continue
         return pd.NaT
 
     df_p['datetime_str'] = df_p['datetime'].apply(clean_datetime_safe)
     df_p['datetime'] = df_p['datetime_str'].apply(parse_dt)
     df_p = df_p.dropna(subset=['datetime'])
 
-    # --- 3. 座標計算ロジック (同期バグ修正版) ---
+    # --- 3. 座標計算ロジック (上げ潮反転・同期版) ---
     def process_coordinates(target_df):
-        if target_df.empty:
-            return target_df
-        
         res_df = target_df.copy()
         
         def extract_step(phase_str):
@@ -72,20 +64,26 @@ def show_analysis_page(df):
         res_df['step_val'] = res_df['潮位フェーズ'].apply(extract_step)
         res_df['is_up'] = res_df['潮位フェーズ'].apply(lambda x: "下げ" not in str(x))
         res_df['hour_cat'] = res_df['datetime'].dt.hour.apply(lambda h: 0 if 4 <= h <= 19 else 1)
-        
-        # 重なり判定用
         res_df['repeat_idx'] = res_df.groupby(['step_val', 'is_up', 'hour_cat']).cumcount()
 
         def calculate_coords(row):
-            # X軸の計算
-            x_base = row['step_val'] * 0.6 if not row['is_up'] else 6 + (row['step_val'] * 0.6)
-            area_offset = 0 if row['hour_cat'] == 0 else 12.5
-            jitter = row['repeat_idx'] * 0.15
-            final_x = x_base + area_offset + jitter
+            # 波の周期(満潮〜満潮)を12ユニットとする計算
+            # 下げ：満潮(0) -> 干潮(6) / 上げ：干潮(6) -> 満潮(12)
+            # step10を最大とするため、1ステップあたり 0.6ユニット移動
             
-            # Y軸の計算 (重要: x_baseをそのままcosに入れることで、背景の波形と完全同期させる)
-            # 背景波形は y = 100 * cos(x * pi / 6)
-            final_y = 100 * np.cos(x_base * np.pi / 6)
+            if not row['is_up']:
+                # 下げ: 0から右へ進む
+                x_pos = row['step_val'] * 0.6
+            else:
+                # 上げ: 6(底)から右へ進む
+                x_pos = 6 + (row['step_val'] * 0.6)
+            
+            area_offset = 0 if row['hour_cat'] == 0 else 12.5
+            jitter = row['repeat_idx'] * 0.2 # 重なり回避
+            
+            final_x = x_pos + area_offset + jitter
+            # Y軸: x_pos(0〜12)を cos 関数に代入して -100〜100 にスケール
+            final_y = 100 * np.cos(x_pos * np.pi / 6)
             
             return pd.Series([final_x, final_y])
 
@@ -102,19 +100,17 @@ def show_analysis_page(df):
         
         fig = go.Figure()
         
-        # 背景のシームレス曲線 (x=0〜25)
-        x_line = np.linspace(0, 25, 1000)
-        # y = 100 * cos( (x % 12.5) * pi / 6 ) とすることで、0-12.5 と 12.5-25 で同じ波形を繰り返す
-        y_line = 100 * np.cos((x_line % 12.5) * np.pi / 6)
+        # 背景のシームレス曲線
+        x_plot = np.linspace(0, 25, 1000)
+        # 0-12.5 と 12.5-25 で同じ cos 波形（満〜干〜満）を繰り返す
+        # 12.5のうち、12ユニット分を波に使い、残りの0.5は接続バッファ
+        y_plot = [100 * np.cos((x % 12.5) * np.pi / 6) if (x % 12.5) <= 12 else 100 for x in x_plot]
         
         fig.add_trace(go.Scatter(
-            x=x_line, y=y_line, 
-            mode='lines', 
-            line=dict(color='#00d4ff', width=3, shape='spline'),
-            fill='tozeroy', 
-            fillcolor='rgba(0, 212, 255, 0.2)',
-            hoverinfo='skip',
-            name='潮位'
+            x=x_plot, y=y_plot, mode='lines', 
+            line=dict(color='#00d4ff', width=3),
+            fill='tozeroy', fillcolor='rgba(0, 212, 255, 0.15)',
+            hoverinfo='skip', name='潮位'
         ))
 
         fig.add_vline(x=12.25, line_width=1, line_dash="dot", line_color="rgba(255,255,255,0.3)")
@@ -123,31 +119,22 @@ def show_analysis_page(df):
             spec_df = display_df[display_df['魚種'] == species]
             if spec_df.empty: continue
             
-            is_up_list = spec_df['is_up']
-            symbols = is_up_list.apply(lambda x: 'triangle-up' if x else 'triangle-down')
-            colors = is_up_list.apply(lambda x: '#00ffd0' if x else '#ff4b4b')
+            symbols = spec_df['is_up'].apply(lambda x: 'triangle-up' if x else 'triangle-down')
+            colors = spec_df['is_up'].apply(lambda x: '#00ffd0' if x else '#ff4b4b')
             
             fig.add_trace(go.Scatter(
                 x=spec_df['x_sync'], y=spec_df['y_sync'],
-                mode='markers',
-                name=species,
+                mode='markers', name=species,
                 marker=dict(size=18, symbol=symbols, color=colors, line=dict(width=1.5, color='white')),
                 text=spec_df['datetime'].dt.strftime('%m/%d %H:%M'),
                 hovertemplate="<b>%{name}</b><br>%{text}<extra></extra>"
             ))
 
         fig.update_layout(
-            xaxis=dict(
-                tickvals=[6, 18.5], ticktext=["☀️ 昼 エリア", "🌙 夜 エリア"],
-                range=[-0.5, 25.5], gridcolor='rgba(255,255,255,0)', zeroline=False
-            ),
-            yaxis=dict(
-                tickvals=[100, 0, -100], ticktext=["満潮", "中間", "干潮"],
-                range=[-120, 150], gridcolor='rgba(255,255,255,0.1)'
-            ),
+            xaxis=dict(tickvals=[6, 18.5], ticktext=["☀️ 昼 エリア", "🌙 夜 エリア"], range=[-0.5, 25.5], gridcolor='rgba(0,0,0,0)', zeroline=False),
+            yaxis=dict(tickvals=[100, 0, -100], ticktext=["満潮", "中間", "干潮"], range=[-120, 150], gridcolor='rgba(255,255,255,0.1)'),
             template="plotly_dark", height=550, margin=dict(l=10, r=10, t=20, b=60)
         )
-
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("表示する魚種を選択してください。")
