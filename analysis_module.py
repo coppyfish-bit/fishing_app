@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 エリア別・時合解析 (昼 vs 夜)")
+    st.subheader("📊 エリア別・時合解析 (曲線完全同期版)")
 
     if df.empty:
         st.info("データがありません。")
@@ -13,40 +13,27 @@ def show_analysis_page(df):
 
     # --- 1. フィルタリング設定 ---
     col_f1, col_f2 = st.columns([1, 2])
-    
     with col_f1:
-        # 場所の選択
         selected_place = st.selectbox("📍 場所を選択", sorted(df["場所"].unique()), key="ana_place")
     
-    # 選択された場所のデータを抽出
     df_p_base = df[df["場所"] == selected_place].copy()
 
     with col_f2:
-        # その場所で釣れた魚種のリストを取得
         all_species = sorted(df_p_base["魚種"].unique())
-        
-        # --- デフォルト魚種の動的決定ロジック ---
         if not df_p_base.empty:
-            # 魚種ごとの出現回数をカウントし、最も多いものを取得
             top_species = df_p_base["魚種"].value_counts().idxmax()
             default_selection = [top_species]
         else:
             default_selection = []
         
-        # マルチセレクトの初期値に、最も釣れている魚を設定
-        selected_species = st.multiselect(
-            "🐟 魚種を選択 (初期値: 最多釣果)", 
-            all_species, 
-            default=default_selection, 
-            key="ana_species"
-        )
+        selected_species = st.multiselect("🐟 魚種を選択", all_species, default=default_selection, key="ana_species")
 
     # データの前処理
     df_p = df_p_base.copy()
     df_p['datetime'] = pd.to_datetime(df_p['datetime'], errors='coerce')
     df_p = df_p.dropna(subset=['datetime'])
 
-    # --- 2. 座標計算ロジック (救済モード継続) ---
+    # --- 2. 座標計算ロジック (曲線完全同期モード) ---
     def get_sync_coords(row):
         phase_str = str(row['潮位フェーズ']).strip()
         nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
@@ -54,11 +41,25 @@ def show_analysis_page(df):
         step = max(0, min(10, step))
         is_up = "下げ" not in phase_str
         
+        # Y軸: フェーズから計算 (満潮100, 干潮-100)
         y = -100 + (step * 20) if is_up else 100 - (step * 20)
+
+        # X軸: 曲線のサインカーブ（周期12）に合わせてxを逆算する
+        # 下げ: 満潮(x=3)から干潮(x=9)へ
+        # 上げ: 干潮(x=9)から満潮(x=15)へ
+        # ※背景曲線の y = 100 * sin(2*pi*(x-9)/12) と同期
+        if not is_up:
+            # 下げ0(満潮)=3, 下げ10(干潮)=9
+            pos = 3 + (step * 0.6)
+        else:
+            # 上げ0(干潮)=9, 上げ10(満潮)=15
+            pos = 9 + (step * 0.6)
+
+        # 4時-19時は左、それ以外は右
         h = row['datetime'].hour
-        pos = 6 + (step * 0.6) if is_up else step * 0.6
-        base_x = 0 if 4 <= h <= 19 else 15
+        base_x = -6 if 4 <= h <= 19 else 12 # 昼夜で起点を18ずらす
         x = base_x + pos
+        
         return pd.Series([x, y])
 
     if not df_p.empty:
@@ -67,10 +68,11 @@ def show_analysis_page(df):
     # --- 3. グラフ描画 ---
     fig = go.Figure()
     
+    # 潮位背景（面グラフ）
     x_line = np.linspace(0, 27, 1000)
+    # y = 100 * sin(2*pi*(x-9)/12) により、x=3,15,27が満潮(100)、x=9,21が干潮(-100)
     y_line = 100 * np.sin(2 * np.pi * (x_line - 9) / 12)
     
-    # 潮位背景（面グラフ）
     fig.add_trace(go.Scatter(
         x=x_line, y=y_line, 
         mode='lines', 
@@ -80,7 +82,7 @@ def show_analysis_page(df):
         hoverinfo='skip'
     ))
 
-    # 中央の境界線
+    # 境界線
     fig.add_vline(x=13.5, line_width=2, line_dash="solid", line_color="rgba(255,255,255,0.5)")
 
     if selected_species:
@@ -104,7 +106,7 @@ def show_analysis_page(df):
     fig.update_layout(
         xaxis=dict(
             tickvals=[6, 21],
-            ticktext=["☀️ 昼 エリア (4:00 - 19:59)", "🌙 夜 エリア (20:00 - 3:59)"],
+            ticktext=["☀️ 昼 エリア", "🌙 夜 エリア"],
             tickfont=dict(size=16, color="white"),
             range=[-0.5, 27.5],
             gridcolor='rgba(255,255,255,0)',
@@ -118,7 +120,6 @@ def show_analysis_page(df):
         ),
         template="plotly_dark",
         height=550,
-        showlegend=True,
         margin=dict(l=10, r=10, t=20, b=60)
     )
 
