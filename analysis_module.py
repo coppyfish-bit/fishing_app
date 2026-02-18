@@ -5,21 +5,28 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 時合精密解析 (スクロール優先版)")
+    # CSSでグラフの操作を無効化（念のため継続）
+    st.markdown("""
+        <style>
+        [data-testid="stPlotlyChart"] {
+            pointer-events: none !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.subheader("📊 時合精密解析 (スマホ完全固定版)")
 
     if df.empty:
         st.info("データがありません。")
         return
 
-    # --- 1. 場所の選択 ---
+    # --- 1. 場所・魚種の選択ロジック ---
     places = sorted(df["場所"].unique())
     if "prev_place" not in st.session_state:
         st.session_state.prev_place = places[0]
-
     selected_place = st.selectbox("📍 場所を選択", places, key="ana_place")
     df_p_base = df[df["場所"] == selected_place].copy()
-
-    # --- 2. 魚種の自動選択ロジック ---
+    
     all_species = sorted(df_p_base["魚種"].unique())
     if st.session_state.prev_place != selected_place or "selected_species" not in st.session_state:
         if not df_p_base.empty:
@@ -28,10 +35,9 @@ def show_analysis_page(df):
         else:
             st.session_state.selected_species = []
         st.session_state.prev_place = selected_place
-
     selected_species = st.multiselect("🐟 魚種を選択", all_species, key="selected_species")
 
-    # --- 3. データの前処理 ---
+    # --- 2. データ前処理 ---
     df_p = df_p_base.copy()
     def clean_datetime_safe(val):
         if pd.isna(val): return None
@@ -39,56 +45,38 @@ def show_analysis_page(df):
         s = s.replace('年', '/').replace('月', '/').replace('日', ' ').replace('時', ':').replace('分', '')
         s = re.sub(r'[^0-9:/\-\s]', '', s)
         return s if s else None
-
     def parse_dt(s):
         if not s: return pd.NaT
         dt = pd.to_datetime(s, errors='coerce')
         if pd.notna(dt): return dt
-        for fmt in ('%Y-%m-%d %H:%M', '%Y/%m/%d %H:%M'):
-            try: return pd.to_datetime(s, format=fmt)
-            except: continue
         return pd.NaT
-
     df_p['datetime_str'] = df_p['datetime'].apply(clean_datetime_safe)
     df_p['datetime'] = df_p['datetime_str'].apply(parse_dt)
     df_p = df_p.dropna(subset=['datetime'])
 
     def process_coordinates(target_df):
         res_df = target_df.copy()
-        def extract_step_smart(phase_str):
-            phase_str = str(phase_str)
-            nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
-            if nums: return max(0, min(10, int(nums[0])))
-            if "干潮後" in phase_str: return 1
-            if "満潮前" in phase_str: return 9
-            if "満潮後" in phase_str: return 1
-            if "干潮前" in phase_str: return 9
-            return 5
+        def extract_step_smart(ph):
+            ph = str(ph).translate(str.maketrans('０１２３４５６７８９', '0123456789'))
+            nums = re.findall(r'\d+', ph)
+            return max(0, min(10, int(nums[0]))) if nums else 5
         res_df['step_val'] = res_df['潮位フェーズ'].apply(extract_step_smart)
         res_df['is_up'] = res_df['潮位フェーズ'].apply(lambda x: "下げ" not in str(x))
         res_df['hour_cat'] = res_df['datetime'].dt.hour.apply(lambda h: 0 if 4 <= h <= 19 else 1)
         res_df['repeat_idx'] = res_df.groupby(['step_val', 'is_up', 'hour_cat']).cumcount()
         def calculate_coords(row):
-            if not row['is_up']: x_pos = row['step_val'] * 0.6
-            else: x_pos = 6 + (row['step_val'] * 0.6)
-            area_offset = 0 if row['hour_cat'] == 0 else 12.5
-            jitter = row['repeat_idx'] * 0.18
-            final_x = x_pos + area_offset + jitter
-            final_y = 100 * np.cos(x_pos * np.pi / 6)
-            return pd.Series([final_x, final_y])
+            x_pos = row['step_val'] * 0.6 if not row['is_up'] else 6 + (row['step_val'] * 0.6)
+            off = 0 if row['hour_cat'] == 0 else 12.5
+            fx = x_pos + off + (row['repeat_idx'] * 0.18)
+            fy = 100 * np.cos(x_pos * np.pi / 6)
+            return pd.Series([fx, fy])
         res_df[['x_sync', 'y_sync']] = res_df.apply(calculate_coords, axis=1)
         return res_df
 
     if not df_p.empty:
         df_p = process_coordinates(df_p)
 
-    # --- 4. スマホスクロール用設定 (staticPlotを有効化) ---
-    chart_config = {
-        'staticPlot': True,  # インタラクティブ操作を完全に無効化
-        'displayModeBar': False 
-    }
-
-    # --- 5. グラフ描画 ---
+    # --- 3. グラフ描画 ---
     if selected_species and not df_p.empty:
         display_df = df_p[df_p['魚種'].isin(selected_species)]
         
@@ -97,22 +85,17 @@ def show_analysis_page(df):
         x_plot = np.linspace(0, 25, 1000)
         y_plot = [100 * np.cos((x % 12.5) * np.pi / 6) if (x % 12.5) <= 12 else 100 for x in x_plot]
         fig.add_trace(go.Scatter(x=x_plot, y=y_plot, mode='lines', line=dict(color='#00d4ff', width=2), fill='tozeroy', fillcolor='rgba(0, 212, 255, 0.1)', hoverinfo='skip'))
-        
         for species in selected_species:
             spec_df = display_df[display_df['魚種'] == species]
             if spec_df.empty: continue
             symbols = spec_df['is_up'].apply(lambda x: 'triangle-up' if x else 'triangle-down')
             colors = spec_df['is_up'].apply(lambda x: '#00ffd0' if x else '#ff4b4b')
             fig.add_trace(go.Scatter(x=spec_df['x_sync'], y=spec_df['y_sync'], mode='markers', name=species, marker=dict(size=14, symbol=symbols, color=colors, line=dict(width=1, color='white'))))
-
-        fig.update_layout(
-            xaxis=dict(tickvals=[6, 18.5], ticktext=["☀️ 昼", "🌙 夜"], range=[-0.5, 25.5], gridcolor='rgba(0,0,0,0)'), 
-            yaxis=dict(showticklabels=False, range=[-120, 150]), 
-            template="plotly_dark", height=320, margin=dict(l=10, r=10, t=10, b=10), 
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            dragmode=False
-        )
-        st.plotly_chart(fig, use_container_width=True, config=chart_config)
+        
+        fig.update_layout(xaxis=dict(tickvals=[6, 18.5], ticktext=["☀️ 昼", "🌙 夜"], range=[-0.5, 25.5], gridcolor='rgba(0,0,0,0)'), yaxis=dict(showticklabels=False, range=[-120, 150]), template="plotly_dark", height=320, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        
+        # タイドグラフを表示
+        st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True, 'displayModeBar': False})
 
         # 棒グラフ
         st.write("📈 **フェーズ別ボリューム**")
@@ -125,11 +108,30 @@ def show_analysis_page(df):
         fig_bar = go.Figure()
         colors_bar = ['#ff4b4b' if '下げ' in p else '#00ffd0' for p in counts['フェーズ']]
         fig_bar.add_trace(go.Bar(x=counts['フェーズ'], y=counts['件数'], marker_color=colors_bar))
-        fig_bar.update_layout(
-            template="plotly_dark", height=230, margin=dict(l=5, r=5, t=10, b=30), 
-            xaxis=dict(tickmode='array', tickvals=["下げ0分", "下げ5分", "下げ9分", "上げ1分", "上げ5分", "上げ10分"], ticktext=["満", "下げ5", "干前", "干", "上げ5", "満"], categoryorder='array', categoryarray=phase_order), 
-            yaxis=dict(showgrid=False), showlegend=False
-        )
-        st.plotly_chart(fig_bar, use_container_width=True, config=chart_config)
+        fig_bar.update_layout(template="plotly_dark", height=230, margin=dict(l=5, r=5, t=10, b=30), xaxis=dict(tickmode='array', tickvals=["下げ0分", "下げ5分", "下げ9分", "上げ1分", "上げ5分", "上げ10分"], ticktext=["満", "下げ5", "干前", "干", "上げ5", "満"], categoryorder='array', categoryarray=phase_order), yaxis=dict(showgrid=False), showlegend=False)
+        
+        # 棒グラフを表示
+        st.plotly_chart(fig_bar, use_container_width=True, config={'staticPlot': True, 'displayModeBar': False})
+
+        # --- 💥 物理ガード: グラフの上に透明な板を置く ---
+        # グラフが描画された後、その領域に重なるように透明なdivを配置してタッチを奪う
+        st.components.v1.html("""
+            <script>
+            const plots = window.parent.document.querySelectorAll('[data-testid="stPlotlyChart"]');
+            plots.forEach(plot => {
+                const guard = document.createElement('div');
+                guard.style.position = 'absolute';
+                guard.style.top = '0';
+                guard.style.left = '0';
+                guard.style.width = '100%';
+                guard.style.height = '100%';
+                guard.style.zIndex = '999';
+                guard.style.backgroundColor = 'transparent';
+                plot.style.position = 'relative';
+                plot.appendChild(guard);
+            });
+            </script>
+        """, height=0)
+
     else:
         st.info("魚種を選択してください。")
