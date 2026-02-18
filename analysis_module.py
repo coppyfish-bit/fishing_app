@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 シームレス・時合精密解析 (上げ潮同期修正済)")
+    st.subheader("📊 時合精密解析 (詳細情報ホバー対応)")
 
     if df.empty:
         st.info("データがありません。")
@@ -52,7 +52,7 @@ def show_analysis_page(df):
     df_p['datetime'] = df_p['datetime_str'].apply(parse_dt)
     df_p = df_p.dropna(subset=['datetime'])
 
-    # --- 3. 座標計算ロジック (上げ潮反転・同期版) ---
+    # --- 3. 座標計算ロジック ---
     def process_coordinates(target_df):
         res_df = target_df.copy()
         
@@ -67,24 +67,15 @@ def show_analysis_page(df):
         res_df['repeat_idx'] = res_df.groupby(['step_val', 'is_up', 'hour_cat']).cumcount()
 
         def calculate_coords(row):
-            # 波の周期(満潮〜満潮)を12ユニットとする計算
-            # 下げ：満潮(0) -> 干潮(6) / 上げ：干潮(6) -> 満潮(12)
-            # step10を最大とするため、1ステップあたり 0.6ユニット移動
-            
             if not row['is_up']:
-                # 下げ: 0から右へ進む
                 x_pos = row['step_val'] * 0.6
             else:
-                # 上げ: 6(底)から右へ進む
                 x_pos = 6 + (row['step_val'] * 0.6)
             
             area_offset = 0 if row['hour_cat'] == 0 else 12.5
-            jitter = row['repeat_idx'] * 0.2 # 重なり回避
-            
+            jitter = row['repeat_idx'] * 0.2
             final_x = x_pos + area_offset + jitter
-            # Y軸: x_pos(0〜12)を cos 関数に代入して -100〜100 にスケール
             final_y = 100 * np.cos(x_pos * np.pi / 6)
-            
             return pd.Series([final_x, final_y])
 
         res_df[['x_sync', 'y_sync']] = res_df.apply(calculate_coords, axis=1)
@@ -102,8 +93,6 @@ def show_analysis_page(df):
         
         # 背景のシームレス曲線
         x_plot = np.linspace(0, 25, 1000)
-        # 0-12.5 と 12.5-25 で同じ cos 波形（満〜干〜満）を繰り返す
-        # 12.5のうち、12ユニット分を波に使い、残りの0.5は接続バッファ
         y_plot = [100 * np.cos((x % 12.5) * np.pi / 6) if (x % 12.5) <= 12 else 100 for x in x_plot]
         
         fig.add_trace(go.Scatter(
@@ -122,11 +111,26 @@ def show_analysis_page(df):
             symbols = spec_df['is_up'].apply(lambda x: 'triangle-up' if x else 'triangle-down')
             colors = spec_df['is_up'].apply(lambda x: '#00ffd0' if x else '#ff4b4b')
             
+            # ホバーテキストの作成
+            # スプレッドシートの列名が「全長」「潮位」であることを想定
+            hover_text = [
+                f"日時: {dt.strftime('%m/%d %H:%M')}<br>" +
+                f"全長: {size} cm<br>" +
+                f"潮位: {tide} cm<br>" +
+                f"フェーズ: {phase}"
+                for dt, size, tide, phase in zip(
+                    spec_df['datetime'], 
+                    spec_df.get('全長', spec_df.get('サイズ', '不明')), 
+                    spec_df.get('潮位', '不明'), 
+                    spec_df['潮位フェーズ']
+                )
+            ]
+            
             fig.add_trace(go.Scatter(
                 x=spec_df['x_sync'], y=spec_df['y_sync'],
                 mode='markers', name=species,
                 marker=dict(size=18, symbol=symbols, color=colors, line=dict(width=1.5, color='white')),
-                text=spec_df['datetime'].dt.strftime('%m/%d %H:%M'),
+                text=hover_text,
                 hovertemplate="<b>%{name}</b><br>%{text}<extra></extra>"
             ))
 
