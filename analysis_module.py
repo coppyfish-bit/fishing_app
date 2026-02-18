@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 潮位フェーズ完全同期解析")
+    st.subheader("📊 潮位フェーズ完全同期解析（修正版）")
 
     if df.empty:
         st.info("データがありません。")
@@ -29,7 +29,7 @@ def show_analysis_page(df):
     df_p['datetime'] = pd.to_datetime(df_p['datetime'], errors='coerce')
     df_p = df_p.dropna(subset=['datetime'])
 
-    # --- 2. 座標計算ロジック (潮位フェーズのみを使用) ---
+    # --- 2. 座標計算ロジック (位相を修正) ---
     def get_sync_coords(row):
         phase_str = str(row['潮位フェーズ']).strip()
         nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
@@ -37,24 +37,23 @@ def show_analysis_page(df):
         step = max(0, min(10, step))
         is_up = "下げ" not in phase_str
         
-        # --- 曲線 y = 100 * sin(2*pi*(x-9)/12) との完全同期アルゴリズム ---
-        # 下げフェーズ (満潮 x=3 から 干潮 x=9 まで)
+        # 背景曲線の y = 100 * sin(2*pi*(x-3)/12) に合わせる
+        # この式では: x=3(満潮), x=6(下げ中間), x=9(干潮), x=12(上げ中間), x=15(満潮)
+        
         if not is_up:
-            # step0(満潮)=3, step5(中間)=6, step10(干潮)=9
+            # 下げフェーズ: 満潮(x=3)から干潮(x=9)へ
             x_val = 3 + (step * 0.6)
-        # 上げフェーズ (干潮 x=9 から 満潮 x=15 まで)
         else:
-            # step0(干潮)=9, step5(中間)=12, step10(満潮)=15
+            # 上げフェーズ: 干潮(x=9)から満潮(x=15)へ
             x_val = 9 + (step * 0.6)
 
         # 4時-19時は左(昼)、それ以外は右(夜)へスライド
         h = row['datetime'].hour
-        # 夜間エリアはx座標を15ずらす
         offset = 0 if 4 <= h <= 19 else 15
         final_x = x_val + offset
         
-        # Y座標もサインカーブと同じ式で計算することで、ズレをゼロにする
-        final_y = 100 * np.sin(2 * np.pi * (final_x - 9) / 12)
+        # 修正されたサインカーブの式
+        final_y = 100 * np.sin(2 * np.pi * (final_x - 12) / 12)
         
         return pd.Series([final_x, final_y])
 
@@ -64,9 +63,10 @@ def show_analysis_page(df):
     # --- 3. グラフ描画 ---
     fig = go.Figure()
     
-    # 背景の面グラフ (x=0〜30まで描画)
+    # 背景の面グラフ
     x_line = np.linspace(0, 30, 1000)
-    y_line = 100 * np.sin(2 * np.pi * (x_line - 9) / 12)
+    # y=0で上げ開始、y=100で満潮、y=0で下げ開始、y=-100で干潮となる位相
+    y_line = 100 * np.sin(2 * np.pi * (x_line - 12) / 12)
     
     fig.add_trace(go.Scatter(
         x=x_line, y=y_line, 
@@ -101,8 +101,7 @@ def show_analysis_page(df):
     fig.update_layout(
         xaxis=dict(
             tickvals=[7.5, 22.5],
-            ticktext=["☀️ 昼 エリア (4:00-19:59)", "🌙 夜 エリア (20:00-3:59)"],
-            tickfont=dict(size=16, color="white"),
+            ticktext=["☀️ 昼 エリア", "🌙 夜 エリア"],
             range=[1, 29],
             gridcolor='rgba(255,255,255,0)',
             zeroline=False
