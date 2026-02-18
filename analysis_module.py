@@ -5,10 +5,20 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    # CSSでグラフの操作を無効化（念のため継続）
+    # 【最強設定】グラフを包む「枠」そのものの操作を物理的に無効化するCSS
+    # これにより、ブラウザはグラフの存在を無視してスクロールを優先します
     st.markdown("""
         <style>
+        /* 1. Plotlyグラフ本体の操作を無効化 */
+        .js-plotly-plot {
+            pointer-events: none !important;
+        }
+        /* 2. Streamlitがグラフを配置するコンテナ全体の操作を無効化 */
         [data-testid="stPlotlyChart"] {
+            pointer-events: none !important;
+        }
+        /* 3. 万が一の透過漏れを防ぐため、グラフ内のSVG要素も指定 */
+        .main-svg {
             pointer-events: none !important;
         }
         </style>
@@ -20,7 +30,7 @@ def show_analysis_page(df):
         st.info("データがありません。")
         return
 
-    # --- 1. 場所・魚種の選択ロジック ---
+    # --- 1. 場所・魚種の選択 ---
     places = sorted(df["場所"].unique())
     if "prev_place" not in st.session_state:
         st.session_state.prev_place = places[0]
@@ -39,44 +49,40 @@ def show_analysis_page(df):
 
     # --- 2. データ前処理 ---
     df_p = df_p_base.copy()
-    def clean_datetime_safe(val):
+    def clean_dt(val):
         if pd.isna(val): return None
         s = str(val).strip().translate(str.maketrans('０１２３４５６７８９：／－', '0123456789:/-'))
         s = s.replace('年', '/').replace('月', '/').replace('日', ' ').replace('時', ':').replace('分', '')
-        s = re.sub(r'[^0-9:/\-\s]', '', s)
-        return s if s else None
-    def parse_dt(s):
-        if not s: return pd.NaT
-        dt = pd.to_datetime(s, errors='coerce')
-        if pd.notna(dt): return dt
-        return pd.NaT
-    df_p['datetime_str'] = df_p['datetime'].apply(clean_datetime_safe)
-    df_p['datetime'] = df_p['datetime_str'].apply(parse_dt)
+        return re.sub(r'[^0-9:/\-\s]', '', s)
+    df_p['datetime'] = df_p['datetime'].apply(clean_dt).apply(lambda x: pd.to_datetime(x, errors='coerce'))
     df_p = df_p.dropna(subset=['datetime'])
 
-    def process_coordinates(target_df):
+    def process_coords(target_df):
         res_df = target_df.copy()
-        def extract_step_smart(ph):
+        def extract_step(ph):
             ph = str(ph).translate(str.maketrans('０１２３４５６７８９', '0123456789'))
             nums = re.findall(r'\d+', ph)
             return max(0, min(10, int(nums[0]))) if nums else 5
-        res_df['step_val'] = res_df['潮位フェーズ'].apply(extract_step_smart)
+        res_df['step_val'] = res_df['潮位フェーズ'].apply(extract_step)
         res_df['is_up'] = res_df['潮位フェーズ'].apply(lambda x: "下げ" not in str(x))
         res_df['hour_cat'] = res_df['datetime'].dt.hour.apply(lambda h: 0 if 4 <= h <= 19 else 1)
         res_df['repeat_idx'] = res_df.groupby(['step_val', 'is_up', 'hour_cat']).cumcount()
-        def calculate_coords(row):
-            x_pos = row['step_val'] * 0.6 if not row['is_up'] else 6 + (row['step_val'] * 0.6)
+        def calc(row):
+            x = row['step_val'] * 0.6 if not row['is_up'] else 6 + (row['step_val'] * 0.6)
             off = 0 if row['hour_cat'] == 0 else 12.5
-            fx = x_pos + off + (row['repeat_idx'] * 0.18)
-            fy = 100 * np.cos(x_pos * np.pi / 6)
+            fx = x + off + (row['repeat_idx'] * 0.18)
+            fy = 100 * np.cos(x * np.pi / 6)
             return pd.Series([fx, fy])
-        res_df[['x_sync', 'y_sync']] = res_df.apply(calculate_coords, axis=1)
+        res_df[['x_sync', 'y_sync']] = res_df.apply(calc, axis=1)
         return res_df
 
     if not df_p.empty:
-        df_p = process_coordinates(df_p)
+        df_p = process_coords(df_p)
 
     # --- 3. グラフ描画 ---
+    # staticPlot: True も併用して二重にガードします
+    config = {'staticPlot': True, 'displayModeBar': False}
+
     if selected_species and not df_p.empty:
         display_df = df_p[df_p['魚種'].isin(selected_species)]
         
@@ -93,9 +99,7 @@ def show_analysis_page(df):
             fig.add_trace(go.Scatter(x=spec_df['x_sync'], y=spec_df['y_sync'], mode='markers', name=species, marker=dict(size=14, symbol=symbols, color=colors, line=dict(width=1, color='white'))))
         
         fig.update_layout(xaxis=dict(tickvals=[6, 18.5], ticktext=["☀️ 昼", "🌙 夜"], range=[-0.5, 25.5], gridcolor='rgba(0,0,0,0)'), yaxis=dict(showticklabels=False, range=[-120, 150]), template="plotly_dark", height=320, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        
-        # タイドグラフを表示
-        st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True, 'displayModeBar': False})
+        st.plotly_chart(fig, use_container_width=True, config=config)
 
         # 棒グラフ
         st.write("📈 **フェーズ別ボリューム**")
@@ -109,29 +113,6 @@ def show_analysis_page(df):
         colors_bar = ['#ff4b4b' if '下げ' in p else '#00ffd0' for p in counts['フェーズ']]
         fig_bar.add_trace(go.Bar(x=counts['フェーズ'], y=counts['件数'], marker_color=colors_bar))
         fig_bar.update_layout(template="plotly_dark", height=230, margin=dict(l=5, r=5, t=10, b=30), xaxis=dict(tickmode='array', tickvals=["下げ0分", "下げ5分", "下げ9分", "上げ1分", "上げ5分", "上げ10分"], ticktext=["満", "下げ5", "干前", "干", "上げ5", "満"], categoryorder='array', categoryarray=phase_order), yaxis=dict(showgrid=False), showlegend=False)
-        
-        # 棒グラフを表示
-        st.plotly_chart(fig_bar, use_container_width=True, config={'staticPlot': True, 'displayModeBar': False})
-
-        # --- 💥 物理ガード: グラフの上に透明な板を置く ---
-        # グラフが描画された後、その領域に重なるように透明なdivを配置してタッチを奪う
-        st.components.v1.html("""
-            <script>
-            const plots = window.parent.document.querySelectorAll('[data-testid="stPlotlyChart"]');
-            plots.forEach(plot => {
-                const guard = document.createElement('div');
-                guard.style.position = 'absolute';
-                guard.style.top = '0';
-                guard.style.left = '0';
-                guard.style.width = '100%';
-                guard.style.height = '100%';
-                guard.style.zIndex = '999';
-                guard.style.backgroundColor = 'transparent';
-                plot.style.position = 'relative';
-                plot.appendChild(guard);
-            });
-            </script>
-        """, height=0)
-
+        st.plotly_chart(fig_bar, use_container_width=True, config=config)
     else:
         st.info("魚種を選択してください。")
