@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 潮位フェーズ完全同期解析（修正版）")
+    st.subheader("📊 潮位フェーズ完全同期解析（10段階精密プロット）")
 
     if df.empty:
         st.info("データがありません。")
@@ -29,31 +29,32 @@ def show_analysis_page(df):
     df_p['datetime'] = pd.to_datetime(df_p['datetime'], errors='coerce')
     df_p = df_p.dropna(subset=['datetime'])
 
-    # --- 2. 座標計算ロジック (位相を修正) ---
+    # --- 2. 座標計算ロジック (0-10段階 完全同期版) ---
     def get_sync_coords(row):
         phase_str = str(row['潮位フェーズ']).strip()
         nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
         step = int(nums[0]) if nums else 5
-        step = max(0, min(10, step))
+        step = max(0, min(10, step)) # 0〜10に制限
         is_up = "下げ" not in phase_str
         
-        # 背景曲線の y = 100 * sin(2*pi*(x-3)/12) に合わせる
-        # この式では: x=3(満潮), x=6(下げ中間), x=9(干潮), x=12(上げ中間), x=15(満潮)
-        
+        # 波の周期を12ユニットとする (下げ6 + 上げ6)
+        # x=0:満潮, x=6:干潮, x=12:満潮
         if not is_up:
-            # 下げフェーズ: 満潮(x=3)から干潮(x=9)へ
-            x_val = 3 + (step * 0.6)
+            # 下げ: 満潮(0) -> 干潮(6) を10段階で割る (1ステップ 0.6進む)
+            x_val = step * 0.6
         else:
-            # 上げフェーズ: 干潮(x=9)から満潮(x=15)へ
-            x_val = 9 + (step * 0.6)
+            # 上げ: 干潮(6) -> 満潮(12) を10段階で割る (1ステップ 0.6進む)
+            x_val = 6 + (step * 0.6)
 
-        # 4時-19時は左(昼)、それ以外は右(夜)へスライド
+        # 4時-19時は左(昼エリア)、それ以外は右(夜エリア)へ15ユニットずらす
         h = row['datetime'].hour
         offset = 0 if 4 <= h <= 19 else 15
         final_x = x_val + offset
         
-        # 修正されたサインカーブの式
-        final_y = 100 * np.sin(2 * np.pi * (final_x - 12) / 12)
+        # y = 100 * cos(x * pi / 6) により、
+        # x=0(満潮)=100, x=3(中間)=0, x=6(干潮)=-100, x=9(中間)=0, x=12(満潮)=100
+        # この式に合わせてy座標を直接計算し、曲線上への固定を保証する
+        final_y = 100 * np.cos(x_val * np.pi / 6)
         
         return pd.Series([final_x, final_y])
 
@@ -63,13 +64,13 @@ def show_analysis_page(df):
     # --- 3. グラフ描画 ---
     fig = go.Figure()
     
-    # 背景の面グラフ
+    # 背景の面グラフ (2つのサイクルを描画)
     x_line = np.linspace(0, 30, 1000)
-    # y=0で上げ開始、y=100で満潮、y=0で下げ開始、y=-100で干潮となる位相
-    y_line = 100 * np.sin(2 * np.pi * (x_line - 12) / 12)
+    # y座標の基準。x=0, 12, 15, 27 辺りで満潮になる波
+    y_line_bg = 100 * np.cos((x_line % 15) * np.pi / 6)
     
     fig.add_trace(go.Scatter(
-        x=x_line, y=y_line, 
+        x=x_line, y=y_line_bg, 
         mode='lines', 
         line=dict(color='#00d4ff', width=3),
         fill='tozeroy', 
@@ -78,7 +79,7 @@ def show_analysis_page(df):
     ))
 
     # 昼夜の境界線
-    fig.add_vline(x=15.0, line_width=2, line_dash="solid", line_color="rgba(255,255,255,0.5)")
+    fig.add_vline(x=13.5, line_width=2, line_dash="solid", line_color="rgba(255,255,255,0.5)")
 
     if selected_species:
         for species in selected_species:
@@ -100,9 +101,9 @@ def show_analysis_page(df):
 
     fig.update_layout(
         xaxis=dict(
-            tickvals=[7.5, 22.5],
-            ticktext=["☀️ 昼 エリア", "🌙 夜 エリア"],
-            range=[1, 29],
+            tickvals=[6, 21],
+            ticktext=["☀️ 昼 エリア (4:00-19:59)", "🌙 夜 エリア (20:00-3:59)"],
+            range=[-0.5, 29],
             gridcolor='rgba(255,255,255,0)',
             zeroline=False
         ),
