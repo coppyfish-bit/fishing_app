@@ -256,7 +256,7 @@ url = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_
 
 # 2. データを読み込んで 'df' という名前の変数に入れる（★ここが重要！）
 # 先ほどのエラー(429)対策として ttl="1m" を推奨します
-df = conn.read(spreadsheet=url, ttl="5m")
+df = conn.read(spreadsheet=url, ttl="1m")
 # --- タブの設定部分 ---
 tab1, tab2, tab3, tab4 = st.tabs(["記録", "編集", "ギャラリー", "分析（時合・フェーズ）"])
 
@@ -449,10 +449,12 @@ with tab1:
 with tab2:
     show_edit_page(conn, url)
 with tab3:
-    show_gallery_page(df) # 「tab3の中にこれを表示してね」と命令する
+    # ここで渡している 'df' が最新のものか確認
+    show_gallery_page(df)
 with tab4:
     # ここを show_analysis_page に変更
     show_analysis_page(df)
+
 
 
 
