@@ -27,6 +27,18 @@ def show_gallery_page(df):
         img_url = row.get("filename")
         if not img_url or pd.isna(img_url): continue
         
+        # --- Google Drive URLの変換処理 ---
+        display_url = str(img_url)
+        if "drive.google.com" in display_url:
+            try:
+                if "/d/" in display_url:
+                    file_id = display_url.split('/d/')[1].split('/')[0]
+                else:
+                    file_id = display_url.split('id=')[1].split('&')[0]
+                display_url = f"https://drive.google.com/uc?id={file_id}"
+            except:
+                pass # 変換に失敗した場合は元のURLを試す
+
         with cols[i % 3]:
             try:
                 # データ取得
@@ -42,14 +54,14 @@ def show_gallery_page(df):
                 lat = row.get('lat', 0)
                 lon = row.get('lon', 0)
 
-                # Googleマップのリンク
-                map_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+                # Googleマップのリンク（修正版リンク）
+                map_url = f"https://www.google.com/maps?q={lat},{lon}"
 
-                # HTMLオーバーレイ表示（フォントサイズ調整版）
+                # HTMLオーバーレイ表示
                 overlay_html = f"""
                 <a href="{map_url}" target="_blank" style="text-decoration: none; color: inherit;">
                     <div style="position: relative; width: 100%; margin-bottom: 20px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
-                        <img src="{img_url}" style="width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block;">
+                        <img src="{display_url}" style="width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block;">
                         <div style="position: absolute; bottom: 0; width: 100%; padding: 12px 10px; background: linear-gradient(transparent, rgba(0,0,0,0.5) 20%, rgba(0,0,0,0.95)); color: white; line-height: 1.5;">
                             <b style="color: #00ffd0; font-size: 1.1rem; display: block; margin-bottom: 2px;">{fish_name} {size}cm</b>
                             <span style="font-size: 0.85rem;">
@@ -64,5 +76,4 @@ def show_gallery_page(df):
                 st.markdown(overlay_html, unsafe_allow_html=True)
                 
             except Exception as e:
-                st.image(img_url, caption=f"{row.get('魚種','-')}")
-
+                st.image(display_url, caption=f"{row.get('魚種','-')}")
