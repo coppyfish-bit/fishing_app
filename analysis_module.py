@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 シームレス・時合精密解析")
+    st.subheader("📊 魚種別・最多釣果フォーカス解析")
 
     if df.empty:
         st.info("データがありません。")
@@ -18,15 +18,30 @@ def show_analysis_page(df):
         places = sorted(df["場所"].unique())
         selected_place = st.selectbox("📍 場所を選択", places, key="ana_place")
     
+    # 選択された場所のデータをベースにする
     df_p_base = df[df["場所"] == selected_place].copy()
 
     with col_f2:
+        # その場所で釣れている魚種のリスト
         all_species = sorted(df_p_base["魚種"].unique())
-        top_species = df_p_base["魚種"].value_counts().idxmax() if not df_p_base.empty else None
-        default_selection = [top_species] if top_species else []
-        selected_species = st.multiselect("🐟 魚種を選択", all_species, default=default_selection, key="ana_species")
+        
+        # --- 最多釣果の魚種を特定 ---
+        if not df_p_base.empty:
+            # 魚種ごとの件数を数え、最大件数の名前を取得
+            top_species = df_p_base["魚種"].value_counts().idxmax()
+            default_selection = [top_species]
+        else:
+            default_selection = []
+        
+        # マルチセレクトにデフォルト値を適用
+        selected_species = st.multiselect(
+            "🐟 魚種を選択 (初期表示: 最多釣果)", 
+            all_species, 
+            default=default_selection, 
+            key="ana_species"
+        )
 
-    # --- 2. データの前処理 (秒なし・秒あり両対応 & 強力クリーンアップ) ---
+    # --- 2. データの前処理 (秒なし対応) ---
     df_p = df_p_base.copy()
     
     def clean_datetime_safe(val):
@@ -41,7 +56,6 @@ def show_analysis_page(df):
         if not s: return pd.NaT
         dt = pd.to_datetime(s, errors='coerce')
         if pd.notna(dt): return dt
-        # 秒なしパターンの救済
         for fmt in ('%Y-%m-%d %H:%M', '%Y/%m/%d %H:%M'):
             try:
                 return pd.to_datetime(s, format=fmt)
@@ -61,15 +75,11 @@ def show_analysis_page(df):
         step = max(0, min(10, step))
         is_up = "下げ" not in phase_str
         
-        # x=0:満潮, x=6:干潮, x=12:満潮 (12ユニットで1サイクル)
+        # x=0:満潮, x=6:干潮, x=12:満潮
         x_val = step * 0.6 if not is_up else 6 + (step * 0.6)
-
         h = row['datetime'].hour
-        # 昼(4-19時)はオフセット0、夜(それ以外)はオフセット12.5で繋ぐ
         offset = 0 if 4 <= h <= 19 else 12.5
         final_x = x_val + offset
-        
-        # 背景曲線 y = 100 * cos(x * pi / 6) に完全同期
         final_y = 100 * np.cos(x_val * np.pi / 6)
         return pd.Series([final_x, final_y])
 
@@ -79,9 +89,7 @@ def show_analysis_page(df):
     # --- 4. グラフ描画 ---
     fig = go.Figure()
     
-    # 背景のシームレス曲線 (x=0〜25)
     x_line = np.linspace(0, 25, 1000)
-    # 昼夜の波を12.5の地点で滑らかに接続
     y_line = [100 * np.cos(x * np.pi / 6) if x <= 12.5 else 100 * np.cos((x - 12.5) * np.pi / 6) for x in x_line]
     
     fig.add_trace(go.Scatter(
@@ -90,11 +98,9 @@ def show_analysis_page(df):
         line=dict(color='#00d4ff', width=3, shape='spline'),
         fill='tozeroy', 
         fillcolor='rgba(0, 212, 255, 0.2)',
-        hoverinfo='skip',
-        name='潮位'
+        hoverinfo='skip'
     ))
 
-    # エリア境界線
     fig.add_vline(x=12.25, line_width=1, line_dash="dot", line_color="rgba(255,255,255,0.3)")
 
     if selected_species and not df_p.empty:
@@ -108,7 +114,7 @@ def show_analysis_page(df):
             fig.add_trace(go.Scatter(
                 x=display_df['x_sync'], y=display_df['y_sync'],
                 mode='markers',
-                name="釣果",
+                name="釣果データ",
                 marker=dict(size=18, symbol=symbols, color=colors, line=dict(width=1.5, color='white')),
                 text=display_df['datetime'].dt.strftime('%m/%d %H:%M'),
                 hovertemplate="<b>%{text}</b><extra></extra>"
@@ -128,9 +134,7 @@ def show_analysis_page(df):
             range=[-120, 150],
             gridcolor='rgba(255,255,255,0.1)'
         ),
-        template="plotly_dark",
-        height=550,
-        margin=dict(l=10, r=10, t=20, b=60)
+        template="plotly_dark", height=550, margin=dict(l=10, r=10, t=20, b=60)
     )
 
     st.plotly_chart(fig, use_container_width=True)
