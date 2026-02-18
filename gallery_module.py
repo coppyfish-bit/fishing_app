@@ -2,49 +2,40 @@ import streamlit as st
 import pandas as pd
 
 def show_gallery_page(df):
-    st.subheader("🖼️ 全釣果ギャラリー（最新順）")
+    st.subheader("📊 ギャラリー診断モード")
     
     if df is None or df.empty:
-        st.info("表示するデータがまだありません。")
+        st.error("❌ データが空っぽです（読み込み失敗）")
         return
 
-    # データのコピーを作成
-    df_gallery = df.copy()
+    # 1. データの件数を表示
+    st.write(f"読み込んだ総データ数: {len(df)} 件")
     
-    # datetime列を日付型に変換して最新順に並び替え
-    df_gallery['datetime'] = pd.to_datetime(df_gallery['datetime'], errors='coerce')
-    df_gallery = df_gallery.sort_values("datetime", ascending=False)
+    # 2. データの末尾5件をテーブルで表示（ここを確認！）
+    st.write("▼ 最新の5件（スプレッドシートの後半部分）")
+    st.dataframe(df.tail(5))
 
-    # --- ギャラリー表示 ---
+    # 3. 実際の表示ループ
+    st.divider()
     cols = st.columns(3)
     
-    for i, (idx, row) in enumerate(df_gallery.iterrows()):
+    # datetimeで並び替え
+    df_sorted = df.copy()
+    df_sorted['datetime'] = pd.to_datetime(df_sorted['datetime'], errors='coerce')
+    df_sorted = df_sorted.sort_values("datetime", ascending=False)
+
+    display_count = 0
+    for i, (idx, row) in enumerate(df_sorted.iterrows()):
         img_url = row.get("filename")
+        
+        # URLが空っぽならスキップ理由を表示
         if not img_url or pd.isna(img_url):
+            # st.write(f"行 {idx}: filenameが空のためスキップ") # デバッグ用
             continue
         
-        with cols[i % 3]:
-            try:
-                # 表示用データの準備
-                dt_str = row['datetime'].strftime('%y/%m/%d %H:%M') if pd.notnull(row['datetime']) else "-"
-                fish_name = row.get('魚種', '-')
-                size = row.get('全長_cm', '-')
-                place = row.get('場所', '-')
-                tide_name = row.get('潮名', '-')
-                tide_phase = row.get('潮位フェーズ', '-')
+        with cols[display_count % 3]:
+            st.image(str(img_url), caption=f"{row.get('魚種','-')} ({row.get('datetime','-')})")
+            display_count += 1
 
-                # 画像と情報を表示
-                overlay_html = f"""
-                <div style="position: relative; width: 100%; margin-bottom: 20px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
-                    <img src="{img_url}" style="width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block;">
-                    <div style="position: absolute; bottom: 0; width: 100%; padding: 8px; background: linear-gradient(transparent, rgba(0,0,0,0.9)); color: white; font-size: 0.8rem;">
-                        <b style="color: #00ffd0;">{fish_name} {size}cm</b><br>
-                        {dt_str}<br>
-                        {place} / {tide_name}
-                    </div>
-                </div>
-                """
-                st.markdown(overlay_html, unsafe_allow_html=True)
-                
-            except Exception as e:
-                st.image(str(img_url), caption=f"{row.get('魚種','-')}")
+    if display_count == 0:
+        st.warning("⚠️ filename（画像URL）が入っているデータが1件もありませんでした。")
