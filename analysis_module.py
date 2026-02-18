@@ -8,13 +8,13 @@ def show_analysis_page(df):
     # CSS: グラフの操作を有効化
     st.markdown("<style>[data-testid='stPlotlyChart'] { pointer-events: auto !important; }</style>", unsafe_allow_html=True)
 
-    st.subheader("📊 時合精密解析 (フル機能版)")
+    st.subheader("📊 時合精密解析 (詳細表示版)")
 
     if df.empty:
         st.info("データがありません。")
         return
 
-    # --- 1. 場所・魚種の選択 ---
+    # --- 1. 選択ロジック ---
     places = sorted(df["場所"].unique()) if "場所" in df.columns else []
     selected_place = st.selectbox("📍 場所を選択", places, key="ana_place")
     df_p_base = df[df["場所"] == selected_place].copy()
@@ -54,9 +54,8 @@ def show_analysis_page(df):
 
     df_p = process_coords(df_p_base)
 
-    # --- 3. グラフ描画 ---
     if selected_species and not df_p.empty:
-        display_df = df_p[df_p['魚種'].isin(selected_species)]
+        display_df = df_p[df_p['魚種'].isin(selected_species)].sort_values('datetime', ascending=False)
         
         # --- A. タイド分布グラフ ---
         fig = go.Figure()
@@ -68,59 +67,63 @@ def show_analysis_page(df):
             spec_df = display_df[display_df['魚種'] == species]
             if spec_df.empty: continue
             
-            def create_hover(r):
-                size = r.get('全長_cm', '-')
-                tm = r.get('time', '-')
-                ph = r.get('潮位フェーズ', '-')
-                return f"魚種: {r['魚種']}<br>全長: {size}cm<br>時刻: {tm}<br>フェーズ: {ph}"
+            # マウスオーバーテキストの構築
+            def create_hover_text(r):
+                txt = f"<b>{r['魚種']}</b> ({r.get('全長_cm','-')}cm)<br>"
+                txt += f"時刻: {r.get('time','-')}<br>"
+                txt += f"潮名: {r.get('潮名','-')}<br>"
+                txt += f"潮位: {r.get('潮位_cm','-')}cm ({r.get('潮位フェーズ','-')})"
+                return txt
 
             fig.add_trace(go.Scatter(
                 x=spec_df['x_sync'], y=spec_df['y_sync'],
                 mode='markers', name=species,
-                text=spec_df.apply(create_hover, axis=1),
+                text=spec_df.apply(create_hover_text, axis=1),
                 hoverinfo='text',
                 customdata=spec_df.index,
-                marker=dict(size=14, 
-                            symbol=spec_df['is_up'].apply(lambda x: 'triangle-up' if x else 'triangle-down'),
-                            line=dict(width=1, color='white'))
+                marker=dict(size=14, symbol=spec_df['is_up'].apply(lambda x: 'triangle-up' if x else 'triangle-down'), line=dict(width=1, color='white'))
             ))
         
         fig.update_layout(
             xaxis=dict(tickvals=[6.25, 18.75], ticktext=["昼", "夜"]), 
             yaxis=dict(showticklabels=False), 
-            template="plotly_dark", height=380, 
-            margin=dict(l=10, r=10, t=10, b=10),
-            clickmode='event+select',
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            template="plotly_dark", height=350, margin=dict(l=10, r=10, t=10, b=10),
+            clickmode='event+select', dragmode=False
         )
 
         st.write("🌊 タイド分布")
-        selected_point = st.plotly_chart(fig, use_container_width=True, on_select="rerun")
+        st.plotly_chart(fig, use_container_width=True)
 
-        # --- B. クリックした釣果の詳細表示 ---
-        if selected_point and len(selected_point.get("points", [])) > 0:
-            idx = selected_point["points"][0]["customdata"]
+        # --- B. 釣果詳細（リスト選択） ---
+        st.markdown("---")
+        st.subheader("📌 釣果詳細")
+        
+        fish_options = {f"{r['datetime']} - {r['魚種']} ({r.get('全長_cm','-')}cm)": i for i, r in display_df.iterrows()}
+        selected_fish_label = st.selectbox("詳細を表示する釣果を選択", ["選択してください"] + list(fish_options.keys()))
+
+        if selected_fish_label != "選択してください":
+            idx = fish_options[selected_fish_label]
             fish_data = df.loc[idx]
             
-            st.success(f"📌 **釣果詳細: {fish_data.get('魚種', '不明')}**")
             c1, c2 = st.columns([1, 1.2])
             with c1:
-                # filenameを画像パスとして試行
                 img_path = fish_data.get('filename', None)
                 if img_path and pd.notna(img_path):
                     st.image(img_path, use_container_width=True)
                 else:
                     st.info("📸 写真なし")
             with c2:
-                st.write(f"**日時:** {fish_data.get('date', '-')} {fish_data.get('time', '-')}")
                 st.write(f"**全長:** {fish_data.get('全長_cm', '-')} cm")
-                st.write(f"**潮名:** {fish_data.get('潮名', '-')}")
+                st.write(f"**時刻:** {fish_data.get('time', '-')}")
+                st.write(f"**潮名:** {fish_data.get('潮名', '-')} ({fish_data.get('月齢', '-')}d)")
+                st.write(f"**潮位:** {fish_data.get('潮位_cm', '-')} cm")
+                st.write(f"**フェーズ:** {fish_data.get('潮位フェーズ', '-')}")
                 st.write(f"**ルアー:** {fish_data.get('ルアー', '-')}")
                 st.write(f"**備考:** {fish_data.get('備考', '-')}")
 
         st.markdown("---")
 
-        # --- C. 棒グラフ (フェーズ別ボリューム) ---
+        # --- C. 棒グラフ ---
         st.write("📈 フェーズ別ボリューム")
         phase_order = [f"下げ{i}分" for i in range(10)] + [f"上げ{i}分" for i in range(1, 11)]
         display_df_copy = display_df.copy()
@@ -131,12 +134,7 @@ def show_analysis_page(df):
         fig_bar = go.Figure()
         colors_bar = ['#ff4b4b' if '下げ' in p else '#00ffd0' for p in counts['フェーズ']]
         fig_bar.add_trace(go.Bar(x=counts['フェーズ'], y=counts['件数'], marker_color=colors_bar))
-        fig_bar.update_layout(
-            template="plotly_dark", height=230, margin=dict(l=5, r=5, t=10, b=30),
-            xaxis=dict(tickmode='array', tickvals=["下げ0分", "下げ5分", "下げ9分", "上げ1分", "上げ5分", "上げ10分"], 
-                       ticktext=["満", "下5", "干前", "干", "上5", "満"], categoryorder='array', categoryarray=phase_order),
-            yaxis=dict(showgrid=False), showlegend=False
-        )
+        fig_bar.update_layout(template="plotly_dark", height=230, margin=dict(l=5, r=5, t=10, b=30), showlegend=False)
         st.plotly_chart(fig_bar, use_container_width=True, config={'staticPlot': True})
 
     else:
