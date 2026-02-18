@@ -13,23 +13,40 @@ def show_analysis_page(df):
 
     # --- 1. フィルタリング設定 ---
     col_f1, col_f2 = st.columns([1, 2])
+    
     with col_f1:
+        # 場所の選択
         selected_place = st.selectbox("📍 場所を選択", sorted(df["場所"].unique()), key="ana_place")
     
+    # 選択された場所のデータを抽出
+    df_p_base = df[df["場所"] == selected_place].copy()
+
     with col_f2:
-        all_species = sorted(df[df["場所"] == selected_place]["魚種"].unique())
-        initial_targets = ["スズキ", "ヒラスズキ"]
-        default_selection = [s for s in initial_targets if s in all_species]
-        if not default_selection and all_species:
-            default_selection = [all_species[0]]
-        selected_species = st.multiselect("🐟 魚種を選択", all_species, default=default_selection, key="ana_species")
+        # その場所で釣れた魚種のリストを取得
+        all_species = sorted(df_p_base["魚種"].unique())
+        
+        # --- デフォルト魚種の動的決定ロジック ---
+        if not df_p_base.empty:
+            # 魚種ごとの出現回数をカウントし、最も多いものを取得
+            top_species = df_p_base["魚種"].value_counts().idxmax()
+            default_selection = [top_species]
+        else:
+            default_selection = []
+        
+        # マルチセレクトの初期値に、最も釣れている魚を設定
+        selected_species = st.multiselect(
+            "🐟 魚種を選択 (初期値: 最多釣果)", 
+            all_species, 
+            default=default_selection, 
+            key="ana_species"
+        )
 
     # データの前処理
-    df_p = df[df["場所"] == selected_place].copy()
+    df_p = df_p_base.copy()
     df_p['datetime'] = pd.to_datetime(df_p['datetime'], errors='coerce')
     df_p = df_p.dropna(subset=['datetime'])
 
-    # --- 2. 座標計算ロジック ---
+    # --- 2. 座標計算ロジック (救済モード継続) ---
     def get_sync_coords(row):
         phase_str = str(row['潮位フェーズ']).strip()
         nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
@@ -38,10 +55,8 @@ def show_analysis_page(df):
         is_up = "下げ" not in phase_str
         
         y = -100 + (step * 20) if is_up else 100 - (step * 20)
-
         h = row['datetime'].hour
         pos = 6 + (step * 0.6) if is_up else step * 0.6
-        # 4時-19時を 0-12エリア、それ以外を 15-27エリアに配置
         base_x = 0 if 4 <= h <= 19 else 15
         x = base_x + pos
         return pd.Series([x, y])
@@ -65,7 +80,7 @@ def show_analysis_page(df):
         hoverinfo='skip'
     ))
 
-    # 中央の境界線（昼夜の区切り）
+    # 中央の境界線
     fig.add_vline(x=13.5, line_width=2, line_dash="solid", line_color="rgba(255,255,255,0.5)")
 
     if selected_species:
@@ -92,7 +107,7 @@ def show_analysis_page(df):
             ticktext=["☀️ 昼 エリア (4:00 - 19:59)", "🌙 夜 エリア (20:00 - 3:59)"],
             tickfont=dict(size=16, color="white"),
             range=[-0.5, 27.5],
-            gridcolor='rgba(255,255,255,0)', # 縦のグリッドを消す
+            gridcolor='rgba(255,255,255,0)',
             zeroline=False
         ),
         yaxis=dict(
