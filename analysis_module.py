@@ -5,18 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    # グラフ領域でのタッチ操作を「スルー」させるCSS
-    st.markdown("""
-        <style>
-        .js-plotly-plot {
-            pointer-events: none; /* グラフへの操作をすべて無視して背景へ流す */
-        }
-        .main {
-            overflow-x: hidden;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    st.subheader("📊 時合精密解析 (スクロール固定版)")
+    st.subheader("📊 時合精密解析 (スクロール優先版)")
 
     if df.empty:
         st.info("データがありません。")
@@ -93,14 +82,10 @@ def show_analysis_page(df):
     if not df_p.empty:
         df_p = process_coordinates(df_p)
 
-    # --- 4. スマホスクロール用設定 (config) ---
-    # ズーム、パン（移動）を無効化し、スクロールを優先
+    # --- 4. スマホスクロール用設定 (staticPlotを有効化) ---
     chart_config = {
-        'staticPlot': False,
-        'scrollZoom': False,
-        'doubleClick': False,
-        'showAxisDragHandles': False,
-        'displayModeBar': False  # 上部のツールバーも非表示
+        'staticPlot': True,  # インタラクティブ操作を完全に無効化
+        'displayModeBar': False 
     }
 
     # --- 5. グラフ描画 ---
@@ -118,11 +103,15 @@ def show_analysis_page(df):
             if spec_df.empty: continue
             symbols = spec_df['is_up'].apply(lambda x: 'triangle-up' if x else 'triangle-down')
             colors = spec_df['is_up'].apply(lambda x: '#00ffd0' if x else '#ff4b4b')
-            hover_text = [f"<b>{dt.strftime('%m/%d %H:%M')}</b><br>全長: {size} cm<br>潮位: {tide} cm<br>{ph}" for dt, size, tide, ph in zip(spec_df['datetime'], spec_df['全長_cm'], spec_df['潮位_cm'], spec_df['潮位フェーズ'])]
-            fig.add_trace(go.Scatter(x=spec_df['x_sync'], y=spec_df['y_sync'], mode='markers', name=species, marker=dict(size=14, symbol=symbols, color=colors, line=dict(width=1, color='white')), text=hover_text, hovertemplate="%{text}<extra></extra>"))
+            fig.add_trace(go.Scatter(x=spec_df['x_sync'], y=spec_df['y_sync'], mode='markers', name=species, marker=dict(size=14, symbol=symbols, color=colors, line=dict(width=1, color='white'))))
 
-        fig.update_layout(xaxis=dict(tickvals=[6, 18.5], ticktext=["☀️ 昼", "🌙 夜"], range=[-0.5, 25.5], gridcolor='rgba(0,0,0,0)'), yaxis=dict(showticklabels=False, range=[-120, 150]), template="plotly_dark", height=320, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        # configを適用
+        fig.update_layout(
+            xaxis=dict(tickvals=[6, 18.5], ticktext=["☀️ 昼", "🌙 夜"], range=[-0.5, 25.5], gridcolor='rgba(0,0,0,0)'), 
+            yaxis=dict(showticklabels=False, range=[-120, 150]), 
+            template="plotly_dark", height=320, margin=dict(l=10, r=10, t=10, b=10), 
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            dragmode=False
+        )
         st.plotly_chart(fig, use_container_width=True, config=chart_config)
 
         # 棒グラフ
@@ -135,9 +124,12 @@ def show_analysis_page(df):
         
         fig_bar = go.Figure()
         colors_bar = ['#ff4b4b' if '下げ' in p else '#00ffd0' for p in counts['フェーズ']]
-        fig_bar.add_trace(go.Bar(x=counts['フェーズ'], y=counts['件数'], marker_color=colors_bar, hovertemplate="<b>%{x}</b>: %{y}件<extra></extra>"))
-        fig_bar.update_layout(template="plotly_dark", height=230, margin=dict(l=5, r=5, t=10, b=30), xaxis=dict(tickmode='array', tickvals=["下げ0分", "下げ5分", "下げ9分", "上げ1分", "上げ5分", "上げ10分"], ticktext=["満", "下げ5", "干前", "干", "上げ5", "満"], categoryorder='array', categoryarray=phase_order), yaxis=dict(showgrid=False), showlegend=False)
-        # configを適用
+        fig_bar.add_trace(go.Bar(x=counts['フェーズ'], y=counts['件数'], marker_color=colors_bar))
+        fig_bar.update_layout(
+            template="plotly_dark", height=230, margin=dict(l=5, r=5, t=10, b=30), 
+            xaxis=dict(tickmode='array', tickvals=["下げ0分", "下げ5分", "下げ9分", "上げ1分", "上げ5分", "上げ10分"], ticktext=["満", "下げ5", "干前", "干", "上げ5", "満"], categoryorder='array', categoryarray=phase_order), 
+            yaxis=dict(showgrid=False), showlegend=False
+        )
         st.plotly_chart(fig_bar, use_container_width=True, config=chart_config)
     else:
         st.info("魚種を選択してください。")
