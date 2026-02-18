@@ -11,7 +11,7 @@ import io
 import numpy as np
 import ephem
 import requests
-from PIL import Image, ExifTags
+from PIL import Image, ExifTagsdf_main = conn.read
 # app.py の冒頭に追加
 from edit_module import show_edit_page
 from gallery_module import show_gallery_page
@@ -435,6 +435,8 @@ with tab1:
                         
                         st.success("✅ 記録完了しました！ギャラリーを確認してください。")
                         st.balloons()
+                        st.cache_data.clear() # キャッシュを完全にクリアする
+                        
                         time.sleep(2)
                         st.rerun()
 
@@ -450,6 +452,7 @@ with tab3:
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
