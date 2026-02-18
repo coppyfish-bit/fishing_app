@@ -5,10 +5,10 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    # CSS: インタラクションを有効化
+    # CSS: グラフの操作を有効化
     st.markdown("<style>[data-testid='stPlotlyChart'] { pointer-events: auto !important; }</style>", unsafe_allow_html=True)
 
-    st.subheader("📊 時合精密解析 (詳細表示版)")
+    st.subheader("📊 時合精密解析 (フル機能版)")
 
     if df.empty:
         st.info("データがありません。")
@@ -35,7 +35,6 @@ def show_analysis_page(df):
             if "干潮前" in ph_str: return 9
             return 5
 
-        # 日時処理
         res_df['dt_temp'] = pd.to_datetime(res_df['datetime'], errors='coerce')
         res_df['is_up'] = res_df['潮位フェーズ'].apply(lambda x: "下げ" not in str(x))
         res_df['step_val'] = res_df['潮位フェーズ'].apply(extract_step)
@@ -59,6 +58,7 @@ def show_analysis_page(df):
     if selected_species and not df_p.empty:
         display_df = df_p[df_p['魚種'].isin(selected_species)]
         
+        # --- A. タイド分布グラフ ---
         fig = go.Figure()
         x_plot = np.linspace(0, 25, 500)
         y_plot = [100 * np.cos((x % 12.5) * np.pi / 6.25) for x in x_plot]
@@ -68,13 +68,11 @@ def show_analysis_page(df):
             spec_df = display_df[display_df['魚種'] == species]
             if spec_df.empty: continue
             
-            # マウスオーバーテキストを提示されたカラム名に合わせる
             def create_hover(r):
                 size = r.get('全長_cm', '-')
-                lure = r.get('ルアー', '-')
                 tm = r.get('time', '-')
                 ph = r.get('潮位フェーズ', '-')
-                return f"魚種: {r['魚種']}<br>全長: {size}cm<br>時刻: {tm}<br>フェーズ: {ph}<br>ルアー: {lure}"
+                return f"魚種: {r['魚種']}<br>全長: {size}cm<br>時刻: {tm}<br>フェーズ: {ph}"
 
             fig.add_trace(go.Scatter(
                 x=spec_df['x_sync'], y=spec_df['y_sync'],
@@ -96,40 +94,50 @@ def show_analysis_page(df):
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
 
-        # 選択イベントの取得
+        st.write("🌊 タイド分布")
         selected_point = st.plotly_chart(fig, use_container_width=True, on_select="rerun")
 
-        # --- 4. クリックした釣果の詳細表示 ---
-        st.markdown("---")
+        # --- B. クリックした釣果の詳細表示 ---
         if selected_point and len(selected_point.get("points", [])) > 0:
             idx = selected_point["points"][0]["customdata"]
             fish_data = df.loc[idx]
             
             st.success(f"📌 **釣果詳細: {fish_data.get('魚種', '不明')}**")
-            
             c1, c2 = st.columns([1, 1.2])
             with c1:
-                # カラムに画像系がないため、一応「画像」という列名を探す設定に
-                img_col = next((c for c in ["画像", "写真", "filename"] if c in fish_data.index), None)
-                if img_col and pd.notna(fish_data[img_col]) and str(fish_data[img_col]).endswith(('.jpg', '.png', '.jpeg')):
-                    st.image(fish_data[img_col], use_container_width=True)
+                # filenameを画像パスとして試行
+                img_path = fish_data.get('filename', None)
+                if img_path and pd.notna(img_path):
+                    st.image(img_path, use_container_width=True)
                 else:
-                    st.info("📸 写真なし\n(カラムに画像URLが必要です)")
-            
+                    st.info("📸 写真なし")
             with c2:
                 st.write(f"**日時:** {fish_data.get('date', '-')} {fish_data.get('time', '-')}")
                 st.write(f"**全長:** {fish_data.get('全長_cm', '-')} cm")
                 st.write(f"**潮名:** {fish_data.get('潮名', '-')}")
                 st.write(f"**ルアー:** {fish_data.get('ルアー', '-')}")
                 st.write(f"**備考:** {fish_data.get('備考', '-')}")
-                
-                # 気象データもついでに表示
-                with st.expander("🌡️ 気象・詳細データ"):
-                    st.write(f"気温: {fish_data.get('気温', '-')} ℃")
-                    st.write(f"風速: {fish_data.get('風速', '-')} m/s ({fish_data.get('風向', '-')})")
-                    st.write(f"潮位: {fish_data.get('潮位_cm', '-')} cm")
-        else:
-            st.info("👆 プロットをタップすると詳細が表示されます。")
+
+        st.markdown("---")
+
+        # --- C. 棒グラフ (フェーズ別ボリューム) ---
+        st.write("📈 フェーズ別ボリューム")
+        phase_order = [f"下げ{i}分" for i in range(10)] + [f"上げ{i}分" for i in range(1, 11)]
+        display_df_copy = display_df.copy()
+        display_df_copy['norm_phase'] = display_df_copy.apply(lambda r: f"{'上げ' if r['is_up'] else '下げ'}{r['step_val']}分", axis=1)
+        counts = display_df_copy['norm_phase'].value_counts().reindex(phase_order, fill_value=0).reset_index()
+        counts.columns = ['フェーズ', '件数']
+        
+        fig_bar = go.Figure()
+        colors_bar = ['#ff4b4b' if '下げ' in p else '#00ffd0' for p in counts['フェーズ']]
+        fig_bar.add_trace(go.Bar(x=counts['フェーズ'], y=counts['件数'], marker_color=colors_bar))
+        fig_bar.update_layout(
+            template="plotly_dark", height=230, margin=dict(l=5, r=5, t=10, b=30),
+            xaxis=dict(tickmode='array', tickvals=["下げ0分", "下げ5分", "下げ9分", "上げ1分", "上げ5分", "上げ10分"], 
+                       ticktext=["満", "下5", "干前", "干", "上5", "満"], categoryorder='array', categoryarray=phase_order),
+            yaxis=dict(showgrid=False), showlegend=False
+        )
+        st.plotly_chart(fig_bar, use_container_width=True, config={'staticPlot': True})
 
     else:
         st.info("魚種を選択してください。")
