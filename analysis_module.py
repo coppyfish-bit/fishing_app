@@ -6,6 +6,10 @@ import re
 
 def show_analysis_page(df):
     st.subheader("📊 シームレス・時合精密解析")
+    st.write(f"全データ数: {len(df)}")
+    df_debug = df[df["場所"] == selected_place]
+    st.write(f"選択された場所のデータ数: {len(df_debug)}")
+    st.write(f"表示対象の魚種: {selected_species}")
 
     if df.empty:
         st.info("データがありません。")
@@ -126,3 +130,4 @@ def show_analysis_page(df):
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
