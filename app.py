@@ -453,11 +453,22 @@ with tab2:
     show_edit_page(conn, url)
 
 with tab3:
-    df_latest = conn.read(spreadsheet=url, ttl="0s")
+    # 1. 既存のキャッシュをこの瞬間だけ完全にクリア
+    st.cache_data.clear() 
+    
+    # 2. 乱数（タイムスタンプ）をパラメータに混ぜることで、
+    # Google側に「全く新しいリクエスト」だと思わせて最新データを強制取得
+    import time
+    df_latest = conn.read(spreadsheet=url, ttl=0)
+    
+    # 診断用：これを出して116行目まで増えるか確認してください
+    st.caption(f"最終更新確認: {len(df_latest)} 件のデータを読み込みました")
+    
     show_gallery_page(df_latest)
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
