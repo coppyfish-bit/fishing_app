@@ -138,11 +138,11 @@ def show_analysis_page(df):
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        # --- 5. 棒グラフ (上げ左:緑 / 下げ右:赤 / 順序強制) ---
-        st.write("📈 **フェーズ別ボリューム**")
+# --- 5. 棒グラフ (下げ左:赤 / 上げ右:緑 / 順序: 下げ0-9 -> 上げ1-10) ---
+        st.write("📈 **フェーズ別・釣果ボリューム**")
         
-        # 順序定義: 上げ1〜10分 -> 下げ0〜9分
-        phase_order = [f"上げ{i}分" for i in range(1, 11)] + [f"下げ{i}分" for i in range(10)]
+        # 以前の順序に復元: 下げ0〜9分 -> 上げ1〜10分
+        phase_order = [f"下げ{i}分" for i in range(10)] + [f"上げ{i}分" for i in range(1, 11)]
         
         display_df_copy = display_df.copy()
         display_df_copy['norm_phase'] = display_df_copy.apply(
@@ -153,7 +153,8 @@ def show_analysis_page(df):
         counts.columns = ['フェーズ', '件数']
 
         fig_bar = go.Figure()
-        colors_bar = ['#00ffd0' if '上げ' in p else '#ff4b4b' for p in counts['フェーズ']]
+        # 下げ＝赤系、上げ＝緑系
+        colors_bar = ['#ff4b4b' if '下げ' in p else '#00ffd0' for p in counts['フェーズ']]
         
         fig_bar.add_trace(go.Bar(
             x=counts['フェーズ'], y=counts['件数'],
@@ -168,8 +169,9 @@ def show_analysis_page(df):
             xaxis=dict(
                 title=None,
                 tickmode='array',
-                tickvals=["上げ1分", "上げ5分", "上げ10分", "下げ0分", "下げ5分", "下げ9分"],
-                ticktext=["干潮", "上げ5", "満潮", "満潮", "下げ5", "干潮前"],
+                # 表示ラベルを調整
+                tickvals=["下げ0分", "下げ5分", "下げ9分", "上げ1分", "上げ5分", "上げ10分"],
+                ticktext=["満潮", "下げ5", "干潮前", "干潮", "上げ5", "満潮"],
                 tickfont=dict(size=10),
                 categoryorder='array',
                 categoryarray=phase_order 
@@ -178,6 +180,6 @@ def show_analysis_page(df):
             showlegend=False
         )
         st.plotly_chart(fig_bar, use_container_width=True)
-
     else:
         st.info("魚種を選択してください。")
+
