@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 時合精密解析 & ヒストグラム")
+    st.subheader("📊 時合精密解析 (スマホ最適化)")
 
     if df.empty:
         st.info("データがありません。")
@@ -78,7 +78,7 @@ def show_analysis_page(df):
                 x_pos = 6 + (row['step_val'] * 0.6)
             
             area_offset = 0 if row['hour_cat'] == 0 else 12.5
-            jitter = row['repeat_idx'] * 0.2
+            jitter = row['repeat_idx'] * 0.18 # スマホ用に少し狭める
             final_x = x_pos + area_offset + jitter
             final_y = 100 * np.cos(x_pos * np.pi / 6)
             return pd.Series([final_x, final_y])
@@ -89,7 +89,7 @@ def show_analysis_page(df):
     if not df_p.empty:
         df_p = process_coordinates(df_p)
 
-    # --- 4. メイン・タイドグラフ描画 ---
+    # --- 4. メイン・タイドグラフ描画 (高さを350に低減) ---
     if selected_species and not df_p.empty:
         display_df = df_p[df_p['魚種'].isin(selected_species)]
         st.caption(f"💡 現在表示中の釣果: {len(display_df)} 件")
@@ -100,8 +100,8 @@ def show_analysis_page(df):
         
         fig.add_trace(go.Scatter(
             x=x_plot, y=y_plot, mode='lines', 
-            line=dict(color='#00d4ff', width=3),
-            fill='tozeroy', fillcolor='rgba(0, 212, 255, 0.15)',
+            line=dict(color='#00d4ff', width=2), # 線を少し細く
+            fill='tozeroy', fillcolor='rgba(0, 212, 255, 0.1)',
             hoverinfo='skip', name='潮位'
         ))
 
@@ -126,26 +126,27 @@ def show_analysis_page(df):
             fig.add_trace(go.Scatter(
                 x=spec_df['x_sync'], y=spec_df['y_sync'],
                 mode='markers', name=species,
-                marker=dict(size=18, symbol=symbols, color=colors, line=dict(width=1.5, color='white')),
+                marker=dict(size=14, symbol=symbols, color=colors, line=dict(width=1, color='white')), # サイズ調整
                 text=hover_text,
                 hovertemplate="%{text}<extra></extra>"
             ))
 
         fig.update_layout(
-            xaxis=dict(tickvals=[6, 18.5], ticktext=["☀️ 昼 エリア", "🌙 夜 エリア"], range=[-0.5, 25.5], gridcolor='rgba(0,0,0,0)', zeroline=False),
-            yaxis=dict(tickvals=[100, 0, -100], ticktext=["満潮", "中間", "干潮"], range=[-120, 150], gridcolor='rgba(255,255,255,0.1)'),
-            template="plotly_dark", height=450, margin=dict(l=10, r=10, t=20, b=10)
+            xaxis=dict(tickvals=[6, 18.5], ticktext=["☀️ 昼", "🌙 夜"], range=[-0.5, 25.5], gridcolor='rgba(0,0,0,0)', zeroline=False),
+            yaxis=dict(tickvals=[100, 0, -100], ticktext=["満", "中", "干"], range=[-120, 150], gridcolor='rgba(255,255,255,0.1)'),
+            template="plotly_dark", 
+            height=350, # 縦を低くして横長に見せる
+            margin=dict(l=5, r=5, t=10, b=10),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        # --- 5. 潮位フェーズ別ボリューム集計 (棒グラフ) ---
-        st.write("📈 **潮位フェーズ別・釣果ボリューム**")
+        # --- 5. 潮位フェーズ別ボリューム集計 (下げ10分を削除) ---
+        st.write("📈 **フェーズ別・釣果ボリューム**")
         
-        # 集計用のデータ整理
-        # 「下げ10」などは文字として並べ替えるため、カテゴリ型にする
-        phase_order = [f"下げ{i}分" for i in range(11)] + [f"上げ{i}分" for i in range(1, 11)]
+        # 下げ10分を除外したオーダー
+        phase_order = [f"下げ{i}分" for i in range(10)] + [f"上げ{i}分" for i in range(1, 11)]
         
-        # 簡易的な名前の正規化（数字を抽出して再構築）
         def normalize_phase_name(row):
             prefix = "上げ" if row['is_up'] else "下げ"
             return f"{prefix}{row['step_val']}分"
@@ -153,13 +154,11 @@ def show_analysis_page(df):
         display_df_copy = display_df.copy()
         display_df_copy['norm_phase'] = display_df_copy.apply(normalize_phase_name, axis=1)
         
-        # 集計
+        # 下げ10分は集計から除外（スルー）される
         counts = display_df_copy['norm_phase'].value_counts().reindex(phase_order, fill_value=0).reset_index()
         counts.columns = ['フェーズ', '釣果件数']
 
-        # 棒グラフ描画
         fig_bar = go.Figure()
-        # 下げは赤系、上げは緑系で色分け
         colors_bar = ['#ff4b4b' if '下げ' in p else '#00ffd0' for p in counts['フェーズ']]
         
         fig_bar.add_trace(go.Bar(
@@ -171,10 +170,10 @@ def show_analysis_page(df):
 
         fig_bar.update_layout(
             template="plotly_dark",
-            height=300,
-            margin=dict(l=10, r=10, t=10, b=40),
-            xaxis=dict(title="潮位フェーズ", tickangle=45),
-            yaxis=dict(title="釣果件数 (件)", gridcolor='rgba(255,255,255,0.1)'),
+            height=280, # 棒グラフも高さを抑える
+            margin=dict(l=5, r=5, t=10, b=30),
+            xaxis=dict(title=None, tickangle=45, tickfont=dict(size=10)),
+            yaxis=dict(title=None, gridcolor='rgba(255,255,255,0.1)'),
             showlegend=False
         )
         st.plotly_chart(fig_bar, use_container_width=True)
