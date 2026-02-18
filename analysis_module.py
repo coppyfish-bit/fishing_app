@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 時合精密解析 (詳細情報ホバー対応)")
+    st.subheader("📊 時合精密解析 (フェーズ推論版)")
 
     if df.empty:
         st.info("データがありません。")
@@ -52,16 +52,30 @@ def show_analysis_page(df):
     df_p['datetime'] = df_p['datetime_str'].apply(parse_dt)
     df_p = df_p.dropna(subset=['datetime'])
 
-    # --- 3. 座標計算ロジック ---
+    # --- 3. 座標計算ロジック (言葉による推論機能付き) ---
     def process_coordinates(target_df):
         res_df = target_df.copy()
         
-        def extract_step(phase_str):
-            nums = re.findall(r'\d+', str(phase_str).translate(str.maketrans('０１２３４５６７８９', '0123456789')))
-            step = int(nums[0]) if nums else 5
-            return max(0, min(10, step))
+        def extract_step_smart(phase_str):
+            phase_str = str(phase_str)
+            # 1. まず数字を探す
+            nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
+            if nums:
+                return max(0, min(10, int(nums[0])))
+            
+            # 2. 数字がない場合、キーワードで推論
+            if "干潮後" in phase_str or "上げ始め" in phase_str:
+                return 1
+            if "満潮前" in phase_str:
+                return 9
+            if "満潮後" in phase_str or "下げ始め" in phase_str:
+                return 1
+            if "干潮前" in phase_str:
+                return 9
+            
+            return 5 # どうしても不明な場合のみ中央
 
-        res_df['step_val'] = res_df['潮位フェーズ'].apply(extract_step)
+        res_df['step_val'] = res_df['潮位フェーズ'].apply(extract_step_smart)
         res_df['is_up'] = res_df['潮位フェーズ'].apply(lambda x: "下げ" not in str(x))
         res_df['hour_cat'] = res_df['datetime'].dt.hour.apply(lambda h: 0 if 4 <= h <= 19 else 1)
         res_df['repeat_idx'] = res_df.groupby(['step_val', 'is_up', 'hour_cat']).cumcount()
@@ -90,8 +104,6 @@ def show_analysis_page(df):
         st.caption(f"💡 現在表示中の釣果: {len(display_df)} 件")
         
         fig = go.Figure()
-        
-        # 背景のシームレス曲線
         x_plot = np.linspace(0, 25, 1000)
         y_plot = [100 * np.cos((x % 12.5) * np.pi / 6) if (x % 12.5) <= 12 else 100 for x in x_plot]
         
@@ -111,27 +123,21 @@ def show_analysis_page(df):
             symbols = spec_df['is_up'].apply(lambda x: 'triangle-up' if x else 'triangle-down')
             colors = spec_df['is_up'].apply(lambda x: '#00ffd0' if x else '#ff4b4b')
             
-            # ホバーテキストの作成
-            # スプレッドシートの列名が「全長」「潮位」であることを想定
-            hover_text = [
-                f"日時: {dt.strftime('%m/%d %H:%M')}<br>" +
-                f"全長: {size} cm<br>" +
-                f"潮位: {tide} cm<br>" +
-                f"フェーズ: {phase}"
-                for dt, size, tide, phase in zip(
-                    spec_df['datetime'], 
-                    spec_df.get('全長_cm', spec_df.get('サイズ', '不明')), 
-                    spec_df.get('潮位_cm', '不明'), 
-                    spec_df['潮位フェーズ']
-                )
-            ]
+            hover_text = []
+            for _, row in spec_df.iterrows():
+                dt_str = row['datetime'].strftime('%m/%d %H:%M')
+                size = row.get('全長_cm', '不明')
+                tide_val = row.get('潮位_cm', '不明')
+                phase = row.get('潮位フェーズ', '不明')
+                txt = (f"<b>{dt_str}</b><br>全長: {size} cm<br>潮位: {tide_val} cm<br>フェーズ: {phase}")
+                hover_text.append(txt)
             
             fig.add_trace(go.Scatter(
                 x=spec_df['x_sync'], y=spec_df['y_sync'],
                 mode='markers', name=species,
                 marker=dict(size=18, symbol=symbols, color=colors, line=dict(width=1.5, color='white')),
                 text=hover_text,
-                hovertemplate="<b>%{name}</b><br>%{text}<extra></extra>"
+                hovertemplate="%{text}<extra></extra>"
             ))
 
         fig.update_layout(
@@ -142,4 +148,3 @@ def show_analysis_page(df):
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("表示する魚種を選択してください。")
-
