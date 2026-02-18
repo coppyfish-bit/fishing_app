@@ -2,44 +2,52 @@ import streamlit as st
 import pandas as pd
 
 def show_gallery_page(df):
-    # インデックスを振り直して、途中に欠番があっても最後までループさせる
-    df = df.reset_index(drop=True)
-    st.subheader("📊 ギャラリー診断モード")
+    st.subheader("🖼️ 全釣果ギャラリー")
     
     if df is None or df.empty:
-        st.error("❌ データが空っぽです（読み込み失敗）")
+        st.info("表示するデータがまだありません。")
         return
 
-    # 1. データの件数を表示
-    st.write(f"読み込んだ総データ数: {len(df)} 件")
-    
-    # 2. データの末尾5件をテーブルで表示（ここを確認！）
-    st.write("▼ 最新の5件（スプレッドシートの後半部分）")
-    st.dataframe(df.tail(5))
+    df_gallery = df.copy()
 
-    # 3. 実際の表示ループ
-    st.divider()
+    # --- 重要：日付の読み込みを柔軟にする ---
+    # formatを指定せず、Pandasに自動判別させることで「秒あり/なし」が混在してもOKにします
+    df_gallery['datetime'] = pd.to_datetime(df_gallery['datetime'], errors='coerce')
+
+    # datetimeが空の行（変換失敗）があるとソートでエラーになる可能性があるため
+    # 保存されていない分も確実に拾うために、一度並び替えをせずに最新行を上に持ってくる工夫をします
+    df_gallery = df_gallery.iloc[::-1] # 単純に「スプレッドシートの下の行」を上にする
+
+    # --- ギャラリー表示 ---
     cols = st.columns(3)
-    
-    # datetimeで並び替え
-    df_sorted = df.copy()
-    df_sorted['datetime'] = pd.to_datetime(df_sorted['datetime'], errors='coerce')
-    df_sorted = df_sorted.sort_values("datetime", ascending=False)
-
     display_count = 0
-    for idx in range(len(df)):
-        row = df.iloc[idx]
+    
+    for i, (idx, row) in enumerate(df_gallery.iterrows()):
         img_url = row.get("filename")
-        
-        # URLが空っぽならスキップ理由を表示
         if not img_url or pd.isna(img_url):
-            # st.write(f"行 {idx}: filenameが空のためスキップ") # デバッグ用
             continue
         
         with cols[display_count % 3]:
-            st.image(str(img_url), caption=f"{row.get('魚種','-')} ({row.get('datetime','-')})")
-            display_count += 1
+            try:
+                # 日付の表示形式を統一
+                dt_val = row['datetime']
+                dt_str = dt_val.strftime('%y/%m/%d %H:%M') if pd.notnull(dt_val) else str(row.get('datetime', '-'))
+                
+                fish_name = row.get('魚種', '-')
+                size = row.get('全長_cm', '-')
 
-    if display_count == 0:
-        st.warning("⚠️ filename（画像URL）が入っているデータが1件もありませんでした。")
-
+                overlay_html = f"""
+                <div style="position: relative; width: 100%; margin-bottom: 20px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
+                    <img src="{img_url}" style="width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block;">
+                    <div style="position: absolute; bottom: 0; width: 100%; padding: 8px; background: linear-gradient(transparent, rgba(0,0,0,0.9)); color: white; font-size: 0.8rem;">
+                        <b style="color: #00ffd0;">{fish_name} {size}cm</b><br>
+                        {dt_str}
+                    </div>
+                </div>
+                """
+                st.markdown(overlay_html, unsafe_allow_html=True)
+                display_count += 1
+                
+            except Exception as e:
+                st.image(str(img_url))
+                display_count += 1
