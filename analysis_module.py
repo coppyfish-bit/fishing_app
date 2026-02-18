@@ -120,8 +120,8 @@ def show_analysis_page(df):
                 f"フェーズ: {phase}"
                 for dt, size, tide, phase in zip(
                     spec_df['datetime'], 
-                    spec_df.get('全長', spec_df.get('サイズ', '不明')), 
-                    spec_df.get('潮位', '不明'), 
+                    spec_df.get('全長_cm', spec_df.get('サイズ', '不明')), 
+                    spec_df.get('潮位_cm', '不明'), 
                     spec_df['潮位フェーズ']
                 )
             ]
@@ -142,3 +142,4 @@ def show_analysis_page(df):
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("表示する魚種を選択してください。")
+
