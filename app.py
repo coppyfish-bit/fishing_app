@@ -256,7 +256,7 @@ url = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_
 
 # 2. データを読み込んで 'df' という名前の変数に入れる（★ここが重要！）
 # 先ほどのエラー(429)対策として ttl="1m" を推奨します
-df = conn.read(spreadsheet=url, ttl="1m")
+df = conn.read(spreadsheet=url, ttl="0s")
 # --- タブの設定部分 ---
 tab1, tab2, tab3, tab4 = st.tabs(["記録", "編集", "ギャラリー", "分析（時合・フェーズ）"])
 
@@ -431,12 +431,17 @@ with tab1:
                         df_main = conn.read(spreadsheet=url, )
                         new_row = pd.DataFrame([save_data])
                         updated_df = pd.concat([df_main, new_row], ignore_index=True)
+    # app.py の「保存完了しました！」のメッセージ周辺を修正
+# ---------------------------------------------------------
                         conn.update(spreadsheet=url, data=updated_df)
                         
-                        st.success("✅ 記録完了しました！ギャラリーを確認してください。")
-                        st.balloons()
-                        st.cache_data.clear() # キャッシュを完全にクリアする
+                        # 重要：キャッシュを物理的に消去
+                        st.cache_data.clear()
                         
+                        st.success("✅ スプレッドシートへの書き込みが完了しました！")
+                        st.balloons()
+                        
+                        # 2秒待ってから、強制的にアプリを再起動して最新データを読み込ませる
                         time.sleep(2)
                         st.rerun()
 
@@ -452,6 +457,7 @@ with tab3:
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
