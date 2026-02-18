@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 時合精密解析 (フェーズ推論版)")
+    st.subheader("📊 時合精密解析 & ヒストグラム")
 
     if df.empty:
         st.info("データがありません。")
@@ -52,28 +52,19 @@ def show_analysis_page(df):
     df_p['datetime'] = df_p['datetime_str'].apply(parse_dt)
     df_p = df_p.dropna(subset=['datetime'])
 
-    # --- 3. 座標計算ロジック (言葉による推論機能付き) ---
+    # --- 3. 座標計算ロジック ---
     def process_coordinates(target_df):
         res_df = target_df.copy()
         
         def extract_step_smart(phase_str):
             phase_str = str(phase_str)
-            # 1. まず数字を探す
             nums = re.findall(r'\d+', phase_str.translate(str.maketrans('０１２３４５６７８９', '0123456789')))
-            if nums:
-                return max(0, min(10, int(nums[0])))
-            
-            # 2. 数字がない場合、キーワードで推論
-            if "干潮後" in phase_str or "上げ始め" in phase_str:
-                return 1
-            if "満潮前" in phase_str:
-                return 9
-            if "満潮後" in phase_str or "下げ始め" in phase_str:
-                return 1
-            if "干潮前" in phase_str:
-                return 9
-            
-            return 5 # どうしても不明な場合のみ中央
+            if nums: return max(0, min(10, int(nums[0])))
+            if "干潮後" in phase_str or "上げ始め" in phase_str: return 1
+            if "満潮前" in phase_str: return 9
+            if "満潮後" in phase_str or "下げ始め" in phase_str: return 1
+            if "干潮前" in phase_str: return 9
+            return 5
 
         res_df['step_val'] = res_df['潮位フェーズ'].apply(extract_step_smart)
         res_df['is_up'] = res_df['潮位フェーズ'].apply(lambda x: "下げ" not in str(x))
@@ -98,7 +89,7 @@ def show_analysis_page(df):
     if not df_p.empty:
         df_p = process_coordinates(df_p)
 
-    # --- 4. グラフ描画 ---
+    # --- 4. メイン・タイドグラフ描画 ---
     if selected_species and not df_p.empty:
         display_df = df_p[df_p['魚種'].isin(selected_species)]
         st.caption(f"💡 現在表示中の釣果: {len(display_df)} 件")
@@ -143,8 +134,50 @@ def show_analysis_page(df):
         fig.update_layout(
             xaxis=dict(tickvals=[6, 18.5], ticktext=["☀️ 昼 エリア", "🌙 夜 エリア"], range=[-0.5, 25.5], gridcolor='rgba(0,0,0,0)', zeroline=False),
             yaxis=dict(tickvals=[100, 0, -100], ticktext=["満潮", "中間", "干潮"], range=[-120, 150], gridcolor='rgba(255,255,255,0.1)'),
-            template="plotly_dark", height=550, margin=dict(l=10, r=10, t=20, b=60)
+            template="plotly_dark", height=450, margin=dict(l=10, r=10, t=20, b=10)
         )
         st.plotly_chart(fig, use_container_width=True)
+
+        # --- 5. 潮位フェーズ別ボリューム集計 (棒グラフ) ---
+        st.write("📈 **潮位フェーズ別・釣果ボリューム**")
+        
+        # 集計用のデータ整理
+        # 「下げ10」などは文字として並べ替えるため、カテゴリ型にする
+        phase_order = [f"下げ{i}分" for i in range(11)] + [f"上げ{i}分" for i in range(1, 11)]
+        
+        # 簡易的な名前の正規化（数字を抽出して再構築）
+        def normalize_phase_name(row):
+            prefix = "上げ" if row['is_up'] else "下げ"
+            return f"{prefix}{row['step_val']}分"
+
+        display_df_copy = display_df.copy()
+        display_df_copy['norm_phase'] = display_df_copy.apply(normalize_phase_name, axis=1)
+        
+        # 集計
+        counts = display_df_copy['norm_phase'].value_counts().reindex(phase_order, fill_value=0).reset_index()
+        counts.columns = ['フェーズ', '釣果件数']
+
+        # 棒グラフ描画
+        fig_bar = go.Figure()
+        # 下げは赤系、上げは緑系で色分け
+        colors_bar = ['#ff4b4b' if '下げ' in p else '#00ffd0' for p in counts['フェーズ']]
+        
+        fig_bar.add_trace(go.Bar(
+            x=counts['フェーズ'],
+            y=counts['釣果件数'],
+            marker_color=colors_bar,
+            hovertemplate="<b>%{x}</b><br>釣果: %{y}件<extra></extra>"
+        ))
+
+        fig_bar.update_layout(
+            template="plotly_dark",
+            height=300,
+            margin=dict(l=10, r=10, t=10, b=40),
+            xaxis=dict(title="潮位フェーズ", tickangle=45),
+            yaxis=dict(title="釣果件数 (件)", gridcolor='rgba(255,255,255,0.1)'),
+            showlegend=False
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
+
     else:
         st.info("表示する魚種を選択してください。")
