@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 
 def show_gallery_page(df):
+    # インデックスを振り直して、途中に欠番があっても最後までループさせる
+    df = df.reset_index(drop=True)
     st.subheader("📊 ギャラリー診断モード")
     
     if df is None or df.empty:
@@ -25,7 +27,8 @@ def show_gallery_page(df):
     df_sorted = df_sorted.sort_values("datetime", ascending=False)
 
     display_count = 0
-    for i, (idx, row) in enumerate(df_sorted.iterrows()):
+    for idx in range(len(df)):
+        row = df.iloc[idx]
         img_url = row.get("filename")
         
         # URLが空っぽならスキップ理由を表示
@@ -39,3 +42,4 @@ def show_gallery_page(df):
 
     if display_count == 0:
         st.warning("⚠️ filename（画像URL）が入っているデータが1件もありませんでした。")
+
