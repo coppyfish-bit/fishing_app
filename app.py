@@ -453,10 +453,12 @@ with tab2:
     show_edit_page(conn, url)
 
 with tab3:
-    show_gallery_page(df)
+    df_latest = conn.read(spreadsheet=url, ttl="0s")
+    show_gallery_page(df_latest)
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
