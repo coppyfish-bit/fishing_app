@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 def show_gallery_page(df):
-    st.subheader("🖼️ 全釣果ギャラリー（マップ連携）")
+    st.subheader("🖼️ 全釣果ギャラリー（写真をタップすると地図を表示）")
     
     if df is None or df.empty:
         st.info("表示するデータがまだありません。")
@@ -63,3 +63,4 @@ def show_gallery_page(df):
             """
             st.markdown(overlay_html, unsafe_allow_html=True)
             display_count += 1
+
