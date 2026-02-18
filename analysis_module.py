@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    st.subheader("📊 魚種別・時合解析 (スズキ・ヒラスズキ優先版)")
+    st.subheader("📊 シームレス・時合精密解析")
 
     if df.empty:
         st.info("データがありません。")
@@ -21,20 +21,16 @@ def show_analysis_page(df):
     df_p_base = df[df["場所"] == selected_place].copy()
 
     with col_f2:
-        # その場所で釣れている全魚種のリスト
         all_species = sorted(df_p_base["魚種"].unique())
         
-        # --- デフォルト選択のロジック ---
-        # 1. まず、その場所に存在する魚種の中から「スズキ」「ヒラスズキ」を探す
+        # デフォルト選択のロジック
         priority_species = ["スズキ", "ヒラスズキ"]
         default_selection = [s for s in priority_species if s in all_species]
         
-        # 2. もしスズキ系が1つもいなければ、その場所の最多釣果種をデフォルトにする（空欄回避）
         if not default_selection and not df_p_base.empty:
             top_species = df_p_base["魚種"].value_counts().idxmax()
             default_selection = [top_species]
         
-        # マルチセレクトに適用（ユーザーが後から自由に追加・削除可能）
         selected_species = st.multiselect(
             "🐟 魚種を選択", 
             all_species, 
@@ -79,7 +75,10 @@ def show_analysis_page(df):
         x_val = step * 0.6 if not is_up else 6 + (step * 0.6)
         h = row['datetime'].hour
         offset = 0 if 4 <= h <= 19 else 12.5
-        final_x = x_val + offset
+        
+        # 重なり防止の微小な散らし (Jitter)
+        jitter = np.random.uniform(-0.1, 0.1)
+        final_x = x_val + offset + jitter
         final_y = 100 * np.cos(x_val * np.pi / 6)
         return pd.Series([final_x, final_y])
 
@@ -87,32 +86,33 @@ def show_analysis_page(df):
         df_p[['x_sync', 'y_sync']] = df_p.apply(get_sync_coords, axis=1)
 
     # --- 4. グラフ描画 ---
-    fig = go.Figure()
-    
-    x_line = np.linspace(0, 25, 1000)
-    y_line = [100 * np.cos(x * np.pi / 6) if x <= 12.5 else 100 * np.cos((x - 12.5) * np.pi / 6) for x in x_line]
-    
-    fig.add_trace(go.Scatter(
-        x=x_line, y=y_line, 
-        mode='lines', 
-        line=dict(color='#00d4ff', width=3, shape='spline'),
-        fill='tozeroy', 
-        fillcolor='rgba(0, 212, 255, 0.2)',
-        hoverinfo='skip',
-        name='潮位'
-    ))
-
-    fig.add_vline(x=12.25, line_width=1, line_dash="dot", line_color="rgba(255,255,255,0.3)")
-
-    # --- グラフ描画の直前に追加 ---
     if selected_species and not df_p.empty:
         display_df = df_p[df_p['魚種'].isin(selected_species)]
+        # 件数カウンターを表示
+        st.caption(f"💡 現在表示中の釣果: {len(display_df)} 件")
         
-        # 実際にプロットされる件数を表示
-        st.write(f"💡 現在表示中のデータ: {len(display_df)} 件")
+        fig = go.Figure()
         
-        if not display_df.empty:
-            for species in selected_species:
+        # 背景のシームレス曲線
+        x_line = np.linspace(0, 25, 1000)
+        y_line = [100 * np.cos(x * np.pi / 6) if x <= 12.5 else 100 * np.cos((x - 12.5) * np.pi / 6) for x in x_line]
+        
+        fig.add_trace(go.Scatter(
+            x=x_line, y=y_line, 
+            mode='lines', 
+            line=dict(color='#00d4ff', width=3, shape='spline'),
+            fill='tozeroy', 
+            fillcolor='rgba(0, 212, 255, 0.2)',
+            hoverinfo='skip',
+            name='潮位'
+        ))
+
+        fig.add_vline(x=12.25, line_width=1, line_dash="dot", line_color="rgba(255,255,255,0.3)")
+
+        # 魚種ごとにプロット
+        for species in selected_species:
+            spec_df = display_df[display_df['魚種'] == species]
+            if spec_df.empty: continue
             
             is_up_list = spec_df['潮位フェーズ'].apply(lambda x: "下げ" not in str(x))
             symbols = is_up_list.apply(lambda x: 'triangle-up' if x else 'triangle-down')
@@ -127,22 +127,18 @@ def show_analysis_page(df):
                 hovertemplate="<b>%{name}</b><br>%{text}<extra></extra>"
             ))
 
-    fig.update_layout(
-        xaxis=dict(
-            tickvals=[6, 18.5],
-            ticktext=["☀️ 昼 エリア", "🌙 夜 エリア"],
-            range=[-0.5, 25.5],
-            gridcolor='rgba(255,255,255,0)',
-            zeroline=False
-        ),
-        yaxis=dict(
-            tickvals=[100, 0, -100], 
-            ticktext=["満潮", "中間", "干潮"], 
-            range=[-120, 150],
-            gridcolor='rgba(255,255,255,0.1)'
-        ),
-        template="plotly_dark", height=550, margin=dict(l=10, r=10, t=20, b=60)
-    )
+        fig.update_layout(
+            xaxis=dict(
+                tickvals=[6, 18.5], ticktext=["☀️ 昼 エリア", "🌙 夜 エリア"],
+                range=[-0.5, 25.5], gridcolor='rgba(255,255,255,0)', zeroline=False
+            ),
+            yaxis=dict(
+                tickvals=[100, 0, -100], ticktext=["満潮", "中間", "干潮"],
+                range=[-120, 150], gridcolor='rgba(255,255,255,0.1)'
+            ),
+            template="plotly_dark", height=550, margin=dict(l=10, r=10, t=20, b=60)
+        )
 
-    st.plotly_chart(fig, use_container_width=True)
-
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("表示する魚種を選択してください。")
