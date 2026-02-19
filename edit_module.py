@@ -5,7 +5,7 @@ def show_edit_page(conn, url):
     st.subheader("🔄 登録情報の修正・削除")
     
     # 1. データの読み込み
-    df = conn.read(spreadsheet=url, ttl=0)
+    df = conn.read(spreadsheet=url, ttl=300)
     
     if df.empty:
         st.info("データがありません。")
@@ -84,4 +84,5 @@ def render_edit_form(df, idx, conn, url):
             conn.update(spreadsheet=url, data=save_df.iloc[::-1])
             st.warning("削除しました。")
             st.rerun()
+
 
