@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 def show_monthly_stats(df):
     if df is None or df.empty:
@@ -8,22 +10,14 @@ def show_monthly_stats(df):
 
     # 1. データのクレンジング
     df_stats = df.copy()
-    
-    # 「テスト」「ボウズ」を統計から完全に除外
     exclude_list = ["テスト", "ボウズ"]
     df_stats = df_stats[~df_stats['魚種'].isin(exclude_list)]
-    
-    # 全長_cmを数値に変換（変換できないものは0に）
     df_stats['length_num'] = pd.to_numeric(df_stats['全長_cm'], errors='coerce').fillna(0)
-    
-    # 日付型に変換
     df_stats['datetime'] = pd.to_datetime(df_stats['datetime'], errors='coerce')
     df_stats = df_stats.dropna(subset=['datetime'])
-    
-    # 統計用の「月(数字)」列を作成 (1〜12)
     df_stats['month_num'] = df_stats['datetime'].dt.month
 
-    st.subheader("📊 スズキ年間釣果分析 (1月〜12月)")
+    st.subheader("📊 スズキ年間分析（釣果数 × 最大サイズ）")
 
     # 2. スズキのみのデータにフィルタリング
     df_suzuki = df_stats[df_stats['魚種'] == "スズキ"]
@@ -31,55 +25,59 @@ def show_monthly_stats(df):
     if df_suzuki.empty:
         st.warning("「スズキ」のデータがまだありません。")
     else:
-        # --- 1月〜12月の軸を固定するためのベース枠を作成 ---
-        # これにより、釣果がない月もグラフ上に表示されます
+        # 1月〜12月のベース枠作成
         base_months = pd.DataFrame({'月': range(1, 13)})
-        
-        # スズキの月別集計（数と最大サイズ）
         suzuki_monthly = df_suzuki.groupby('month_num').agg(
             釣果数=('datetime', 'count'),
             最大サイズ=('length_num', 'max')
-        ).reset_index()
-        suzuki_monthly.rename(columns={'month_num': '月'}, inplace=True)
-
-        # 12ヶ月の枠とマージして、データがない月を0で埋める
+        ).reset_index().rename(columns={'month_num': '月'})
+        
         final_suzuki = pd.merge(base_months, suzuki_monthly, on='月', how='left').fillna(0)
-        final_suzuki = final_suzuki.set_index('月')
 
-        # --- A. スズキ月別釣果数 (棒グラフ) ---
-        st.write("📈 【スズキ】月別キャッチ数")
-        st.bar_chart(final_suzuki['釣果数'], color="#00ffd0")
+        # --- Plotlyによる2軸グラフの作成 ---
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-        # --- B. スズキ月別最大サイズ (折れ線グラフ) ---
-        st.write("📏 【スズキ】月別最大サイズ推移 (cm)")
-        st.line_chart(final_suzuki['最大サイズ'], color="#ff4b4b")
+        # 棒グラフ：釣果数（左軸）
+        fig.add_trace(
+            go.Bar(x=final_suzuki['月'], y=final_suzuki['釣果数'], 
+                   name="釣果数 (匹)", marker_color='#00ffd0', opacity=0.6),
+            secondary_y=False,
+        )
 
-    # --- C. 月別×魚種別の詳細（テスト・ボウズを除く） ---
+        # 折れ線グラフ：最大サイズ（右軸）
+        fig.add_trace(
+            go.Scatter(x=final_suzuki['月'], y=final_suzuki['最大サイズ'], 
+                       name="最大サイズ (cm)", line=dict(color='#ff4b4b', width=3), mode='lines+markers'),
+            secondary_y=True,
+        )
+
+        # レイアウト設定
+        fig.update_layout(
+            title_text="月別スズキ釣果トレンド",
+            xaxis=dict(title="月", tickmode='linear', tick0=1, dtick=1),
+            yaxis=dict(title="釣果数 (匹)", side="left"),
+            yaxis2=dict(title="最大サイズ (cm)", side="right", overlaying="y", range=[0, 100]),
+            legend=dict(x=0, y=1.1, orientation="h"),
+            margin=dict(l=20, r=20, t=60, b=20),
+            hovermode="x unified"
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    # --- C. 全魚種の月別内訳（下部に配置） ---
     st.markdown("---")
-    st.write("📅 全魚種・月別の内訳")
-    
-    # 月列を作成 (YYYY-MM)
+    st.write("📅 全魚種・月別詳細（ボウズ・テスト除外）")
     df_stats['月別'] = df_stats['datetime'].dt.strftime('%Y-%m')
-    
-    monthly_fish = df_stats.pivot_table(
-        index='月別', 
-        columns='魚種', 
-        values='datetime', 
-        aggfunc='count', 
-        fill_value=0
+    monthly_pivot = df_stats.pivot_table(
+        index='月別', columns='魚種', values='datetime', aggfunc='count', fill_value=0
     )
-    # 最新月を一番上に表示
-    monthly_fish = monthly_fish.sort_index(ascending=False)
-    st.dataframe(monthly_fish, use_container_width=True)
+    st.dataframe(monthly_pivot.sort_index(ascending=False), use_container_width=True)
 
-    # --- D. 累計サマリー ---
+    # --- D. サマリー ---
     st.markdown("---")
     c1, c2, c3 = st.columns(3)
-    
-    suzuki_total = len(df_suzuki)
-    suzuki_max = df_suzuki['length_num'].max() if not df_suzuki.empty else 0
-    total_catch = len(df_stats)
-    
-    c1.metric("スズキ総数", f"{suzuki_total} 匹")
-    c2.metric("スズキ歴代最大", f"{suzuki_max} cm")
-    c3.metric("全魚種合計", f"{total_catch} 匹")
+    suz_total = len(df_suzuki)
+    suz_max = df_suzuki['length_num'].max() if not df_suzuki.empty else 0
+    c1.metric("スズキ総数", f"{suz_total} 匹")
+    c2.metric("スズキ最大", f"{suz_max} cm")
+    c3.metric("全魚種合計", f"{len(df_stats)} 匹")
