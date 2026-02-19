@@ -16,6 +16,7 @@ from PIL import Image, ExifTags
 from edit_module import show_edit_page
 from gallery_module import show_gallery_page
 from analysis_module import show_analysis_page # この名前であることを確認
+from monthly_stats import show_monthly_stats  # 追加
 
 def safe_strptime(date_str, fmt='%Y/%m/%d %H:%M'):
     """ミリ秒などが混入していても、フォーマットに合う長さだけ切り取って解析する"""
@@ -268,7 +269,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 df, df_master = get_all_data(conn, url)
 
 # --- タブ設定 ---
-tab1, tab2, tab3, tab4 = st.tabs(["記録", "編集", "ギャラリー", "分析（時合・フェーズ）"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["記録", "編集", "ギャラリー", "分析（時合）", "月別統計"])
 
 with tab1:
     st.title("🎣 KTDシステム")
@@ -479,6 +480,11 @@ with tab3:
 
 with tab4:
     show_analysis_page(df)
+
+with tab5:
+    # 統計ページの表示
+    show_monthly_stats(df)
+
 
 
 
