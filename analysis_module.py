@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    # 【変更】マウス操作を有効化するため、pointer-events: none を削除
+    # CSS: マウス操作を有効化
     st.markdown("""
         <style>
         [data-testid="stPlotlyChart"] {
@@ -15,18 +15,33 @@ def show_analysis_page(df):
         </style>
     """, unsafe_allow_html=True)
 
-    st.subheader("📊 時合精密解析 (ホバー詳細版)")
+    st.subheader("📊 時合精密解析 (フル機能版)")
 
     if df.empty:
         st.info("データがありません。")
         return
 
-    # --- 1. 場所・魚種の選択ロジック ---
+    # --- 1. 場所・魚種の選択ロジック (最多魚種デフォルト機能復活) ---
     places = sorted(df["場所"].unique())
+    
+    # セッション状態で場所の変更を監視
+    if "prev_place" not in st.session_state:
+        st.session_state.prev_place = places[0]
+
     selected_place = st.selectbox("📍 場所を選択", places, key="ana_place")
     df_p_base = df[df["場所"] == selected_place].copy()
     
     all_species = sorted(df_p_base["魚種"].unique())
+
+    # 【復活】場所が切り替わった場合、または初回のみ最多魚種をセット
+    if st.session_state.prev_place != selected_place or "selected_species" not in st.session_state:
+        if not df_p_base.empty:
+            top_species = df_p_base["魚種"].value_counts().idxmax()
+            st.session_state.selected_species = [top_species]
+        else:
+            st.session_state.selected_species = []
+        st.session_state.prev_place = selected_place
+
     selected_species = st.multiselect("🐟 魚種を選択", all_species, key="selected_species")
 
     # --- 2. データ前処理 ---
@@ -45,17 +60,12 @@ def show_analysis_page(df):
 
         res_df['is_up'] = res_df['潮位フェーズ'].apply(lambda x: "下げ" not in str(x))
         res_df['step_val'] = res_df['潮位フェーズ'].apply(extract_step)
-        # datetimeが文字列の場合に備えて変換
         res_df['dt_temp'] = pd.to_datetime(res_df['datetime'], errors='coerce')
         res_df['hour_cat'] = res_df['dt_temp'].dt.hour.apply(lambda h: 0 if 4 <= h <= 19 else 1)
         res_df['repeat_idx'] = res_df.groupby(['step_val', 'is_up', 'hour_cat']).cumcount()
 
         def calc(row):
-            if not row['is_up']:
-                x_base = row['step_val'] * 0.625
-            else:
-                x_base = 6.25 + (row['step_val'] * 0.625)
-            
+            x_base = row['step_val'] * 0.625 if not row['is_up'] else 6.25 + (row['step_val'] * 0.625)
             offset = 0 if row['hour_cat'] == 0 else 12.5
             jitter = row['repeat_idx'] * 0.25
             final_x = x_base + offset + jitter
@@ -66,9 +76,6 @@ def show_analysis_page(df):
         return res_df
 
     # --- 3. グラフ描画 ---
-    # staticPlotをFalseにしてマウスオーバーを復活
-    config = {'staticPlot': False, 'displayModeBar': False}
-
     if selected_species and not df_p_base.empty:
         df_p = process_coords(df_p_base)
         display_df = df_p[df_p['魚種'].isin(selected_species)]
@@ -77,53 +84,47 @@ def show_analysis_page(df):
         fig = go.Figure()
         x_plot = np.linspace(0, 25, 1000)
         y_plot = [100 * np.cos((x % 12.5) * np.pi / 6.25) for x in x_plot]
-        fig.add_trace(go.Scatter(x=x_plot, y=y_plot, mode='lines', line=dict(color='#00d4ff', width=2), fill='tozeroy', fillcolor='rgba(0, 212, 255, 0.1)', hoverinfo='skip'))
+        fig.add_trace(go.Scatter(x=x_plot, y=y_plot, mode='lines', line=dict(color='#00d4ff', width=2), fill='tozeroy', fillcolor='rgba(0, 212, 255, 0.1)', hoverinfo='skip', showlegend=False))
         
         for species in selected_species:
             spec_df = display_df[display_df['魚種'] == species]
             if spec_df.empty: continue
             
-            # 【復活】マウスオーバー用のテキスト作成
-            hover_texts = []
-            for _, r in spec_df.iterrows():
-                hover_texts.append(
-                    f"<b>{r['魚種']}</b> ({r.get('全長_cm','-')}cm)<br>"
-                    f"時間: {r.get('time','-')}<br>"
-                    f"潮名: {r.get('潮名','-')}<br>"
-                    f"潮位: {r.get('潮位_cm','-')}cm<br>"
-                    f"フェーズ: {r.get('潮位フェーズ','-')}"
-                )
+            # 【復活】マウスオーバー詳細（潮名・潮位入り）
+            hover_texts = [
+                f"<b>{r['魚種']}</b> ({r.get('全長_cm','-')}cm)<br>"
+                f"時間: {r.get('time','-')}<br>"
+                f"潮名: {r.get('潮名','-')}<br>"
+                f"潮位: {r.get('潮位_cm','-')}cm<br>"
+                f"フェーズ: {r.get('潮位フェーズ','-')}"
+                for _, r in spec_df.iterrows()
+            ]
 
-            symbols = spec_df['is_up'].apply(lambda x: 'triangle-up' if x else 'triangle-down')
-            colors = spec_df['is_up'].apply(lambda x: '#00ffd0' if x else '#ff4b4b')
-            
             fig.add_trace(go.Scatter(
                 x=spec_df['x_sync'], y=spec_df['y_sync'],
-                mode='markers',
-                name=species,
-                text=hover_texts,
-                hoverinfo='text',  # 作成したテキストのみを表示
-                marker=dict(size=14, symbol=symbols, color=colors, line=dict(width=1, color='white'))
+                mode='markers', name=species,
+                text=hover_texts, hoverinfo='text',
+                marker=dict(size=14, 
+                            symbol=spec_df['is_up'].apply(lambda x: 'triangle-up' if x else 'triangle-down'),
+                            color=spec_df['is_up'].apply(lambda x: '#00ffd0' if x else '#ff4b4b'),
+                            line=dict(width=1, color='white'))
             ))
         
         fig.update_layout(
             xaxis=dict(tickvals=[6.25, 18.75], ticktext=["☀️ 昼", "🌙 夜"], range=[-0.5, 25.5], gridcolor='rgba(255,255,255,0.1)'),
             yaxis=dict(showticklabels=False, range=[-120, 150]),
-            template="plotly_dark",
-            height=320,
-            margin=dict(l=10, r=10, t=10, b=10),
+            template="plotly_dark", height=320, margin=dict(l=10, r=10, t=10, b=10),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            dragmode=False # スマホで指を動かした時に「スクロール」を優先させるための設定
+            dragmode=False # スマホスクロール優先
         )
         
         st.write("🌊 タイド分布")
-        st.plotly_chart(fig, use_container_width=True, config=config)
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
-        # --- 4. 釣果詳細 (リストから選んで写真を確認) ---
+        # --- 4. 釣果詳細セクション ---
         st.markdown("---")
         st.subheader("📌 釣果詳細")
-        # 降順で表示
-        fish_list_df = display_df.sort_values('datetime', ascending=False)
+        fish_list_df = display_df.sort_values('dt_temp', ascending=False)
         fish_options = {f"{r['date']} {r['time']} - {r['魚種']}": i for i, r in fish_list_df.iterrows()}
         selected_label = st.selectbox("詳細を表示する釣果を選択", ["選択してください"] + list(fish_options.keys()))
 
@@ -157,8 +158,7 @@ def show_analysis_page(df):
         colors_bar = ['#ff4b4b' if '下げ' in p else '#00ffd0' for p in counts['フェーズ']]
         fig_bar.add_trace(go.Bar(x=counts['フェーズ'], y=counts['件数'], marker_color=colors_bar))
         fig_bar.update_layout(template="plotly_dark", height=230, margin=dict(l=5, r=5, t=10, b=30), xaxis=dict(tickmode='array', tickvals=["下げ0分", "下げ5分", "下げ9分", "上げ1分", "上げ5分", "上げ10分"], ticktext=["満", "下5", "干前", "干", "上5", "満"], categoryorder='array', categoryarray=phase_order), yaxis=dict(showgrid=False), showlegend=False)
-        
-        # 棒グラフは静止画（staticPlot）のままでも良いが、必要ならここもFalseに
         st.plotly_chart(fig_bar, use_container_width=True, config={'staticPlot': True})
+
     else:
         st.info("魚種を選択してください。")
