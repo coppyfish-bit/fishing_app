@@ -275,12 +275,12 @@ with tab1:
     # --- 修正箇所：セッション状態の初期化 ---
     if "length_val" not in st.session_state:
         st.session_state.length_val = 0.0  # 全長の初期値を0.0に設定 
-    # セッション状態の初期化
+# --- セッション状態の初期化 ---
     if "lat" not in st.session_state: st.session_state.lat = 0.0
     if "lon" not in st.session_state: st.session_state.lon = 0.0
     if "detected_place" not in st.session_state: st.session_state.detected_place = "新規地点"
     if "group_id" not in st.session_state: st.session_state.group_id = "default"
-    if "length_val" not in st.session_state: st.session_state.length_val = 0.0  # これを追加
+    if "length_val" not in st.session_state: st.session_state.length_val = 0.0
     if "target_dt" not in st.session_state: st.session_state.target_dt = datetime.now()
 
     uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png", "heic"])
@@ -325,16 +325,35 @@ with tab1:
         selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
         final_fish_name = st.text_input("魚種名を入力") if selected_fish == "（手入力）" else selected_fish
 
-        # 場所名の確定
-        force_new = st.checkbox("🆕 新しい場所として登録する")
-        display_place = "" if force_new else st.session_state.detected_place
-        place_name = st.text_input("📍 場所名", value=display_place)
-        
-        # 保存時に使うgroup_idもここで確定させておく
-        target_group_id = "default" if force_new else st.session_state.group_id
+        # --- 【場所選択の強化版ロジック】 ---
+        st.markdown("---")
+        # マスターから場所リストを取得
+        master_places = sorted(df_master['place_name'].unique().tolist())
+        place_options = ["自動判定に従う", "（手入力で新規登録）"] + master_places
 
-        # （この後に 全長、ルアー、釣り人、保存ボタンのロジックを続ける）
+        selected_place_option = st.selectbox(
+            "📍 場所を選択・修正", 
+            options=place_options,
+            index=0,
+            help="自動判定が間違っている場合は、リストから正しい場所を選んでください。"
+        )
 
+        if selected_place_option == "自動判定に従う":
+            place_name = st.text_input("場所名を確認/修正", value=st.session_state.detected_place)
+            target_group_id = st.session_state.group_id
+        elif selected_place_option == "（手入力で新規登録）":
+            place_name = st.text_input("新規場所名を入力", value="")
+            target_group_id = "default"
+        else:
+            # リストから選んだ場合
+            place_name = selected_place_option
+            matched = df_master[df_master['place_name'] == selected_place_option]
+            target_group_id = matched['group_id'].iloc[0] if not matched.empty else "default"
+            st.info(f"「{place_name}」として記録します。")
+        # ----------------------------------------
+
+        # 全長入力
+        st.markdown("---")
         c1, c2, c3 = st.columns([1, 2, 1])
         if c1.button("➖ 0.5", use_container_width=True):
             st.session_state.length_val = max(0.0, st.session_state.length_val - 0.5)
@@ -343,9 +362,6 @@ with tab1:
         if c3.button("➕ 0.5", use_container_width=True):
             st.session_state.length_val += 0.5
         
-        # 保存用データの確定
-        target_group_id = "default" if force_new else st.session_state.group_id
-    
         lure = st.text_input("🪝 ルアー/仕掛け")
         angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"])
         memo = st.text_area("🗒️ 備考")
@@ -463,6 +479,7 @@ with tab3:
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
