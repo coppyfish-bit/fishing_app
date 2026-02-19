@@ -32,11 +32,10 @@ def show_strategy_analysis(df):
     if selected_place:
         p_df = df_suzuki[df_suzuki['場所'] == selected_place].copy()
 
-        # --- 2. 新ロジック：最多ヒット潮位域 (上げor下げ) の算出 ---
+        # --- 2. 最多ヒット潮位域 (上げor下げ) の算出 ---
         # 潮位を20cm刻みのレンジにする
         p_df['tide_range_label'] = (p_df['tide_cm'] // 20 * 20).astype(int).astype(str) + "-" + (p_df['tide_cm'] // 20 * 20 + 20).astype(int).astype(str) + "cm"
         
-        # 「上げ」か「下げ」かを判定（潮位フェーズの文字列から抽出）
         def judge_up_down(phase):
             if pd.isna(phase): return "不明"
             if "上げ" in str(phase): return "上げ"
@@ -44,32 +43,21 @@ def show_strategy_analysis(df):
             return str(phase)
 
         p_df['上げ下げ'] = p_df['潮位フェーズ'].apply(judge_up_down)
-        
-        # 「潮位域 + 上げ下げ」を結合したキーを作成 (例: 140-160cm(下げ))
         p_df['combined_tide_key'] = p_df['tide_range_label'] + " (" + p_df['上げ下げ'] + ")"
         
-        # 最多ヒットの組み合わせを特定
         if not p_df['combined_tide_key'].empty:
             top_condition = p_df['combined_tide_key'].mode()[0]
         else:
             top_condition = "-"
 
-        # 下げ○分の計算
-        p_df['datetime'] = pd.to_datetime(p_df['datetime'], errors='coerce')
-        p_df['last_high_tide'] = pd.to_datetime(p_df['直前の満潮_時刻'], errors='coerce')
-        p_df['mins_since_high'] = (p_df['datetime'] - p_df['last_high_tide']).dt.total_seconds() / 60
-        ebb_df = p_df[p_df['上げ下げ'] == '下げ']
-        avg_ebb_mins = int(ebb_df['mins_since_high'].mean()) if not ebb_df.empty else 0
-
-        # --- 3. 特選データ表示 ---
+        # --- 3. 特選データ表示 (最多ヒット時合を削除) ---
         st.subheader(f"📍 {selected_place} の特選実績")
         c1, c2 = st.columns(2)
         with c1:
             st.metric("歴代最大サイズ", f"{p_df['length_num'].max()} cm")
-            st.metric("最多ヒット潮位域", top_condition) # ここを差し替え
+            st.metric("最多ヒット潮位域", top_condition)
         with c2:
             st.metric("最大ヒット潮位", f"{p_df['tide_cm'].max()} cm")
-            st.metric("最多ヒット時合", f"下げ {avg_ebb_mins} 分")
 
         st.markdown("---")
         config = {'scrollZoom': False, 'displayModeBar': False}
