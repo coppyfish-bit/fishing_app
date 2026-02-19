@@ -269,7 +269,8 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 df, df_master = get_all_data(conn, url)
 
 # --- タブ設定 ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["記録", "編集", "ギャラリー", "分析（時合）", "月別統計"])
+tabs = st.tabs(["記録", "編集", "ギャラリー", "分析（時合）", "月別統計", "スズキ戦略分析"])
+tab1, tab2, tab3, tab4, tab5, tab6 = tabs
 
 with tab1:
     st.title("🎣 KTDシステム")
@@ -484,6 +485,11 @@ with tab4:
 with tab5:
     # 統計ページの表示
     show_monthly_stats(df)
+    
+with tab6:
+    from strategy_analysis import show_strategy_analysis
+    show_strategy_analysis(df)
+
 
 
 
