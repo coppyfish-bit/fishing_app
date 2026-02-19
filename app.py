@@ -254,62 +254,39 @@ def get_weather_data_openmeteo(lat, lon, dt):
 conn = st.connection("gsheets", type=GSheetsConnection)
 url = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_FcoS8gFFyE/edit?gid=0#gid=0"
 
-# 2. データを読み込んで 'df' という名前の変数に入れる（★ここが重要！）
-# 先ほどのエラー(429)対策として ="1m" を推奨します
-df = conn.read(spreadsheet=url, ttl="10m")
-# --- タブの設定部分 ---
+# --- データの読み込みとキャッシュ (API 429エラー対策) ---
+url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+
+@st.cache_data(ttl=600)
+def get_all_data(_conn, _url):
+    # メインデータと場所マスターを一度に取得
+    d_main = _conn.read(spreadsheet=_url, ttl="10m")
+    d_master = _conn.read(spreadsheet=_url, worksheet="place_master", ttl="1h")
+    return d_main, d_master
+
+conn = st.connection("gsheets", type=GSheetsConnection)
+df, df_master = get_all_data(conn, url)
+
+# --- タブ設定 ---
 tab1, tab2, tab3, tab4 = st.tabs(["記録", "編集", "ギャラリー", "分析（時合・フェーズ）"])
 
 with tab1:
-    # --- 3. 以降、初期設定・画像アップロード・入力画面は既存と同じ ---
-    st.set_page_config(page_title="釣果記録アプリ", layout="centered")
     st.title("🎣 KTDシステム")
     
-    if "data_ready" not in st.session_state: st.session_state.data_ready = False
+    # セッション状態の初期化
     if "lat" not in st.session_state: st.session_state.lat = 0.0
     if "lon" not in st.session_state: st.session_state.lon = 0.0
-    if "length_val" not in st.session_state: st.session_state.length_val = 0.0
     if "detected_place" not in st.session_state: st.session_state.detected_place = "新規地点"
     if "group_id" not in st.session_state: st.session_state.group_id = "default"
-    
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-        df_master = conn.read(spreadsheet=url, worksheet="place_master")
-    except Exception as e:
-        st.error(f"接続エラー: {e}")
-        st.stop()
-    
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-        df_master = conn.read(spreadsheet=url, worksheet="place_master")
-    except Exception as e:
-        st.error(f"接続エラー: {e}")
-        st.stop()
-    
-    # --- try-except の外に出して、確実に行が実行されるようにする ---
+    if "target_dt" not in st.session_state: st.session_state.target_dt = datetime.now()
+
     uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png", "heic"])
     
     if uploaded_file:
         img_for_upload = Image.open(uploaded_file)
         exif = img_for_upload._getexif()
         
-        # --- DEBUG PANEL ---
-        with st.expander("🔍 内部解析デバッグ (ここを確認して報告してください)"):
-            if exif:
-                st.write("✅ EXIFデータを検出しました")
-                # GPS情報のタグ(34853)の有無
-                gps_data = exif.get(34853)
-                st.write(f"GPSタグ(34853)の有無: {'あり' if gps_data else 'なし'}")
-                if gps_data:
-                    st.write("生GPSデータ:", gps_data)
-            else:
-                st.error("❌ EXIFデータが画像に含まれていません。LINE等で保存した写真は位置情報が消えます。")
-
-        temp_dt = datetime.now()
-        lat, lon = 0.0, 0.0
-        
+        # 1. 写真解析（一度だけ実行）
         if exif:
             # 日時抽出
             for tag_id, value in exif.items():
@@ -317,47 +294,43 @@ with tab1:
                 if tag_name == 'DateTimeOriginal':
                     try:
                         clean_val = str(value).strip()[:16].replace(":", "/", 2)
-                        temp_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
+                        st.session_state.target_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
                     except: pass
             
-            # 位置抽出
+            # 座標・場所抽出
             geo = get_geotagging(exif)
             if geo:
                 lat = get_decimal_from_dms(geo['GPSLatitude'], geo['GPSLatitudeRef'])
                 lon = get_decimal_from_dms(geo['GPSLongitude'], geo['GPSLongitudeRef'])
+                if lat and lon:
+                    st.session_state.lat, st.session_state.lon = lat, lon
+                    p_name, g_id = find_nearest_place(lat, lon, df_master)
+                    st.session_state.detected_place = p_name
+                    st.session_state.group_id = g_id
 
-        # セッションに即時保存
-        st.session_state.lat = lat
-        st.session_state.lon = lon
-        st.session_state.target_dt = temp_dt
+        st.success(f"📸 解析完了: {st.session_state.detected_place} ({st.session_state.target_dt.strftime('%Y/%m/%d %H:%M')})")
 
-        # --- 地点照合デバッグ ---
-        if lat != 0.0:
-            place, gid = find_nearest_place(lat, lon, df_master)
-            
-            # 内部での計算距離をデバッグ表示
-            valid_m = df_master.dropna(subset=['latitude', 'longitude']).copy()
-            if not valid_m.empty:
-                valid_m['dist_m'] = np.sqrt(((valid_m['latitude'] - lat) * 111000 )**2 + ((valid_m['longitude'] - lon) * 91000 )**2)
-                min_dist = valid_m['dist_m'].min()
-                nearest_row = valid_m.loc[valid_m['dist_m'].idxmin()]
-                
-                with st.expander("📏 地点照合の計算結果"):
-                    st.write(f"画像座標: {lat}, {lon}")
-                    st.write(f"最寄りの登録地点: {nearest_row['place_name']}")
-                    st.write(f"計算距離: {min_dist:.1f} メートル")
-                    st.write(f"判定: {'成功（反映します）' if min_dist <= 500 else '失敗（500m以上離れているため新規地点扱い）'}")
-            
-            st.session_state.detected_place = place
-            st.session_state.group_id = gid
-            st.success(f"📸 解析完了: {detected_place}")
-        else:
-            st.warning("⚠️ 画像から位置情報を取得できませんでした。手入力してください。")
-   # --- 270行目付近：入力エリアの修正 ---
-    if uploaded_file:
+        # --- ここから入力エリア（一本化） ---
         with st.expander("📍 位置情報の確認", expanded=False):
             if st.session_state.lat != 0.0:
                 st.map(pd.DataFrame({'lat': [st.session_state.lat], 'lon': [st.session_state.lon]}), zoom=14)
+
+        st.subheader("📝 釣果の詳細")
+        
+        # 魚種選択
+        fish_options = ["スズキ", "ヒラスズキ", "ボウズ", "バラシ", "カサゴ", "ターポン", "タチウオ", "マダイ", "チヌ", "キビレ", "ブリ", "アジ", "（手入力）"]
+        selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
+        final_fish_name = st.text_input("魚種名を入力") if selected_fish == "（手入力）" else selected_fish
+
+        # 場所名の確定
+        force_new = st.checkbox("🆕 新しい場所として登録する")
+        display_place = "" if force_new else st.session_state.detected_place
+        place_name = st.text_input("📍 場所名", value=display_place)
+        
+        # 保存時に使うgroup_idもここで確定させておく
+        target_group_id = "default" if force_new else st.session_state.group_id
+
+        # （この後に 全長、ルアー、釣り人、保存ボタンのロジックを続ける）
         
         st.subheader("📝 釣果の詳細")
         fish_options = ["スズキ", "ヒラスズキ", "ボウズ", "バラシ", "カサゴ", "ターポン", "タチウオ", "マダイ", "チヌ", "キビレ", "ブリ", "アジ", "（手入力）"]
@@ -499,6 +472,7 @@ with tab3:
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
