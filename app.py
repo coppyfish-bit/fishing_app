@@ -291,19 +291,30 @@ with tab1:
     # --- try-except の外に出して、確実に行が実行されるようにする ---
     uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png", "heic"])
     
-# --- app.py の uploaded_file 処理部分を以下に差し替え ---
+# --- デバッグ機能付き画像解析セクション ---
+    uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png", "heic"])
+    
     if uploaded_file:
         img_for_upload = Image.open(uploaded_file)
         exif = img_for_upload._getexif()
-        temp_dt = datetime.now()
         
-        # 座標と場所の初期化（解析失敗に備える）
-        lat, lon = 0.0, 0.0
-        detected_place = "新規地点"
-        group_id = "default"
+        # --- DEBUG PANEL ---
+        with st.expander("🔍 内部解析デバッグ (ここを確認して報告してください)"):
+            if exif:
+                st.write("✅ EXIFデータを検出しました")
+                # GPS情報のタグ(34853)の有無
+                gps_data = exif.get(34853)
+                st.write(f"GPSタグ(34853)の有無: {'あり' if gps_data else 'なし'}")
+                if gps_data:
+                    st.write("生GPSデータ:", gps_data)
+            else:
+                st.error("❌ EXIFデータが画像に含まれていません。LINE等で保存した写真は位置情報が消えます。")
 
+        temp_dt = datetime.now()
+        lat, lon = 0.0, 0.0
+        
         if exif:
-            # 1. 日時の解析
+            # 日時抽出
             for tag_id, value in exif.items():
                 tag_name = ExifTags.TAGS.get(tag_id, tag_id)
                 if tag_name == 'DateTimeOriginal':
@@ -312,24 +323,39 @@ with tab1:
                         temp_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
                     except: pass
             
-            # 2. 位置情報の解析とマスターデータ（place_master）との照合
+            # 位置抽出
             geo = get_geotagging(exif)
             if geo:
                 lat = get_decimal_from_dms(geo['GPSLatitude'], geo['GPSLatitudeRef'])
                 lon = get_decimal_from_dms(geo['GPSLongitude'], geo['GPSLongitudeRef'])
-                
-                if lat and lon:
-                    # ★ここで place_master (df_master) と照合して場所名を特定
-                    detected_place, group_id = find_nearest_place(lat, lon, df_master)
-        
-        # 3. セッションステートに保存（これで入力欄に反映される）
+
+        # セッションに即時保存
         st.session_state.lat = lat
         st.session_state.lon = lon
         st.session_state.target_dt = temp_dt
-        st.session_state.detected_place = detected_place
-        st.session_state.group_id = group_id
-        
-        st.success(f"📸 解析完了: {temp_dt.strftime('%Y/%m/%d %H:%M')} / 判定地点: {detected_place}")
+
+        # --- 地点照合デバッグ ---
+        if lat != 0.0:
+            place, gid = find_nearest_place(lat, lon, df_master)
+            
+            # 内部での計算距離をデバッグ表示
+            valid_m = df_master.dropna(subset=['latitude', 'longitude']).copy()
+            if not valid_m.empty:
+                valid_m['dist_m'] = np.sqrt(((valid_m['latitude'] - lat) * 111000 )**2 + ((valid_m['longitude'] - lon) * 91000 )**2)
+                min_dist = valid_m['dist_m'].min()
+                nearest_row = valid_m.loc[valid_m['dist_m'].idxmin()]
+                
+                with st.expander("📏 地点照合の計算結果"):
+                    st.write(f"画像座標: {lat}, {lon}")
+                    st.write(f"最寄りの登録地点: {nearest_row['place_name']}")
+                    st.write(f"計算距離: {min_dist:.1f} メートル")
+                    st.write(f"判定: {'成功（反映します）' if min_dist <= 500 else '失敗（500m以上離れているため新規地点扱い）'}")
+            
+            st.session_state.detected_place = place
+            st.session_state.group_id = gid
+            st.success(f"📸 解析完了: {detected_place}")
+        else:
+            st.warning("⚠️ 画像から位置情報を取得できませんでした。手入力してください。")
    # --- 270行目付近：入力エリアの修正 ---
     if uploaded_file:
         with st.expander("📍 位置情報の確認", expanded=False):
@@ -476,6 +502,7 @@ with tab3:
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
