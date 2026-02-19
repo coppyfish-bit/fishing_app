@@ -25,8 +25,8 @@ def show_monthly_stats(df):
         st.warning("「スズキ」のデータがまだありません。")
         return
 
-    # --- A. 全期間トレンド（2023年〜現在までの一本道グラフ） ---
-    st.subheader("📈 スズキ釣果トレンド（過去から現在まで）")
+    # --- A. 全期間トレンド ---
+    st.subheader("📈 スズキ全期間トレンド")
     
     df_suzuki['year_month'] = df_suzuki['datetime'].dt.to_period('M')
     start_m = df_stats['datetime'].dt.to_period('M').min()
@@ -42,16 +42,14 @@ def show_monthly_stats(df):
     final_trend = pd.merge(base_trend, trend_data, on='year_month', how='left').fillna(0)
     final_trend['display_month'] = final_trend['year_month'].astype(str)
 
-    fig_trend = create_dual_axis_chart(
-        final_trend, 'display_month', "スズキ全期間推移", "年月"
-    )
-    st.plotly_chart(fig_trend, use_container_width=True)
+    fig_trend = create_dual_axis_chart(final_trend, 'display_month', "年月")
+    # configで操作を制限
+    st.plotly_chart(fig_trend, use_container_width=True, config={'staticPlot': False, 'scrollZoom': False, 'displayModeBar': False})
 
 
-    # --- B. シーズン傾向（全年度を統合した1月〜12月のグラフ） ---
+    # --- B. シーズン傾向（1月〜12月） ---
     st.markdown("---")
-    st.subheader("📅 スズキ年間統計（1月〜12月の季節傾向）")
-    st.caption("※過去すべての年のデータを月ごとに合算・比較した統計です")
+    st.subheader("📅 スズキ年間統計（1-12月）")
 
     df_suzuki['month_num'] = df_suzuki['datetime'].dt.month
     base_months = pd.DataFrame({'月': range(1, 13)})
@@ -63,53 +61,51 @@ def show_monthly_stats(df):
     
     final_season = pd.merge(base_months, season_data, on='月', how='left').fillna(0)
 
-    fig_season = create_dual_axis_chart(
-        final_season, '月', "スズキ季節別統計", "月"
-    )
-    st.plotly_chart(fig_season, use_container_width=True)
+    fig_season = create_dual_axis_chart(final_season, '月', "月")
+    # 同様にconfigで制限
+    st.plotly_chart(fig_season, use_container_width=True, config={'staticPlot': False, 'scrollZoom': False, 'displayModeBar': False})
 
 
     # --- C. 全魚種の月別内訳表 ---
     st.markdown("---")
-    st.write("📋 月別・魚種別内訳（全期間）")
+    st.write("📋 月別・魚種別内訳")
     df_stats['年月'] = df_stats['datetime'].dt.strftime('%Y-%m')
     monthly_pivot = df_stats.pivot_table(
         index='年月', columns='魚種', values='datetime', aggfunc='count', fill_value=0
     )
     st.dataframe(monthly_pivot.sort_index(ascending=False), use_container_width=True)
 
-    # --- D. 総合サマリー ---
-    st.markdown("---")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("スズキ 累計", f"{len(df_suzuki)} 匹")
-    c2.metric("歴代最大", f"{df_suzuki['length_num'].max()} cm")
-    c3.metric("全魚種合計", f"{len(df_stats)} 匹")
-
-def create_dual_axis_chart(data, x_col, title, x_label):
-    """2軸グラフを生成する共通関数"""
+def create_dual_axis_chart(data, x_col, x_label):
+    """スマホ向けに最適化された2軸グラフ"""
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # 棒グラフ：釣果数
+    # 棒グラフ
     fig.add_trace(
         go.Bar(x=data[x_col], y=data['釣果数'], 
-               name="釣果数 (匹)", marker_color='#00ffd0', opacity=0.6),
+               name="匹数", marker_color='#00ffd0', opacity=0.6),
         secondary_y=False,
     )
     
-    # 折れ線グラフ：最大サイズ
+    # 折れ線グラフ
     fig.add_trace(
         go.Scatter(x=data[x_col], y=data['最大サイズ'], 
-                   name="最大サイズ (cm)", line=dict(color='#ff4b4b', width=3), mode='lines+markers'),
+                   name="cm", line=dict(color='#ff4b4b', width=3), mode='lines+markers'),
         secondary_y=True,
     )
     
     fig.update_layout(
-        xaxis=dict(title=x_label, tickmode='linear' if x_label=="月" else 'auto'),
-        yaxis=dict(title="釣果数 (匹)", side="left"),
-        yaxis2=dict(title="最大サイズ (cm)", side="right", overlaying="y", range=[0, 100]),
-        legend=dict(x=0, y=1.1, orientation="h"),
-        margin=dict(l=20, r=20, t=20, b=20),
+        xaxis=dict(
+            title=x_label, 
+            tickmode='linear' if x_label=="月" else 'auto',
+            tickangle=45 if x_label!="月" else 0, # 長い年月ラベルを斜めにして重なり防止
+            fixedrange=True # X軸のズーム・移動を禁止
+        ),
+        yaxis=dict(title="釣果数 (匹)", side="left", fixedrange=True), # Y軸の操作禁止
+        yaxis2=dict(title="最大サイズ (cm)", side="right", overlaying="y", range=[0, 100], fixedrange=True),
+        legend=dict(x=0.5, y=1.2, xanchor='center', orientation="h"), # 凡例を中央上部に
+        margin=dict(l=5, r=5, t=30, b=10), # 左右の余白を極限まで削ってグラフを広げる
+        height=350, # スマホで一画面に収まりやすい高さ
         hovermode="x unified",
-        height=400
+        dragmode=False # グラフ上のドラッグ（範囲選択）を無効化
     )
     return fig
