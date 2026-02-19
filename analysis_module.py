@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 def show_analysis_page(df):
-    # CSS: マウス操作を有効化
+    # CSS: グラフの操作を有効化（クリックを検知させるため）
     st.markdown("""
         <style>
         [data-testid="stPlotlyChart"] {
@@ -15,16 +15,14 @@ def show_analysis_page(df):
         </style>
     """, unsafe_allow_html=True)
 
-    st.subheader("📊 時合精密解析 (フル機能版)")
+    st.subheader("📊 時合精密解析 (クリック詳細表示)")
 
     if df.empty:
         st.info("データがありません。")
         return
 
-    # --- 1. 場所・魚種の選択ロジック (最多魚種デフォルト機能復活) ---
+    # --- 1. 場所・魚種の選択ロジック (最多魚種デフォルト機能) ---
     places = sorted(df["場所"].unique())
-    
-    # セッション状態で場所の変更を監視
     if "prev_place" not in st.session_state:
         st.session_state.prev_place = places[0]
 
@@ -33,7 +31,6 @@ def show_analysis_page(df):
     
     all_species = sorted(df_p_base["魚種"].unique())
 
-    # 【復活】場所が切り替わった場合、または初回のみ最多魚種をセット
     if st.session_state.prev_place != selected_place or "selected_species" not in st.session_state:
         if not df_p_base.empty:
             top_species = df_p_base["魚種"].value_counts().idxmax()
@@ -47,7 +44,6 @@ def show_analysis_page(df):
     # --- 2. データ前処理 ---
     def process_coords(target_df):
         res_df = target_df.copy()
-
         def extract_step(ph):
             ph_str = str(ph).translate(str.maketrans('０１２３４５６７８９', '0123456789'))
             nums = re.findall(r'\d+', ph_str)
@@ -80,7 +76,6 @@ def show_analysis_page(df):
         df_p = process_coords(df_p_base)
         display_df = df_p[df_p['魚種'].isin(selected_species)]
         
-        # タイド分布グラフ
         fig = go.Figure()
         x_plot = np.linspace(0, 25, 1000)
         y_plot = [100 * np.cos((x % 12.5) * np.pi / 6.25) for x in x_plot]
@@ -90,7 +85,6 @@ def show_analysis_page(df):
             spec_df = display_df[display_df['魚種'] == species]
             if spec_df.empty: continue
             
-            # 【復活】マウスオーバー詳細（潮名・潮位入り）
             hover_texts = [
                 f"<b>{r['魚種']}</b> ({r.get('全長_cm','-')}cm)<br>"
                 f"時間: {r.get('time','-')}<br>"
@@ -104,6 +98,8 @@ def show_analysis_page(df):
                 x=spec_df['x_sync'], y=spec_df['y_sync'],
                 mode='markers', name=species,
                 text=hover_texts, hoverinfo='text',
+                # クリック時に識別するためのインデックスを保持
+                customdata=spec_df.index,
                 marker=dict(size=14, 
                             symbol=spec_df['is_up'].apply(lambda x: 'triangle-up' if x else 'triangle-down'),
                             color=spec_df['is_up'].apply(lambda x: '#00ffd0' if x else '#ff4b4b'),
@@ -115,22 +111,23 @@ def show_analysis_page(df):
             yaxis=dict(showticklabels=False, range=[-120, 150]),
             template="plotly_dark", height=320, margin=dict(l=10, r=10, t=10, b=10),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            dragmode=False # スマホスクロール優先
+            clickmode='event+select', # クリック・選択を有効化
+            dragmode=False
         )
         
         st.write("🌊 タイド分布")
-        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        # on_select="rerun" を指定することでクリック時にスクリプトが再実行される
+        selection = st.plotly_chart(fig, use_container_width=True, on_select="rerun", config={'displayModeBar': False})
 
-        # --- 4. 釣果詳細セクション ---
-        st.markdown("---")
-        st.subheader("📌 釣果詳細")
-        fish_list_df = display_df.sort_values('dt_temp', ascending=False)
-        fish_options = {f"{r['date']} {r['time']} - {r['魚種']}": i for i, r in fish_list_df.iterrows()}
-        selected_label = st.selectbox("詳細を表示する釣果を選択", ["選択してください"] + list(fish_options.keys()))
-
-        if selected_label != "選択してください":
-            idx = fish_options[selected_label]
+        # --- 4. クリック連動の詳細表示 ---
+        # 選択されたポイントがあるか確認
+        if selection and "selection" in selection and len(selection["selection"]["points"]) > 0:
+            st.markdown("---")
+            # 最後にクリックされたポイントのインデックスを取得
+            idx = selection["selection"]["points"][0]["customdata"]
             fish_data = df.loc[idx]
+            
+            st.success(f"📌 **釣果詳細: {fish_data.get('魚種', '不明')}**")
             c1, c2 = st.columns([1, 1.2])
             with c1:
                 img_path = fish_data.get('filename', None)
@@ -140,10 +137,13 @@ def show_analysis_page(df):
                     st.info("📸 写真なし")
             with c2:
                 st.write(f"**全長:** {fish_data.get('全長_cm', '-')} cm")
+                st.write(f"**日時:** {fish_data.get('date', '-')} {fish_data.get('time', '-')}")
                 st.write(f"**潮名:** {fish_data.get('潮名', '-')}")
                 st.write(f"**潮位:** {fish_data.get('潮位_cm', '-')} cm")
                 st.write(f"**ルアー:** {fish_data.get('ルアー', '-')}")
                 st.write(f"**備考:** {fish_data.get('備考', '-')}")
+        else:
+            st.info("💡 グラフ上のプロット（三角マーク）をクリックすると詳細が表示されます。")
 
         # --- 5. 棒グラフ ---
         st.markdown("---")
