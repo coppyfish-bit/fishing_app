@@ -331,12 +331,7 @@ with tab1:
         target_group_id = "default" if force_new else st.session_state.group_id
 
         # （この後に 全長、ルアー、釣り人、保存ボタンのロジックを続ける）
-        
-        st.subheader("📝 釣果の詳細")
-        fish_options = ["スズキ", "ヒラスズキ", "ボウズ", "バラシ", "カサゴ", "ターポン", "タチウオ", "マダイ", "チヌ", "キビレ", "ブリ", "アジ", "（手入力）"]
-        selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
-        final_fish_name = st.text_input("魚種名を入力") if selected_fish == "（手入力）" else selected_fish
-    
+
         c1, c2, c3 = st.columns([1, 2, 1])
         if c1.button("➖ 0.5", use_container_width=True):
             st.session_state.length_val = max(0.0, st.session_state.length_val - 0.5)
@@ -344,13 +339,6 @@ with tab1:
         st.session_state.length_val = normalize_float(length_text)
         if c3.button("➕ 0.5", use_container_width=True):
             st.session_state.length_val += 0.5
-    
-        # --- 場所名入力欄の重要修正 ---
-        force_new = st.checkbox("🆕 新しい場所として登録する")
-        
-        # valueにセッション状態を直接指定し、かつ手入力も受け付けるようにする
-        default_place_val = "" if force_new else st.session_state.detected_place
-        place_name = st.text_input("📍 場所名", value=default_place_val)
         
         # 保存用データの確定
         target_group_id = "default" if force_new else st.session_state.group_id
@@ -472,6 +460,7 @@ with tab3:
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
