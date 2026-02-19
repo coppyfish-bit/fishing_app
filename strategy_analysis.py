@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 def show_strategy_analysis(df):
     if df is None or df.empty:
@@ -18,6 +20,7 @@ def show_strategy_analysis(df):
     # 数値変換
     df_suzuki['length_num'] = pd.to_numeric(df_suzuki['全長_cm'], errors='coerce').fillna(0)
     df_suzuki['tide_cm'] = pd.to_numeric(df_suzuki['潮位_cm'], errors='coerce').fillna(0)
+    df_suzuki['temp_num'] = pd.to_numeric(df_suzuki['気温'], errors='coerce').fillna(0)
     
     # 8方位変換
     wind_map = {'北':'北','北北東':'北東','北東':'北東','東北東':'北東','東':'東','東南東':'南東','南東':'南東','南南東':'南東','南':'南','南南西':'南西','南西':'南西','西北西':'南西','西':'西','西北西':'北西','北西':'北西','北北西':'北西'}
@@ -26,12 +29,11 @@ def show_strategy_analysis(df):
 
     st.header("🎯 スズキ専用 戦略分析")
 
-    # --- 2. 場所の選択（「すべての場所」を追加） ---
+    # 場所の選択
     unique_places = sorted([p for p in df_suzuki['場所'].unique() if p])
     place_options = ["すべての場所"] + unique_places
     selected_place = st.selectbox("分析する場所を選択", place_options)
 
-    # データのフィルタリング
     if selected_place == "すべての場所":
         p_df = df_suzuki.copy()
         display_name = "全フィールド合計"
@@ -39,21 +41,19 @@ def show_strategy_analysis(df):
         p_df = df_suzuki[df_suzuki['場所'] == selected_place].copy()
         display_name = selected_place
 
-    # --- 3. 最多ヒット潮位域 (上げor下げ) の算出 ---
+    # --- 2. 各種統計の計算 ---
+    # 潮位域
     p_df['tide_range_label'] = (p_df['tide_cm'] // 20 * 20).astype(int).astype(str) + "-" + (p_df['tide_cm'] // 20 * 20 + 20).astype(int).astype(str) + "cm"
-    
     def judge_up_down(phase):
         if pd.isna(phase): return "不明"
         if "上げ" in str(phase): return "上げ"
         if "下げ" in str(phase): return "下げ"
         return str(phase)
-
     p_df['上げ下げ'] = p_df['潮位フェーズ'].apply(judge_up_down)
     p_df['combined_tide_key'] = p_df['tide_range_label'] + " (" + p_df['上げ下げ'] + ")"
-    
     top_condition = p_df['combined_tide_key'].mode()[0] if not p_df['combined_tide_key'].empty else "-"
 
-    # --- 4. 特選データ表示 ---
+    # --- 3. 特選データ表示 ---
     st.subheader(f"📍 {display_name} の特選実績")
     c1, c2 = st.columns(2)
     with c1:
@@ -65,7 +65,41 @@ def show_strategy_analysis(df):
     st.markdown("---")
     config = {'scrollZoom': False, 'displayModeBar': False}
 
-    # --- 5. グラフ表示 ---
+    # --- 4. 気温と釣果の相関グラフ (新規追加) ---
+    st.write("🌡️ 気温別・釣果相関")
+    # 気温を5度刻みのレンジで集計
+    p_df['temp_range'] = (p_df['temp_num'] // 5 * 5).astype(int)
+    temp_stats = p_df.groupby('temp_range').agg(
+        釣果数=('魚種', 'count'),
+        平均サイズ=('length_num', 'mean')
+    ).reset_index()
+    temp_stats['temp_label'] = temp_stats['temp_range'].astype(str) + "℃～"
+
+    # 2軸グラフの作成
+    fig_temp = make_subplots(specs=[[{"secondary_y": True}]])
+    fig_temp.add_trace(
+        go.Bar(x=temp_stats['temp_label'], y=temp_stats['釣果数'], 
+               name="釣果数", marker_color='#ffaa00', opacity=0.7),
+        secondary_y=False,
+    )
+    fig_temp.add_trace(
+        go.Scatter(x=temp_stats['temp_label'], y=temp_stats['平均サイズ'], 
+                   name="平均サイズ(cm)", line=dict(color='#ff4b4b', width=3), mode='lines+markers'),
+        secondary_y=True,
+    )
+    fig_temp.update_layout(
+        yaxis=dict(title="釣果数 (匹)"),
+        yaxis2=dict(title="平均全長 (cm)", overlaying="y", side="right", range=[0, 100]),
+        legend=dict(x=0.5, y=1.2, xanchor='center', orientation="h"),
+        margin=dict(l=5, r=5, t=30, b=10),
+        height=350,
+        dragmode=False
+    )
+    fig_temp.update_xaxes(fixedrange=True)
+    fig_temp.update_yaxes(fixedrange=True)
+    st.plotly_chart(fig_temp, use_container_width=True, config=config)
+
+    # --- 5. 既存のグラフ表示 ---
     col_a, col_b = st.columns(2)
     with col_a:
         st.write("🌬️ 有利な風向き")
@@ -74,7 +108,6 @@ def show_strategy_analysis(df):
         fig_w = px.bar(w_stats, x='風向', y='件数', color='件数', color_continuous_scale='Blues')
         apply_mobile_style(fig_w)
         st.plotly_chart(fig_w, use_container_width=True, config=config)
-        
     with col_b:
         st.write("🌊 有利な潮名")
         t_stats = p_df.groupby('潮名').size().reset_index(name='件数')
