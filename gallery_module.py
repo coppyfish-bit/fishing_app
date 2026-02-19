@@ -10,11 +10,16 @@ def show_gallery_page(df):
 
     df_gallery = df.copy()
 
-    # 日付の読み込み処理 (文字列として扱う)
-    df_gallery['datetime'] = df_gallery['datetime'].fillna('-').astype(str)
+    # --- 【修正】日時に基づく正確な並び替え ---
+    # 1. datetime列を日付型に変換（変換できないものはNaTになる）
+    df_gallery['datetime_parsed'] = pd.to_datetime(df_gallery['datetime'], errors='coerce')
+    
+    # 2. 日付が新しい順（降順）にソート。日付がないデータは最後に回す
+    df_gallery = df_gallery.sort_values(by='datetime_parsed', ascending=False)
+    # ---------------------------------------
 
-    # 最新の投稿（下の行）を上にする
-    df_gallery = df_gallery.iloc[::-1]
+    # 日付の読み込み処理 (表示用の文字列整理)
+    df_gallery['datetime'] = df_gallery['datetime'].fillna('-').astype(str)
 
     cols = st.columns(3)
     display_count = 0
@@ -30,9 +35,10 @@ def show_gallery_page(df):
         
         # マップのURLを作成 (緯度経度がある場合のみ)
         if pd.notnull(lat) and pd.notnull(lon) and lat != 0:
-            map_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+            # 💡 googleusercontent.com ではなく標準的な Google Maps URL に修正
+            map_url = f"https://www.google.com/maps?q={lat},{lon}"
         else:
-            map_url = "#" # 座標がない場合は遷移しない
+            map_url = "#"
 
         with cols[display_count % 3]:
             # 表示用データの整理
@@ -46,7 +52,7 @@ def show_gallery_page(df):
             place_name = row.get('場所', '-')
             fish_info = f"{row.get('魚種', '-')} {row.get('全長_cm', '-')}cm"
 
-            # HTMLでのカード表示 (全体をaタグで囲ってリンク化)
+            # HTMLでのカード表示
             overlay_html = f"""
             <a href="{map_url}" target="_blank" style="text-decoration: none; color: inherit;">
                 <div style="position: relative; width: 100%; margin-bottom: 20px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
@@ -63,4 +69,3 @@ def show_gallery_page(df):
             """
             st.markdown(overlay_html, unsafe_allow_html=True)
             display_count += 1
-
