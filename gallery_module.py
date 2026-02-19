@@ -10,42 +10,52 @@ def show_gallery_page(df):
 
     df_gallery = df.copy()
 
-    # --- 1. 日時に基づく正確なソート ---
-    # 秒あり(2026-02-10 22:53:00)と秒なし(2026-02-17 16:08)が混在しても
-    # 正しく「日時」として認識させてから、降順（新しい順）に並べ替えます。
-    df_gallery['datetime_parsed'] = pd.to_datetime(df_gallery['datetime'], errors='coerce')
-    df_gallery = df_gallery.sort_values(by='datetime_parsed', ascending=False, na_position='last')
+    # --- 【最強ソート処理】 ---
+    # 1. 念のため全角数字や記号を半角に、スラッシュをハイフンに統一
+    def clean_datetime_str(x):
+        if pd.isna(x): return x
+        return str(x).replace("/", "-").strip()
+
+    df_gallery['datetime_tmp'] = df_gallery['datetime'].apply(clean_datetime_str)
+
+    # 2. 複数のフォーマットを自動推論して変換 (dayfirst=False で日本形式に固定)
+    # これにより「秒あり/なし」「/区切り/-区切り」が混在しても日付として認識されます
+    df_gallery['datetime_parsed'] = pd.to_datetime(
+        df_gallery['datetime_tmp'], 
+        errors='coerce', 
+        dayfirst=False
+    )
+    
+    # 3. 万が一、変換失敗(NaT)したデータがあれば、元の文字列でソートを補完する
+    # 新しいデータが「2026-02-17」なら、文字列比較でも「2026-02-10」より前（降順なら上）に来るはずです
+    df_gallery = df_gallery.sort_values(
+        by=['datetime_parsed', 'datetime_tmp'], 
+        ascending=[False, False], 
+        na_position='last'
+    )
+    # -----------------------
 
     cols = st.columns(3)
     display_count = 0
     
     for i, (idx, row) in enumerate(df_gallery.iterrows()):
         img_url = row.get("filename")
-        # 画像URLがない、または無効な場合はスキップ
         if not img_url or pd.isna(img_url) or str(img_url).lower() == "nan":
             continue
         
-        # 緯度・経度を取得
         lat = row.get('lat')
         lon = row.get('lon')
-        
-        # マップのURLを作成 (緯度経度がある場合のみ)
-        if pd.notnull(lat) and pd.notnull(lon) and lat != 0:
-            map_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
-        else:
-            map_url = "#"
+        map_url = f"https://www.google.com/maps?q={lat},{lon}" if pd.notnull(lat) and lat != 0 else "#"
 
         with cols[display_count % 3]:
-            # --- 表示用データの整理 ---
-            # 日時：一度datetime型にしてから「分」までの形式に統一
-            dt_val = row.get('datetime', '-')
-            try:
-                parsed_dt = pd.to_datetime(dt_val)
-                display_dt = parsed_dt.strftime('%Y-%m-%d %H:%M')
-            except:
-                display_dt = str(dt_val)[:16]
+            # 表示用日時のフォーマットを「分」までで統一
+            dt_val = row.get('datetime_parsed')
+            if pd.notnull(dt_val):
+                display_dt = dt_val.strftime('%Y-%m-%d %H:%M')
+            else:
+                # 解析失敗時は元の文字を出す
+                display_dt = str(row.get('datetime', '-'))[:16]
             
-            # 各種情報を変数に格納
             temp = f"{row.get('気温', '-')}℃"
             wind = f"{row.get('風向', '')}{row.get('風速', '-')}m"
             tide_name = row.get('潮名', '-')
@@ -53,7 +63,6 @@ def show_gallery_page(df):
             place_name = row.get('場所', '-')
             fish_info = f"{row.get('魚種', '-')} {row.get('全長_cm', '-')}cm"
 
-            # HTMLでのカード表示 (全体をaタグで囲ってリンク化)
             overlay_html = f"""
             <a href="{map_url}" target="_blank" style="text-decoration: none; color: inherit;">
                 <div style="position: relative; width: 100%; margin-bottom: 20px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
