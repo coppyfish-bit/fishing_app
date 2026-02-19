@@ -291,9 +291,6 @@ with tab1:
     # --- try-except の外に出して、確実に行が実行されるようにする ---
     uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png", "heic"])
     
-# --- デバッグ機能付き画像解析セクション ---
-    uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png", "heic"])
-    
     if uploaded_file:
         img_for_upload = Image.open(uploaded_file)
         exif = img_for_upload._getexif()
@@ -502,6 +499,7 @@ with tab3:
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
