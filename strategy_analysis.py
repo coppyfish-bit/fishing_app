@@ -12,14 +12,14 @@ def show_strategy_analysis(df):
     df_suzuki = df_suzuki[(df_suzuki['魚種'] == "スズキ") & (~df_suzuki['魚種'].isin(["テスト", "ボウズ"]))]
     
     if df_suzuki.empty:
-        st.warning("分析に必要な「スズキ」のデータがまだありません。")
+        st.warning("スズキのデータが不足しています。")
         return
 
     # 数値変換
     df_suzuki['length_num'] = pd.to_numeric(df_suzuki['全長_cm'], errors='coerce').fillna(0)
     df_suzuki['tide_cm'] = pd.to_numeric(df_suzuki['潮位_cm'], errors='coerce').fillna(0)
-
-    # --- 風向を16方位から8方位に変換する処理 ---
+    
+    # 8方位変換マップ
     wind_map = {
         '北': '北', '北北東': '北東', '北東': '北東', '東北東': '北東',
         '東': '東', '東南東': '南東', '南東': '南東', '南南東': '南東',
@@ -31,77 +31,84 @@ def show_strategy_analysis(df):
 
     st.header("🎯 スズキ専用 戦略分析")
 
-    # --- 2. 場所ごとのピンポイント実績 (カード表示) ---
-    st.subheader("📍 場所別・特選データ")
-    selected_place = st.selectbox("分析する場所を選択", df_suzuki['場所'].unique())
-    
+    # --- 2. 場所の選択 ---
+    places = [p for p in df_suzuki['場所'].unique() if p]
+    selected_place = st.selectbox("分析する場所を選択してください", places)
+
     if selected_place:
-        p_df = df_suzuki[df_suzuki['場所'] == selected_place]
+        # その場所のデータだけに絞り込み
+        p_df = df_suzuki[df_suzuki['場所'] == selected_place].copy()
+
+        # --- 3. 場所別・特選データ (カード表示) ---
+        st.subheader(f"📍 {selected_place} の特選実績")
         
-        # 各種計算
+        # 計算ロジック
         max_size = p_df['length_num'].max()
         max_tide = p_df['tide_cm'].max()
-        
-        # 最多ヒット潮時（潮位フェーズ）
         top_phase = p_df['潮位フェーズ'].mode()[0] if not p_df['潮位フェーズ'].empty else "-"
         
-        # 最多ヒット潮位（20cm刻みのレンジで集計）
+        # 最多ヒット潮位域
         p_df['tide_range'] = (p_df['tide_cm'] // 20 * 20).astype(int)
-        top_tide_range = p_df['tide_range'].mode()[0] if not p_df['tide_range'].empty else 0
+        top_tide_val = p_df['tide_range'].mode()[0] if not p_df['tide_range'].empty else 0
+
+        # 「下げ○分」の算出（直前の満潮時刻からの経過時間を計算）
+        # ※データに「直前の満潮_時刻」がある場合
+        p_df['datetime'] = pd.to_datetime(p_df['datetime'], errors='coerce')
+        p_df['last_high_tide'] = pd.to_datetime(p_df['直前の満潮_時刻'], errors='coerce')
+        p_df['mins_since_high'] = (p_df['datetime'] - p_df['last_high_tide']).dt.total_seconds() / 60
+        
+        # 下げフェーズのみを抽出して平均を出す
+        ebb_df = p_df[p_df['潮位フェーズ'].str.contains('下げ', na=False)]
+        avg_ebb_mins = int(ebb_df['mins_since_high'].mean()) if not ebb_df.empty else 0
 
         c1, c2 = st.columns(2)
         with c1:
-            st.metric("最大サイズ", f"{max_size} cm")
+            st.metric("歴代最大サイズ", f"{max_size} cm")
             st.metric("最多ヒット潮時", f"{top_phase}")
         with c2:
             st.metric("最大ヒット潮位", f"{max_tide} cm")
-            st.metric("最多ヒット潮位域", f"{top_tide_range} ～ {top_tide_range+20} cm")
-
-    st.markdown("---")
-    config = {'scrollZoom': False, 'displayModeBar': False}
-
-    # --- 3. グラフ：8方位風向実績 ---
-    if '風向_8' in df_suzuki.columns:
-        st.write("🌬️ 風向別実績（8方位集約）")
-        wind_stats = df_suzuki['風向_8'].value_counts().reset_index()
-        wind_stats.columns = ['風向', '件数']
-        # 風向を時計回りに並び替え
-        wind_order = ['北', '北東', '東', '南東', '南', '南西', '西', '北西']
-        wind_stats['風向'] = pd.Categorical(wind_stats['風向'], categories=wind_order, ordered=True)
-        wind_stats = wind_stats.sort_values('風向')
+            st.metric(f"最多ヒット時合", f"下げ {avg_ebb_mins} 分")
         
-        fig_wind = px.bar(wind_stats, x='風向', y='件数', color='件数', color_continuous_scale='Blues')
-        apply_mobile_style(fig_wind)
-        st.plotly_chart(fig_wind, use_container_width=True, config=config)
+        st.caption(f"※最多ヒット潮位域: {top_tide_val} ～ {top_tide_val+20} cm")
 
-    # --- 4. グラフ：場所別サイズ分布（箱ひげ図） ---
-    st.write("📏 場所別の全長実績")
-    fig_loc = px.box(df_suzuki, x='場所', y='length_num', color='場所', points="all")
-    apply_mobile_style(fig_loc)
-    st.plotly_chart(fig_loc, use_container_width=True, config=config)
+        st.markdown("---")
+        config = {'scrollZoom': False, 'displayModeBar': False}
 
-    # --- 5. グラフ：潮名別実績 ---
-    st.write("🌊 潮名別の実績")
-    tide_stats = df_suzuki.groupby('潮名').agg(釣果数=('魚種', 'count'), 平均全長=('length_num', 'mean')).reset_index()
-    fig_tide = px.bar(tide_stats, x='潮名', y='釣果数', color='平均全長', color_continuous_scale='Viridis')
-    apply_mobile_style(fig_tide)
-    st.plotly_chart(fig_tide, use_container_width=True, config=config)
+        # --- 4. その場所の個別グラフ一覧 ---
+        col_a, col_b = st.columns(2)
 
-    # --- 6. グラフ：ヒットルアー TOP10 ---
-    st.write("🎣 ヒットルアー TOP10")
-    lure_stats = df_suzuki['ルアー'].value_counts().reset_index().head(10)
-    lure_stats.columns = ['ルアー', '個数']
-    fig_lure = px.bar(lure_stats, x='個数', y='ルアー', orientation='h', color_discrete_sequence=['#00ffd0'])
-    fig_lure.update_layout(yaxis={'categoryorder':'total ascending'})
-    apply_mobile_style(fig_lure)
-    st.plotly_chart(fig_lure, use_container_width=True, config=config)
+        with col_a:
+            # 風向別実績
+            st.write("🌬️ 有利な風向き")
+            w_stats = p_df['風向_8'].value_counts().reset_index()
+            w_stats.columns = ['風向', '件数']
+            fig_w = px.bar(w_stats, x='風向', y='件数', color='件数', color_continuous_scale='Blues')
+            apply_mobile_style(fig_w)
+            st.plotly_chart(fig_w, use_container_width=True, config=config)
 
-def apply_mobile_style(fig):
+        with col_b:
+            # 潮名別実績
+            st.write("🌊 有利な潮名")
+            t_stats = p_df.groupby('潮名').size().reset_index(name='件数')
+            fig_t = px.bar(t_stats, x='潮名', y='件数', color='件数', color_continuous_scale='Viridis')
+            apply_mobile_style(fig_t)
+            st.plotly_chart(fig_t, use_container_width=True, config=config)
+
+        # ヒットルアー TOP10
+        st.write("🎣 この場所のヒットルアー TOP10")
+        l_stats = p_df['ルアー'].value_counts().reset_index().head(10)
+        l_stats.columns = ['ルアー', '個数']
+        fig_l = px.bar(l_stats, x='個数', y='ルアー', orientation='h', color_discrete_sequence=['#00ffd0'])
+        fig_l.update_layout(yaxis={'categoryorder':'total ascending'})
+        apply_mobile_style(fig_l, height=400)
+        st.plotly_chart(fig_l, use_container_width=True, config=config)
+
+def apply_mobile_style(fig, height=300):
     fig.update_layout(
-        margin=dict(l=10, r=10, t=30, b=10),
+        margin=dict(l=5, r=5, t=30, b=10),
         dragmode=False,
         xaxis=dict(fixedrange=True),
         yaxis=dict(fixedrange=True),
         hovermode="closest",
-        height=350
+        height=height
     )
