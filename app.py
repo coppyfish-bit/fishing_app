@@ -272,12 +272,15 @@ tab1, tab2, tab3, tab4 = st.tabs(["記録", "編集", "ギャラリー", "分析
 
 with tab1:
     st.title("🎣 KTDシステム")
-    
+    # --- 修正箇所：セッション状態の初期化 ---
+    if "length_val" not in st.session_state:
+        st.session_state.length_val = 0.0  # 全長の初期値を0.0に設定 
     # セッション状態の初期化
     if "lat" not in st.session_state: st.session_state.lat = 0.0
     if "lon" not in st.session_state: st.session_state.lon = 0.0
     if "detected_place" not in st.session_state: st.session_state.detected_place = "新規地点"
     if "group_id" not in st.session_state: st.session_state.group_id = "default"
+    if "length_val" not in st.session_state: st.session_state.length_val = 0.0  # これを追加
     if "target_dt" not in st.session_state: st.session_state.target_dt = datetime.now()
 
     uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png", "heic"])
@@ -460,6 +463,7 @@ with tab3:
 
 with tab4:
     show_analysis_page(df)
+
 
 
 
