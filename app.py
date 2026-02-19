@@ -291,14 +291,19 @@ with tab1:
     # --- try-except の外に出して、確実に行が実行されるようにする ---
     uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png", "heic"])
     
-# --- 242行目付近：画像解析ロジックの修正 ---
+# --- app.py の uploaded_file 処理部分を以下に差し替え ---
     if uploaded_file:
         img_for_upload = Image.open(uploaded_file)
         exif = img_for_upload._getexif()
         temp_dt = datetime.now()
         
+        # 座標と場所の初期化（解析失敗に備える）
+        lat, lon = 0.0, 0.0
+        detected_place = "新規地点"
+        group_id = "default"
+
         if exif:
-            # 日時解析
+            # 1. 日時の解析
             for tag_id, value in exif.items():
                 tag_name = ExifTags.TAGS.get(tag_id, tag_id)
                 if tag_name == 'DateTimeOriginal':
@@ -307,24 +312,24 @@ with tab1:
                         temp_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
                     except: pass
             
-            # 位置解析
+            # 2. 位置情報の解析とマスターデータ（place_master）との照合
             geo = get_geotagging(exif)
             if geo:
                 lat = get_decimal_from_dms(geo['GPSLatitude'], geo['GPSLatitudeRef'])
                 lon = get_decimal_from_dms(geo['GPSLongitude'], geo['GPSLongitudeRef'])
+                
                 if lat and lon:
-                    st.session_state.lat, st.session_state.lon = lat, lon
-                    # ここでマスターデータから場所を特定し、セッションに即時保存
-                    place, gid = find_nearest_place(lat, lon, df_master)
-                    st.session_state.detected_place = place
-                    st.session_state.group_id = gid
-                else:
-                    # 座標がない場合
-                    st.session_state.detected_place = "新規地点"
-            else:
-                st.session_state.detected_place = "新規地点"
+                    # ★ここで place_master (df_master) と照合して場所名を特定
+                    detected_place, group_id = find_nearest_place(lat, lon, df_master)
         
+        # 3. セッションステートに保存（これで入力欄に反映される）
+        st.session_state.lat = lat
+        st.session_state.lon = lon
         st.session_state.target_dt = temp_dt
+        st.session_state.detected_place = detected_place
+        st.session_state.group_id = group_id
+        
+        st.success(f"📸 解析完了: {temp_dt.strftime('%Y/%m/%d %H:%M')} / 判定地点: {detected_place}")
    # --- 270行目付近：入力エリアの修正 ---
     if uploaded_file:
         with st.expander("📍 位置情報の確認", expanded=False):
