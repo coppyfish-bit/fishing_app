@@ -20,7 +20,7 @@ from monthly_stats import show_monthly_stats  # 追加
 import streamlit.components.v1 as components
 
 # ホーム画面用アイコン（URL形式の画像を指定してください）
-icon_url = "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771573991/丸型_cwxzp3.png" 
+icon_url = "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png" 
 
 components.html(
     f"""
@@ -505,6 +505,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
