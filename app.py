@@ -17,6 +17,22 @@ from edit_module import show_edit_page
 from gallery_module import show_gallery_page
 from analysis_module import show_analysis_page # この名前であることを確認
 from monthly_stats import show_monthly_stats  # 追加
+import streamlit.components.v1 as components
+
+# ホーム画面用アイコン（URL形式の画像を指定してください）
+icon_url = "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771573839/丸型_lgqcya.ico" 
+
+components.html(
+    f"""
+    <script>
+        var link = window.parent.document.createElement('link');
+        link.rel = 'apple-touch-icon';
+        link.href = '{icon_url}';
+        window.parent.document.getElementsByTagName('head')[0].appendChild(link);
+    </script>
+    """,
+    height=0,
+)
 
 def safe_strptime(date_str, fmt='%Y/%m/%d %H:%M'):
     """ミリ秒などが混入していても、フォーマットに合う長さだけ切り取って解析する"""
@@ -489,6 +505,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
