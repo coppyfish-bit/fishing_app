@@ -16,7 +16,8 @@ from PIL import Image, ExifTags
 from edit_module import show_edit_page
 from gallery_module import show_gallery_page
 from analysis_module import show_analysis_page # この名前であることを確認
-from monthly_stats import show_monthly_stats  # 追加
+# 19行目付近を以下に書き換えてください
+from monthly_stats import show_monthly_stats
 import streamlit.components.v1 as components
 
 # 1. ブラウザのタブ用設定（ファビコン）
@@ -517,3 +518,4 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
