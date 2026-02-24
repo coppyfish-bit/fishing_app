@@ -441,7 +441,7 @@ with tab1:
                     val_next_low = int((next_l - target_dt).total_seconds() / 60) if next_l else ""
 
                         # 画像のリサイズと向き補正
-                        img_final = Image.open(uploaded_file)
+                    img_final = Image.open(uploaded_file)
                         # EXIF補正
                         try:
                             exif_orient = img_final._getexif()
@@ -517,6 +517,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
