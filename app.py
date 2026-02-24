@@ -205,19 +205,25 @@ with tab1:
         fish = st.selectbox("魚種", fish_options)
         f_name = st.text_input("魚種入力") if fish == "（手入力）" else fish
 
-        p_options = ["自動判定に従う", "（新規）"] + sorted(df_master['place_name'].unique().tolist())
+# --- 場所選択の修正版 ---
+        p_options = ["自動判定に従う", "（新規登録）"] + sorted(df_master['place_name'].unique().tolist())
         sel_p = st.selectbox("場所修正", p_options)
-        p_name = st.text_input("場所確定", value=st.session_state.detected_place) if sel_p == "自動判定に従う" else (st.text_input("新規場所") if sel_p == "（新規）" else sel_p)
 
-        c1, c2, c3 = st.columns([1, 2, 1])
-        if c1.button("➖"): st.session_state.length_val -= 0.5
-        len_in = c2.text_input("全長(cm)", value=str(st.session_state.length_val))
-        st.session_state.length_val = normalize_float(len_in)
-        if c3.button("➕"): st.session_state.length_val += 0.5
+        # ここで p_name と g_id を確実に定義する
+        if sel_p == "自動判定に従う":
+            p_name = st.session_state.detected_place
+            g_id = st.session_state.group_id
+        elif sel_p == "（新規登録）":
+            p_name = st.text_input("新規場所名を入力", value="")
+            g_id = "default"
+        else:
+            p_name = sel_p
+            # マスターから該当する場所の group_id を取得
+            matched = df_master[df_master['place_name'] == sel_p]
+            g_id = matched['group_id'].iloc[0] if not matched.empty else "default"
 
-        lure = st.text_input("ルアー")
-        angler = st.selectbox("釣り人", ["長元", "川口", "山川"])
-        memo = st.text_area("備考")
+        # 確認用（任意：デバッグ時に表示）
+        # st.caption(f"記録予定: {p_name} (ID: {g_id})")
 
 if st.button("🚀 釣果を記録する", type="primary", use_container_width=True):
             with st.spinner("データ解析・保存中..."):
@@ -318,6 +324,7 @@ with tab6:
         show_strategy_analysis(df)
     except:
         st.write("戦略分析モジュールなし")
+
 
 
 
