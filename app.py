@@ -404,30 +404,32 @@ with tab1:
                         t_name = get_tide_name(m_age)
                         station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
                         
-# --- 潮汐イベント計算の修正版 ---
+                        # --- 潮汐イベント計算（境界線対策版） ---
                         all_events = []
-                        tide_cm = 0
-                        # 確実に「写真の日時」を基準にする
-                        base_date = st.session_state.target_dt 
-                        
                         try:
-                            # 前日(-1)・当日(0)・翌日(+1)の3日分をループ
                             for delta in [-1, 0, 1]:
-                                # ここで確実に日付をずらす
-                                check_date = base_date + timedelta(days=delta)
-                                
-                                # get_tide_detailsに「ずらした後の日付」を渡す
-                                d_data = get_tide_details(station_info['code'], check_date)
-                                
-                                if d_data:
-                                    # 全てのイベント（満・干潮）を一つのリストに集約
-                                    if 'events' in d_data: 
-                                        all_events.extend(d_data['events'])
-                                    # 「当日（delta=0）」の時だけ、その瞬間の潮位(cm)を記録
-                                    if delta == 0: 
-                                        tide_cm = d_data['cm']
-                        except Exception as tide_err:
-                            st.warning(f"潮汐データの取得中にエラーが発生しました: {tide_err}")
+                                d_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
+                                if d_data and 'events' in d_data:
+                                    all_events.extend(d_data['events'])
+                        
+                            # 時間順にソート
+                            all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
+                        
+                            # 【デバッグ用】実際に読み込めているイベントを画面に出す（後で消してOK）
+                            # st.write(f"取得イベント数: {len(all_events)}件")
+                            # st.write(f"直近のイベント例: {all_events[0]['time']} ～ {all_events[-1]['time']}")
+                        
+                            # 「直前の干潮」を探す（判定を1分だけ後ろにずらして、06:21を確実に捕まえる）
+                            # 写真時刻の1分後から遡って探すことで、同時刻のイベントを確実にヒットさせます
+                            lookup_dt = target_dt + timedelta(minutes=1)
+                            prev_l = next((e['time'] for e in reversed(all_events) if e['time'] <= lookup_dt and '干' in e['type']), None)
+                            
+                            # 潮位フェーズ用の直前イベント
+                            prev_ev = next((e for e in reversed(all_events) if e['time'] <= lookup_dt), None)
+                            next_ev = next((e for e in all_events if e['time'] > lookup_dt), None)
+                        
+                        except Exception as e:
+                            st.error(f"計算エラー: {e}")
 
                         # 重要：全3日分のデータを時間順に並べ替える
                         # これにより、深夜の釣果でも「前日の夜の干潮」が正しく見つかるようになります
@@ -532,6 +534,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
