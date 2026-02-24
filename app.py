@@ -194,24 +194,29 @@ def get_tide_details(station_code, dt):
         t2 = hourly[base_dt.hour+1] if base_dt.hour < 23 else hourly[base_dt.hour]
         current_cm = int(round(t1 + (t2 - t1) * (base_dt.minute / 60.0)))
 
-# (前略：day_data取得まで)
-
+# --- 満潮・干潮時刻の抽出（修正決定版） ---
         event_times = []
-        # 日付文字列を YYYYMMDD で作成
-        date_str = dt.strftime('%Y%m%d')
+        today_ymd = base_dt.strftime('%Y%m%d')
 
-        # 満潮 (80文字目から4桁の時刻が7文字おきに4つ)
+        # 1. 満潮時刻 (Index 80から7文字ずつ4回)
         for i in range(4):
-            t_part = day_data[80+(i*7) : 84+(i*7)].strip()
-            if t_part and t_part != "9999":
-                ev_time = datetime.strptime(date_str + t_part.zfill(4), '%Y%m%d%H%M')
+            start = 80 + (i * 7)
+            # 4文字取得し、前後の空白を徹底的に消す
+            t_part = day_data[start : start+4].strip()
+            # 空白を除去した結果、数字が1〜4桁ある場合のみ処理
+            if t_part and t_part.isdigit() and t_part != "9999":
+                # 0埋めして4桁にする (例: "621" -> "0621")
+                clean_time = t_part.zfill(4)
+                ev_time = datetime.strptime(today_ymd + clean_time, '%Y%m%d%H%M')
                 event_times.append({"time": ev_time, "type": "満潮"})
 
-        # 干潮 (108文字目から4桁の時刻が7文字おきに4つ)
+        # 2. 干潮時刻 (Index 108から7文字ずつ4回)
         for i in range(4):
-            t_part = day_data[108+(i*7) : 112+(i*7)].strip()
-            if t_part and t_part != "9999":
-                ev_time = datetime.strptime(date_str + t_part.zfill(4), '%Y%m%d%H%M')
+            start = 108 + (i * 7)
+            t_part = day_data[start : start+4].strip()
+            if t_part and t_part.isdigit() and t_part != "9999":
+                clean_time = t_part.zfill(4)
+                ev_time = datetime.strptime(today_ymd + clean_time, '%Y%m%d%H%M')
                 event_times.append({"time": ev_time, "type": "干潮"})
 
         # 重要：ここで時間順に並べ替える
@@ -514,6 +519,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
