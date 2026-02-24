@@ -394,7 +394,7 @@ with tab1:
                 st.error("⚠️ 場所名を入力してください。")
             else:
                 try:
-with st.spinner("📊 データ解析中..."):
+                        with st.spinner("📊 データ解析中..."):
                         target_dt = st.session_state.target_dt   
                         
                         # 気象・潮汐取得
@@ -519,6 +519,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
