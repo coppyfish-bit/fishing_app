@@ -394,7 +394,7 @@ with tab1:
                 st.error("⚠️ 場所名を入力してください。")
             else:
                 try:
-with st.spinner("📊 データ解析中..."):
+                        with st.spinner("📊 データ解析中..."):
                         # ここから下は、すべて「with」より右側にズレている必要があります
                         target_dt = st.session_state.target_dt   
                         
@@ -520,6 +520,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
