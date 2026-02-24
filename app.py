@@ -394,7 +394,7 @@ with tab1:
                 st.error("⚠️ 場所名を入力してください。")
             else:
                 try:
-                    with st.spinner("📊 データ解析中..."):
+with st.spinner("📊 データ解析中..."):
                         target_dt = st.session_state.target_dt   
                         
                         # 気象・潮汐取得
@@ -403,36 +403,42 @@ with tab1:
                         t_name = get_tide_name(m_age)
                         station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
                         
-                        # 潮汐フェーズの計算（既存ロジック）
-# --- 3日分のイベントを統合して前後関係を完璧にする ---
-                all_events = []
-                for d in [-1, 0, 1]:
-                    res = get_tide_details(station_info['code'], target_dt + timedelta(days=d))
-                    if res and 'events' in res:
-                        all_events.extend(res['events'])
-                
-                # 時間順にソート（これで日付を跨いでも正しく並ぶ）
-                all_events = sorted(all_events, key=lambda x: x['time'])
+                        # --- 潮汐イベント計算の修正版 ---
+                        all_events = []
+                        tide_cm = 0
+                        try:
+                            for delta in [-1, 0, 1]:
+                                day_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
+                                if day_data:
+                                    if 'events' in day_data: 
+                                        all_events.extend(day_data['events'])
+                                    if delta == 0: 
+                                        tide_cm = day_data['cm']
+                        except Exception as tide_err:
+                            st.warning(f"潮汐データの取得中に微細なエラーが発生しました: {tide_err}")
 
-                # 現在時刻より「前」の最新イベントと「後」の最初のイベントを探す
-                prev_ev = next((e for e in reversed(all_events) if e['time'] <= target_dt), None)
-                next_ev = next((e for e in all_events if e['time'] > target_dt), None)
+                        # 重複排除して時間順にソート
+                        all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
+                        
+                        # 前後のイベント特定
+                        prev_ev = next((e for e in reversed(all_events) if e['time'] <= target_dt), None)
+                        next_ev = next((e for e in all_events if e['time'] > target_dt), None)
+                        
+                        tide_phase = "不明"
+                        if prev_ev and next_ev:
+                            duration = (next_ev['time'] - prev_ev['time']).total_seconds()
+                            elapsed = (target_dt - prev_ev['time']).total_seconds()
+                            if duration > 0:
+                                p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
+                                step = max(1, min(9, int((elapsed / duration) * 10)))
+                                tide_phase = f"{p_type}{step}分"
 
-                # --- 潮位フェーズの判定 ---
-                tide_phase = "不明"
-                if prev_ev and next_ev:
-                    duration = (next_ev['time'] - prev_ev['time']).total_seconds()
-                    elapsed = (target_dt - prev_ev['time']).total_seconds()
-                    # 直前が干潮なら「上げ」、満潮なら「下げ」
-                    p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
-                    step = max(1, min(9, int((elapsed / duration) * 10)))
-                    tide_phase = f"{p_type}{step}分"
-
-                        # 満干潮時刻
+                        # 各時刻カラムの特定
                         prev_h = next((e['time'] for e in reversed(all_events) if e['time'] <= target_dt and '満' in e['type']), None)
                         prev_l = next((e['time'] for e in reversed(all_events) if e['time'] <= target_dt and '干' in e['type']), None)
                         next_h = next((e['time'] for e in all_events if e['time'] > target_dt and '満' in e['type']), None)
                         next_l = next((e['time'] for e in all_events if e['time'] > target_dt and '干' in e['type']), None)
+                        
                         val_next_high = int((next_h - target_dt).total_seconds() / 60) if next_h else ""
                         val_next_low = int((next_l - target_dt).total_seconds() / 60) if next_l else ""
 
@@ -513,6 +519,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
