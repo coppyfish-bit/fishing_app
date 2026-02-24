@@ -388,74 +388,57 @@ with tab1:
         angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"])
         memo = st.text_area("🗒️ 備考")
 
-        # --- 保存ボタン ---
-        if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
-            if not place_name or place_name == "新規地点":
-                st.error("⚠️ 場所名を入力してください。")
-            else:
-                try:
-                    with st.spinner("📊 データ解析中..."):
-                        # ここから下は、すべて「with」より右側にズレている必要があります
-                        target_dt = st.session_state.target_dt   
-                        
-                        # 気象・潮汐取得
-                        temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(st.session_state.lat, st.session_state.lon, target_dt)
-                        m_age = get_moon_age(target_dt)
-                        t_name = get_tide_name(m_age)
-                        station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
-                        
-                        # --- 潮汐イベント計算（境界線対策版） ---
-                        all_events = []
-                        try:
-                            for delta in [-1, 0, 1]:
-                                d_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
-                                if d_data and 'events' in d_data:
-                                    all_events.extend(d_data['events'])
-                        
-                            # 時間順にソート
-                            all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
-                        
-                            # 【デバッグ用】実際に読み込めているイベントを画面に出す（後で消してOK）
-                            # st.write(f"取得イベント数: {len(all_events)}件")
-                            # st.write(f"直近のイベント例: {all_events[0]['time']} ～ {all_events[-1]['time']}")
-                        
-                            # 「直前の干潮」を探す（判定を1分だけ後ろにずらして、06:21を確実に捕まえる）
-                            # 写真時刻の1分後から遡って探すことで、同時刻のイベントを確実にヒットさせます
-                            lookup_dt = target_dt + timedelta(minutes=1)
-                            prev_l = next((e['time'] for e in reversed(all_events) if e['time'] <= lookup_dt and '干' in e['type']), None)
-                            
-                            # 潮位フェーズ用の直前イベント
-                            prev_ev = next((e for e in reversed(all_events) if e['time'] <= lookup_dt), None)
-                            next_ev = next((e for e in all_events if e['time'] > lookup_dt), None)
-                        
-                        except Exception as e:
-                            st.error(f"計算エラー: {e}")
+if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
+            try:
+                with st.spinner("📊 データ解析中..."):
+                    target_dt = st.session_state.target_dt   
+                    
+                    # 1. 気象・場所情報
+                    temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(st.session_state.lat, st.session_state.lon, target_dt)
+                    m_age = get_moon_age(target_dt)
+                    t_name = get_tide_name(m_age)
+                    station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
+                    
+                    # 2. 潮汐データの取得（前後1日を含めて広めに取得）
+                    all_events = []
+                    tide_cm = 0
+                    for delta in [-1, 0, 1]:
+                        d_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
+                        if d_data:
+                            if 'events' in d_data: all_events.extend(d_data['events'])
+                            if delta == 0: tide_cm = d_data['cm']
 
-                        # 重要：全3日分のデータを時間順に並べ替える
-                        # これにより、深夜の釣果でも「前日の夜の干潮」が正しく見つかるようになります
-                        all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
-                        
-                        # 前後のイベント特定
-                        prev_ev = next((e for e in reversed(all_events) if e['time'] <= target_dt), None)
-                        next_ev = next((e for e in all_events if e['time'] > target_dt), None)
-                        
-                        tide_phase = "不明"
-                        if prev_ev and next_ev:
-                            duration = (next_ev['time'] - prev_ev['time']).total_seconds()
-                            elapsed = (target_dt - prev_ev['time']).total_seconds()
-                            if duration > 0:
-                                p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
-                                step = max(1, min(9, int((elapsed / duration) * 10)))
-                                tide_phase = f"{p_type}{step}分"
+                    # 時間順にソートして重複排除
+                    all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
 
-                        # 各時刻カラムの特定
-                        prev_h = next((e['time'] for e in reversed(all_events) if e['time'] <= target_dt and '満' in e['type']), None)
-                        prev_l = next((e['time'] for e in reversed(all_events) if e['time'] <= target_dt and '干' in e['type']), None)
-                        next_h = next((e['time'] for e in all_events if e['time'] > target_dt and '満' in e['type']), None)
-                        next_l = next((e['time'] for e in all_events if e['time'] > target_dt and '干' in e['type']), None)
-                        
-                        val_next_high = int((next_h - target_dt).total_seconds() / 60) if next_h else ""
-                        val_next_low = int((next_l - target_dt).total_seconds() / 60) if next_l else ""
+                    # 3. 直前・直後の判定（境界線対策：1分だけ余裕を持たせる）
+                    search_dt = target_dt + timedelta(minutes=1)
+                    prev_ev = next((e for e in reversed(all_events) if e['time'] <= search_dt), None)
+                    next_ev = next((e for e in all_events if e['time'] > search_dt), None)
+                    
+                    # 潮位フェーズ計算（0除算エラー対策）
+                    tide_phase = "不明"
+                    if prev_ev and next_ev:
+                        duration = (next_ev['time'] - prev_ev['time']).total_seconds()
+                        elapsed = (target_dt - prev_ev['time']).total_seconds()
+                        if duration > 0:
+                            # 経過時間がマイナスにならないよう補正
+                            elapsed = max(0, elapsed)
+                            p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
+                            step = max(1, min(9, int((elapsed / duration) * 10)))
+                            tide_phase = f"{p_type}{step}分"
+                        else:
+                            # 万が一同時刻の場合は上げ0分（干潮直後）とする
+                            tide_phase = "上げ1分" if "干" in prev_ev['type'] else "下げ1分"
+
+                    # 4. 各カラム用の時刻特定
+                    prev_h = next((e['time'] for e in reversed(all_events) if e['time'] <= search_dt and '満' in e['type']), None)
+                    prev_l = next((e['time'] for e in reversed(all_events) if e['time'] <= search_dt and '干' in e['type']), None)
+                    next_h = next((e['time'] for e in all_events if e['time'] > search_dt and '満' in e['type']), None)
+                    next_l = next((e['time'] for e in all_events if e['time'] > search_dt and '干' in e['type']), None)
+                    
+                    val_next_high = int((next_h - target_dt).total_seconds() / 60) if next_h else ""
+                    val_next_low = int((next_l - target_dt).total_seconds() / 60) if next_l else ""
 
                         # 画像のリサイズと向き補正
                         img_final = Image.open(uploaded_file)
@@ -534,6 +517,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
