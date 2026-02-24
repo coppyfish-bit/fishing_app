@@ -286,8 +286,7 @@ with tab1:
     if "length_val" not in st.session_state: st.session_state.length_val = 0.0
     if "target_dt" not in st.session_state: st.session_state.target_dt = datetime.now()
 
-    uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png", "heic"])
-    
+    uploaded_file = st.file_uploader("釣果写真をアップロード", type=["jpg", "jpeg", "png", "heic"], key="main_photo_uploader")
     if uploaded_file:
         img_for_upload = Image.open(uploaded_file)
         exif = img_for_upload._getexif()
@@ -773,6 +772,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
