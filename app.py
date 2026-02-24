@@ -219,7 +219,9 @@ with tab1:
                 st.balloons()
 
 # 他のタブの呼び出し
-with tab2: show_edit_page()
+with tab2: 
+    show_edit_page(df, conn, gs_url)
 with tab3: show_gallery_page()
 with tab4: show_analysis_page()
 with tab5: show_monthly_stats()
+
