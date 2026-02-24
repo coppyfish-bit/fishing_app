@@ -388,7 +388,7 @@ with tab1:
         angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"])
         memo = st.text_area("🗒️ 備考")
 
-if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
+        if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
             try:
                 with st.spinner("📊 データ解析中..."):
                     target_dt = st.session_state.target_dt   
@@ -517,6 +517,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
