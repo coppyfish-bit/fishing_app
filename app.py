@@ -194,38 +194,30 @@ def get_tide_details(station_code, dt):
         t2 = hourly[base_dt.hour+1] if base_dt.hour < 23 else hourly[base_dt.hour]
         current_cm = int(round(t1 + (t2 - t1) * (base_dt.minute / 60.0)))
 
-        # 3. 満干潮時刻の抽出 (満潮 81-108 / 干潮 109-136)
+# (前略：day_data取得まで)
+
         event_times = []
-        today_prefix = dt.strftime('%Y%m%d')
+        # 日付文字列を YYYYMMDD で作成
+        date_str = dt.strftime('%Y%m%d')
 
-        # 満潮 (index 80から7文字×4)
+        # 満潮 (80文字目から4桁の時刻が7文字おきに4つ)
         for i in range(4):
-            start = 80 + (i * 7)
-            time_part = day_data[start : start+4].strip()
-            if time_part and time_part != "9999":
-                clean_time = time_part.zfill(4)
-                # --- ここを修正：strptimeを物理的に安全にする ---
-                try:
-                    # 時刻文字列を確実に8文字(YYYYMMDD) + 4文字(HHMM) = 12文字で切り落とす
-                    raw_str = (today_prefix + clean_time)[:12]
-                    ev_time = datetime.strptime(raw_str, '%Y%m%d%H%M')
-                    event_times.append({"time": ev_time, "type": "満潮"})
-                except:
-                    continue
+            t_part = day_data[80+(i*7) : 84+(i*7)].strip()
+            if t_part and t_part != "9999":
+                ev_time = datetime.strptime(date_str + t_part.zfill(4), '%Y%m%d%H%M')
+                event_times.append({"time": ev_time, "type": "満潮"})
 
-        # 干潮 (index 108から7文字×4)
+        # 干潮 (108文字目から4桁の時刻が7文字おきに4つ)
         for i in range(4):
-            start = 108 + (i * 7)
-            time_part = day_data[start : start+4].strip()
-            if time_part and time_part != "9999":
-                clean_time = time_part.zfill(4)
-                # --- ここを修正：strptimeを物理的に安全にする ---
-                try:
-                    raw_str = (today_prefix + clean_time)[:12]
-                    ev_time = datetime.strptime(raw_str, '%Y%m%d%H%M')
-                    event_times.append({"time": ev_time, "type": "干潮"})
-                except:
-                    continue
+            t_part = day_data[108+(i*7) : 112+(i*7)].strip()
+            if t_part and t_part != "9999":
+                ev_time = datetime.strptime(date_str + t_part.zfill(4), '%Y%m%d%H%M')
+                event_times.append({"time": ev_time, "type": "干潮"})
+
+        # 重要：ここで時間順に並べ替える
+        event_times = sorted(event_times, key=lambda x: x['time'])
+        
+        return {"cm": current_cm, "events": event_times}
 
         # 4. フェーズ計算
         phase_text = "不明"
@@ -412,25 +404,29 @@ with tab1:
                         station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
                         
                         # 潮汐フェーズの計算（既存ロジック）
-                        all_events = []
-                        tide_cm = 0
-                        for delta in [-1, 0, 1]:
-                            day_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
-                            if day_data:
-                                if 'events' in day_data: all_events.extend(day_data['events'])
-                                if delta == 0: tide_cm = day_data['cm']
-                        
-                        all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
-                        prev_ev = next((e for e in reversed(all_events) if e['time'] <= target_dt), None)
-                        next_ev = next((e for e in all_events if e['time'] > target_dt), None)
-                        
-                        tide_phase = "不明"
-                        if prev_ev and next_ev:
-                            duration = (next_ev['time'] - prev_ev['time']).total_seconds()
-                            elapsed = (target_dt - prev_ev['time']).total_seconds()
-                            if duration > 0:
-                                step = max(1, min(9, int((elapsed / duration) * 10)))
-                                tide_phase = f"上げ{step}分" if "干" in prev_ev['type'] else f"下げ{step}分"
+# --- 3日分のイベントを統合して前後関係を完璧にする ---
+                all_events = []
+                for d in [-1, 0, 1]:
+                    res = get_tide_details(station_info['code'], target_dt + timedelta(days=d))
+                    if res and 'events' in res:
+                        all_events.extend(res['events'])
+                
+                # 時間順にソート（これで日付を跨いでも正しく並ぶ）
+                all_events = sorted(all_events, key=lambda x: x['time'])
+
+                # 現在時刻より「前」の最新イベントと「後」の最初のイベントを探す
+                prev_ev = next((e for e in reversed(all_events) if e['time'] <= target_dt), None)
+                next_ev = next((e for e in all_events if e['time'] > target_dt), None)
+
+                # --- 潮位フェーズの判定 ---
+                tide_phase = "不明"
+                if prev_ev and next_ev:
+                    duration = (next_ev['time'] - prev_ev['time']).total_seconds()
+                    elapsed = (target_dt - prev_ev['time']).total_seconds()
+                    # 直前が干潮なら「上げ」、満潮なら「下げ」
+                    p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
+                    step = max(1, min(9, int((elapsed / duration) * 10)))
+                    tide_phase = f"{p_type}{step}分"
 
                         # 満干潮時刻
                         prev_h = next((e['time'] for e in reversed(all_events) if e['time'] <= target_dt and '満' in e['type']), None)
@@ -517,5 +513,6 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
