@@ -24,9 +24,9 @@ import streamlit.components.v1 as components
 icon_url = "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
 
 st.set_page_config(
-    page_title="Seabass Strategy App",
-    page_icon=icon_url,
-    layout="wide"
+    page_title="Seabass Strategy App",
+    page_icon=icon_url,
+    layout="wide"
 )
 
 # 2. スマホの「ホーム画面に追加」用アイコン設定
@@ -518,4 +518,5 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
