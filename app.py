@@ -161,63 +161,62 @@ def find_nearest_tide_station(lat, lon):
 # 気象庁から潮位(cm)を取得・計算
 def get_tide_details(station_code, dt):
     try:
-        base_dt = dt.replace(second=0, microsecond=0)
-        
-        # 気象庁仕様: YYMMDD (73-78カラム用)
-        target_ymd = base_dt.strftime('%y%m%d')
-        
-        url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{base_dt.year}/{station_code}.txt"
+        # 気象庁のURLルールに合わせてURLを生成
+        url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{dt.year}/{station_code}.txt"
         res = requests.get(url, timeout=10)
         if res.status_code != 200: return None
         
         lines = res.text.splitlines()
-        day_data = None
         
-        # 1. 該当行の特定 (カラム番号をPythonインデックスに変換)
+        # 検索用の年月日文字列 (例: 260224)
+        target_ymd = dt.strftime('%y%m%d')
+        day_data = None
         for line in lines:
-            if len(line) < 136: continue
-            # 年月日(73-78カラム) -> line[72:78]
-            # 地点記号(79-80カラム) -> line[78:80]
+            if len(line) < 80: continue
+            # 73-78カラム(index 72-78)が日付、79-80カラム(index 78-80)が地点
             if line[72:78] == target_ymd and line[78:80] == station_code:
                 day_data = line
                 break
         
         if not day_data: return None
 
-        # 2. 毎時潮位の取得 (1-72カラム) -> line[0:72]
+        # --- 毎時潮位の取得 ---
         hourly = []
         for i in range(24):
             val = day_data[i*3 : (i+1)*3].strip()
             hourly.append(int(val))
         
-        # 現在時刻の潮位計算
-        t1 = hourly[base_dt.hour]
-        t2 = hourly[base_dt.hour+1] if base_dt.hour < 23 else hourly[base_dt.hour]
-        current_cm = int(round(t1 + (t2 - t1) * (base_dt.minute / 60.0)))
+        # 指定時刻(dt)の潮位を線形補間
+        t1 = hourly[dt.hour]
+        t2 = hourly[dt.hour+1] if dt.hour < 23 else hourly[dt.hour]
+        current_cm = int(round(t1 + (t2 - t1) * (dt.minute / 60.0)))
 
-        # 3. 満干潮時刻の抽出
+        # --- 満干潮イベントの抽出 ---
         event_times = []
-        today_prefix = base_dt.strftime('%Y%m%d')
+        base_date_str = dt.strftime('%Y%m%d')
 
-        # 満潮 (81-108カラム) -> line[80:108] を 7文字ずつ
+        # 満潮 (81カラム〜 7桁×4セット)
         for i in range(4):
             start = 80 + (i * 7)
-            time_part = day_data[start : start+4].strip() # 時分(4桁)
-            if time_part and time_part != "9999":
-                ev_time = datetime.strptime(today_prefix + time_part.zfill(4), '%Y%m%d%H%M')
-                event_times.append({"time": ev_time, "type": "満潮"})
+            t_str = day_data[start : start+4].strip()
+            l_str = day_data[start+4 : start+7].strip()
+            if t_str and t_str != "9999":
+                ev_time = datetime.strptime(base_date_str + t_str.zfill(4), '%Y%m%d%H%M')
+                event_times.append({"time": ev_time, "type": "満潮", "level": int(l_str)})
 
-        # 干潮 (109-136カラム) -> line[108:136] を 7文字ずつ
+        # 干潮 (109カラム〜 7桁×4セット)
         for i in range(4):
             start = 108 + (i * 7)
-            time_part = day_data[start : start+4].strip() # 時分(4桁)
-            if time_part and time_part != "9999":
-                ev_time = datetime.strptime(today_prefix + time_part.zfill(4), '%Y%m%d%H%M')
-                event_times.append({"time": ev_time, "type": "干潮"})
+            t_str = day_data[start : start+4].strip()
+            l_str = day_data[start+4 : start+7].strip()
+            if t_str and t_str != "9999":
+                ev_time = datetime.strptime(base_date_str + t_str.zfill(4), '%Y%m%d%H%M')
+                event_times.append({"time": ev_time, "type": "干潮", "level": int(l_str)})
 
-        return {"cm": current_cm, "events": sorted(event_times, key=lambda x: x['time'])}
+        return {"cm": current_cm, "events": event_times}
 
     except Exception as e:
+        st.error(f"潮位解析エラー: {e}")
         return None
 # 【修正】Open-Meteoを使用した過去48時間降水量対応の気象取得関数
 def get_weather_data_openmeteo(lat, lon, dt):
@@ -491,6 +490,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
