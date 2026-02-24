@@ -401,24 +401,34 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                 t_name = get_tide_name(m_age)
                 station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
                 
-                # 2. 潮汐データの取得（前後1日を含めて広めに取得）
-                all_events = []
-                tide_cm = 0
-                for delta in [-1, 0, 1]:
-                    d_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
-                    if d_data:
-                        if 'events' in d_data: 
-                            all_events.extend(d_data['events'])
-                        if delta == 0: 
-                            tide_cm = d_data['cm']
+# --- 潮汐イベント計算（デバッグ・強化版） ---
+        all_events = []
+        try:
+            for delta in [-1, 0, 1]:
+                d_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
+                if d_data and 'events' in d_data:
+                    all_events.extend(d_data['events'])
 
-                # 時間順にソートして重複排除
-                all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
+            # 1. 単純に時間順に並べる（重複削除を一度やめる）
+            all_events.sort(key=lambda x: x['time'])
 
-                # 3. 直前・直後の判定（境界線対策：1分だけ余裕を持たせる）
-                search_dt = target_dt + timedelta(minutes=1)
-                prev_ev = next((e for e in reversed(all_events) if e['time'] <= search_dt), None)
-                next_ev = next((e for e in all_events if e['time'] > search_dt), None)
+            # 2. 検索用の時刻を「3分後」まで広げる（1分の誤差を確実に吸収）
+            search_dt = target_dt + timedelta(minutes=3)
+            
+            # 3. 直前の干潮を特定
+            # 現在時刻より前で、かつ「干潮」であるものをすべて出し、その「最後（＝直近）」を取る
+            past_lows = [e for e in all_events if e['time'] <= search_dt and '干' in e['type']]
+            
+            if past_lows:
+                prev_l = past_lows[-1]['time'] # これが一番新しい（直前の）干潮
+            else:
+                prev_l = None
+
+            # --- フェーズ判定も同様に強化 ---
+            prev_ev = next((e for e in reversed(all_events) if e['time'] <= search_dt), None)
+            next_ev = next((e for e in all_events if e['time'] > search_dt), None)
+
+            # (以下、tide_phase計算などはそのまま)
                 
                 # 潮位フェーズ計算
                 tide_phase = "不明"
@@ -516,6 +526,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
