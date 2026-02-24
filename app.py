@@ -401,58 +401,55 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                 t_name = get_tide_name(m_age)
                 station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
                 
-# --- 潮汐イベント計算（デバッグ・強化版） ---
-        all_events = []
-        try:
-            for delta in [-1, 0, 1]:
-                d_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
-                if d_data and 'events' in d_data:
-                    all_events.extend(d_data['events'])
+                # 2. 潮汐データの取得（前後1日分を統合）
+                all_events = []
+                tide_cm = 0
+                for delta in [-1, 0, 1]:
+                    d_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
+                    if d_data:
+                        if 'events' in d_data: 
+                            all_events.extend(d_data['events'])
+                        if delta == 0: 
+                            tide_cm = d_data['cm']
 
-            # 1. 単純に時間順に並べる（重複削除を一度やめる）
-            all_events.sort(key=lambda x: x['time'])
+                # 重要：時間順に並べ、重複を排除
+                all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
 
-            # 2. 検索用の時刻を「3分後」まで広げる（1分の誤差を確実に吸収）
-            search_dt = target_dt + timedelta(minutes=3)
-            
-            # 3. 直前の干潮を特定
-            # 現在時刻より前で、かつ「干潮」であるものをすべて出し、その「最後（＝直近）」を取る
-            past_lows = [e for e in all_events if e['time'] <= search_dt and '干' in e['type']]
-            
-            if past_lows:
-                prev_l = past_lows[-1]['time'] # これが一番新しい（直前の）干潮
-            else:
-                prev_l = None
-
-            # --- フェーズ判定も同様に強化 ---
-            prev_ev = next((e for e in reversed(all_events) if e['time'] <= search_dt), None)
-            next_ev = next((e for e in all_events if e['time'] > search_dt), None)
-
-            # (以下、tide_phase計算などはそのまま)
+                # --- 3. 【重要】境界線（6:21と6:22）の判定ロジック ---
+                # 判定基準を5分未来にずらすことで、同時刻のイベントを確実に「過去」として捕まえる
+                search_dt = target_dt + timedelta(minutes=5)
                 
-                # 潮位フェーズ計算
+                # 直前の干潮を探す
+                past_lows = [e for e in all_events if e['time'] <= search_dt and '干' in e['type']]
+                prev_l = past_lows[-1]['time'] if past_lows else None
+                
+                # 直前の満潮を探す
+                past_highs = [e for e in all_events if e['time'] <= search_dt and '満' in e['type']]
+                prev_h = past_highs[-1]['time'] if past_highs else None
+
+                # 直後のイベントを探す
+                next_l = next((e['time'] for e in all_events if e['time'] > search_dt and '干' in e['type']), None)
+                next_h = next((e['time'] for e in all_events if e['time'] > search_dt and '満' in e['type']), None)
+
+                # 潮位フェーズ判定用の前後イベント
+                prev_ev = next((e for e in reversed(all_events) if e['time'] <= search_dt), None)
+                next_ev = next((e for e in all_events if e['time'] > search_dt), None)
+                
                 tide_phase = "不明"
                 if prev_ev and next_ev:
                     duration = (next_ev['time'] - prev_ev['time']).total_seconds()
                     elapsed = (target_dt - prev_ev['time']).total_seconds()
                     if duration > 0:
-                        elapsed = max(0, elapsed)
+                        elapsed = max(0, elapsed) # マイナス防止
                         p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
                         step = max(1, min(9, int((elapsed / duration) * 10)))
                         tide_phase = f"{p_type}{step}分"
-                    else:
-                        tide_phase = "上げ1分" if "干" in prev_ev['type'] else "下げ1分"
 
-                # 4. 各カラム用の時刻特定
-                prev_h = next((e['time'] for e in reversed(all_events) if e['time'] <= search_dt and '満' in e['type']), None)
-                prev_l = next((e['time'] for e in reversed(all_events) if e['time'] <= search_dt and '干' in e['type']), None)
-                next_h = next((e['time'] for e in all_events if e['time'] > search_dt and '満' in e['type']), None)
-                next_l = next((e['time'] for e in all_events if e['time'] > search_dt and '干' in e['type']), None)
-                
+                # 4. 次の潮までの時間（分）
                 val_next_high = int((next_h - target_dt).total_seconds() / 60) if next_h else ""
                 val_next_low = int((next_l - target_dt).total_seconds() / 60) if next_l else ""
 
-                # 5. 画像のリサイズと向き補正
+                # 5. 画像処理
                 img_final = Image.open(uploaded_file)
                 try:
                     exif_orient = img_final._getexif()
@@ -470,10 +467,9 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                 img_final.convert('RGB').save(img_bytes, format='JPEG', quality=70, optimize=True)
                 img_bytes.seek(0)
 
-                # 6. Cloudinary保存
+                # 6. 保存実行（Cloudinary & Google Sheets）
                 res = cloudinary.uploader.upload(img_bytes, folder="fishing_app")
                 
-                # 7. スプレッドシート保存データ作成
                 save_data = {
                     "filename": res.get("secure_url"), 
                     "datetime": target_dt.strftime("%Y/%m/%d %H:%M"),
@@ -490,13 +486,11 @@ if st.button("🚀 釣果を記録する", use_container_width=True, type="prima
                     "group_id": target_group_id, "観測所": station_info['name'], "釣り人": angler
                 }
 
-                # 8. 更新実行
                 df_main = conn.read(spreadsheet=url)
                 new_row = pd.DataFrame([save_data])
                 updated_df = pd.concat([df_main, new_row], ignore_index=True)
                 conn.update(spreadsheet=url, data=updated_df)
                 
-                # キャッシュクリアと完了通知
                 st.cache_data.clear() 
                 st.success("✅ 記録完了しました！")
                 st.balloons()
@@ -526,6 +520,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
