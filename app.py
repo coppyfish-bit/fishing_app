@@ -194,29 +194,26 @@ def get_tide_details(station_code, dt):
         t2 = hourly[base_dt.hour+1] if base_dt.hour < 23 else hourly[base_dt.hour]
         current_cm = int(round(t1 + (t2 - t1) * (base_dt.minute / 60.0)))
 
-# --- 満潮・干潮時刻の抽出（修正決定版） ---
+# --- 本渡瀬戸(HS.txt) 完全対応版ロジック ---
         event_times = []
         today_ymd = base_dt.strftime('%Y%m%d')
 
-        # 1. 満潮時刻 (Index 80から7文字ずつ4回)
+        # 1. 満潮データの抽出 (80文字目から7文字ずつ4回)
+        # 80-83, 87-90, 94-97, 101-104 をピンポイントで取得
         for i in range(4):
             start = 80 + (i * 7)
-            # 4文字取得し、前後の空白を徹底的に消す
-            t_part = day_data[start : start+4].strip()
-            # 空白を除去した結果、数字が1〜4桁ある場合のみ処理
+            t_part = day_data[start : start+4].replace(" ", "")
             if t_part and t_part.isdigit() and t_part != "9999":
-                # 0埋めして4桁にする (例: "621" -> "0621")
-                clean_time = t_part.zfill(4)
-                ev_time = datetime.strptime(today_ymd + clean_time, '%Y%m%d%H%M')
+                ev_time = datetime.strptime(today_ymd + t_part.zfill(4), '%Y%m%d%H%M')
                 event_times.append({"time": ev_time, "type": "満潮"})
 
-        # 2. 干潮時刻 (Index 108から7文字ずつ4回)
+        # 2. 干潮データの抽出 (108文字目から7文字ずつ4回)
+        # 108-111, 115-118, 122-125, 129-132 をピンポイントで取得
         for i in range(4):
             start = 108 + (i * 7)
-            t_part = day_data[start : start+4].strip()
+            t_part = day_data[start : start+4].replace(" ", "")
             if t_part and t_part.isdigit() and t_part != "9999":
-                clean_time = t_part.zfill(4)
-                ev_time = datetime.strptime(today_ymd + clean_time, '%Y%m%d%H%M')
+                ev_time = datetime.strptime(today_ymd + t_part.zfill(4), '%Y%m%d%H%M')
                 event_times.append({"time": ev_time, "type": "干潮"})
 
         # 重要：ここで時間順に並べ替える
@@ -519,6 +516,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
