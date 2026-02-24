@@ -394,7 +394,8 @@ with tab1:
                 st.error("⚠️ 場所名を入力してください。")
             else:
                 try:
-                        with st.spinner("📊 データ解析中..."):
+with st.spinner("📊 データ解析中..."):
+                        # ここから下は、すべて「with」より右側にズレている必要があります
                         target_dt = st.session_state.target_dt   
                         
                         # 気象・潮汐取得
@@ -403,7 +404,7 @@ with tab1:
                         t_name = get_tide_name(m_age)
                         station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
                         
-                        # --- 潮汐イベント計算の修正版 ---
+                        # --- 潮汐イベント計算 ---
                         all_events = []
                         tide_cm = 0
                         try:
@@ -415,7 +416,7 @@ with tab1:
                                     if delta == 0: 
                                         tide_cm = day_data['cm']
                         except Exception as tide_err:
-                            st.warning(f"潮汐データの取得中に微細なエラーが発生しました: {tide_err}")
+                            st.warning(f"潮汐データの取得でエラー: {tide_err}")
 
                         # 重複排除して時間順にソート
                         all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
@@ -519,6 +520,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
