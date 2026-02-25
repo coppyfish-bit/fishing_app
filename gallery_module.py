@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 def show_gallery_page(df):
-    st.subheader("🖼️ 全釣果ギャラリー（写真をタップすると地図を表示）")
+    st.subheader("🖼️ 全釣果ギャラリー（写真をタップして地図表示）")
     
     if df is None or df.empty:
         st.info("表示するデータがまだありません。")
@@ -11,50 +11,47 @@ def show_gallery_page(df):
     df_gallery = df.copy()
 
     # --- 【最強ソート処理】 ---
-    # 1. 念のため全角数字や記号を半角に、スラッシュをハイフンに統一
     def clean_datetime_str(x):
         if pd.isna(x): return x
         return str(x).replace("/", "-").strip()
 
     df_gallery['datetime_tmp'] = df_gallery['datetime'].apply(clean_datetime_str)
-
-    # 2. 複数のフォーマットを自動推論して変換 (dayfirst=False で日本形式に固定)
-    # これにより「秒あり/なし」「/区切り/-区切り」が混在しても日付として認識されます
     df_gallery['datetime_parsed'] = pd.to_datetime(
         df_gallery['datetime_tmp'], 
         errors='coerce', 
         dayfirst=False
     )
     
-    # 3. 万が一、変換失敗(NaT)したデータがあれば、元の文字列でソートを補完する
-    # 新しいデータが「2026-02-17」なら、文字列比較でも「2026-02-10」より前（降順なら上）に来るはずです
+    # 降順（新しい順）にソート
     df_gallery = df_gallery.sort_values(
         by=['datetime_parsed', 'datetime_tmp'], 
         ascending=[False, False], 
         na_position='last'
     )
-    # -----------------------
 
-    cols = st.columns(3)
-    display_count = 0
+    # --- 【スマホ対応のグリッド表示】 ---
+    # st.columnsの中に直接書くのではなく、1行(Row)ごとにデータを配置します
+    # スマホ等の狭い画面では、1列または2列に自動で調整されるように設定
     
-    for i, (idx, row) in enumerate(df_gallery.iterrows()):
-        img_url = row.get("filename")
-        if not img_url or pd.isna(img_url) or str(img_url).lower() == "nan":
-            continue
-        
-        lat = row.get('lat')
-        lon = row.get('lon')
-        map_url = f"https://www.google.com/maps?q={lat},{lon}" if pd.notnull(lat) and lat != 0 else "#"
+    # PCは3列、スマホを考慮して1列ずつ順番に並べるロジック
+    # display_countを使って、3列の箱に順番に入れていく
+    grid_cols = st.columns(3)
+    
+    # フィルタリング後の有効なデータのみ抽出
+    valid_rows = df_gallery[df_gallery['filename'].notna() & (df_gallery['filename'].astype(str).lower() != "nan")]
 
-        with cols[display_count % 3]:
-            # 表示用日時のフォーマットを「分」までで統一
+    for i, (idx, row) in enumerate(valid_rows.iterrows()):
+        # 順番通りに並べるための魔法：
+        # スマホでの「縦積み」を防ぐため、1つずつ列を選択して配置する
+        with grid_cols[i % 3]:
+            img_url = row.get("filename")
+            lat = row.get('lat')
+            lon = row.get('lon')
+            map_url = f"https://www.google.com/maps?q={lat},{lon}" if pd.notnull(lat) and lat != 0 else "#"
+
+            # 表示用日時のフォーマット
             dt_val = row.get('datetime_parsed')
-            if pd.notnull(dt_val):
-                display_dt = dt_val.strftime('%Y-%m-%d %H:%M')
-            else:
-                # 解析失敗時は元の文字を出す
-                display_dt = str(row.get('datetime', '-'))[:16]
+            display_dt = dt_val.strftime('%Y-%m-%d %H:%M') if pd.notnull(dt_val) else str(row.get('datetime', '-'))[:16]
             
             temp = f"{row.get('気温', '-')}℃"
             wind = f"{row.get('風向', '')}{row.get('風速', '-')}m"
@@ -78,4 +75,3 @@ def show_gallery_page(df):
             </a>
             """
             st.markdown(overlay_html, unsafe_allow_html=True)
-            display_count += 1
