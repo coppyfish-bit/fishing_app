@@ -1,46 +1,6 @@
 import streamlit as st
 import pandas as pd
-
-def show_edit_page(conn, url):
-    st.subheader("🔄 登録情報の修正・削除")
-    
-    # 1. データの読み込み
-    df = conn.read(spreadsheet=url, ttl=300)
-    
-    if df.empty:
-        st.info("データがありません。")
-        return
-
-    # 全体の並びを新しい順（降順）にする
-    df = df.iloc[::-1].copy()
-
-    # --- A. 直近5件の表示（最初から開いた状態） ---
-    st.markdown("### 📸 修正")
-    df_recent = df.head(5)
-    
-    for idx in df_recent.index:
-        label = f"✨ 最新: {df.at[idx, 'datetime']} | {df.at[idx, '場所']} | {df.at[idx, '魚種']}"
-        # expanded=True にすることで、最初から入力欄と写真が見えるようになります
-        with st.expander(label, expanded=True):
-            render_edit_form(df, idx, conn, url)
-
-    st.markdown("---")
-
-    # --- B. 5件より前のデータをリストから選択 ---
-    st.markdown("### 🔍 過去のデータを検索・修正")
-    if len(df) > 5:
-        df_old = df.iloc[5:].copy()
-        df_old['search_label'] = df_old['datetime'].astype(str) + " | " + df_old['場所'].astype(str) + " | " + df_old['魚種'].astype(str)
-        
-        selected_label = st.selectbox("修正したい過去のデータを選択してください", df_old['search_label'], index=None, placeholder="項目を選択...")
-        
-        if selected_label:
-            target_idx = df_old[df_old['search_label'] == selected_label].index[0]
-            with st.container(border=True):
-                st.info(f"選択中のデータ: {selected_label}")
-                render_edit_form(df, target_idx, conn, url)
-    else:
-        st.caption("5件より前のデータはありません。")
+from datetime import datetime
 
 # --- 共通の修正フォーム関数 ---
 def render_edit_form(df, idx, conn, url):
@@ -48,6 +8,38 @@ def render_edit_form(df, idx, conn, url):
     if 'filename' in df.columns and df.at[idx, 'filename']:
         st.image(df.at[idx, 'filename'], width=400)
     
+    # --- 🔄 気象・潮汐の再取得機能 ---
+    # フォームの外に配置します（APIを叩いて値を上書きするため）
+    if st.button("🌡️ 気象・潮汐情報を再取得して自動入力", key=f"recalc_{idx}"):
+        try:
+            with st.spinner("最新データを取得中..."):
+                # 文字列のdatetimeをオブジェクトに変換
+                dt_obj = datetime.strptime(df.at[idx, 'datetime'], '%Y/%m/%d %H:%M')
+                lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
+                
+                # 既存の取得関数を利用（これらがapp.py内で定義されている前提）
+                from app import get_weather_data_openmeteo, find_nearest_tide_station, get_tide_details
+                
+                # 気象データ
+                temp, wind_s, wind_d, rain = get_weather_data_openmeteo(lat, lon, dt_obj)
+                # 潮汐データ
+                station = find_nearest_tide_station(lat, lon)
+                tide_res = get_tide_details(station['code'], dt_obj)
+                
+                # DataFrameの値を直接書き換える（この後のformのvalueに反映される）
+                df.at[idx, '気温'] = temp
+                df.at[idx, '風速'] = wind_s
+                df.at[idx, '風向'] = wind_d
+                if tide_res:
+                    df.at[idx, '潮位_cm'] = tide_res['cm']
+                    # ここで再計算されたフェーズを自動で入れたい場合は以下も
+                    # df.at[idx, '潮位フェーズ'] = calculated_phase 
+                
+                st.toast("気象情報を更新しました。下の「更新」ボタンで保存してください。")
+        except Exception as e:
+            st.error(f"再取得に失敗しました: {e}")
+
+    # --- 編集フォーム ---
     with st.form(key=f"form_{idx}"):
         st.write("📝 **基本情報**")
         col1, col2 = st.columns(2)
@@ -56,10 +48,14 @@ def render_edit_form(df, idx, conn, url):
         new_place = col1.text_input("場所", value=df.at[idx, '場所'], key=f"p_{idx}")
         
         st.write("🌤️ **環境データ**")
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4) # カラムを4つに増やしてフェーズを追加
         new_temp = c1.number_input("気温(℃)", value=float(df.at[idx, '気温']), key=f"t_{idx}")
         new_wind = c2.number_input("風速(m)", value=float(df.at[idx, '風速']), key=f"w_{idx}")
         new_tide = c3.number_input("潮位(cm)", value=int(df.at[idx, '潮位_cm']), key=f"td_{idx}")
+        
+        # 潮位フェーズの手入力欄（既存データがあればそれを、なければ空文字を初期値に）
+        current_phase = df.at[idx, '潮位フェーズ'] if '潮位フェーズ' in df.columns else ""
+        new_phase = c4.text_input("潮汐フェーズ", value=current_phase, key=f"ph_{idx}", placeholder="例: 上げ3分")
         
         new_memo = st.text_area("備考", value=df.at[idx, '備考'] if pd.notna(df.at[idx, '備考']) else "", key=f"m_{idx}")
 
@@ -71,10 +67,11 @@ def render_edit_form(df, idx, conn, url):
             df.at[idx, '気温'] = new_temp
             df.at[idx, '風速'] = new_wind
             df.at[idx, '潮位_cm'] = new_tide
-            df.at[idx, '備考'] = new_memo
-            # 保存時に一時的な列を削除
+            df.at[idx, '潮位フェーズ'] = new_phase # 追加
+            
+            # 保存処理
             save_df = df.drop(columns=['search_label']) if 'search_label' in df.columns else df
-            conn.update(spreadsheet=url, data=save_df.iloc[::-1]) # スプレッドシートの元の順序（昇順）に戻して保存
+            conn.update(spreadsheet=url, data=save_df.iloc[::-1]) 
             st.success("更新完了！")
             st.rerun()
 
@@ -84,5 +81,3 @@ def render_edit_form(df, idx, conn, url):
             conn.update(spreadsheet=url, data=save_df.iloc[::-1])
             st.warning("削除しました。")
             st.rerun()
-
-
