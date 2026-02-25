@@ -95,6 +95,7 @@ def get_realtime_weather():
     return data
 
 def show_ai_chat_section(md):
+    st.write("デバッグ: Secretsにあるキー一覧 ->", list(st.secrets.keys()))
     """AIチャットセクション"""
     st.divider()
     st.subheader("💬 シーバス攻略AIに相談")
@@ -167,3 +168,4 @@ def show_matching_page(df):
 
     # AIチャットセクションの表示
     show_ai_chat_section(md)
+
