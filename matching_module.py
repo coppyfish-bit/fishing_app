@@ -117,7 +117,7 @@ def show_ai_chat_section(md):
 
     # API設定
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('models/gemini-1.5-flash')
 
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
@@ -185,6 +185,7 @@ def show_matching_page(df):
 
     # AIチャットセクションの表示
     show_ai_chat_section(md)
+
 
 
 
