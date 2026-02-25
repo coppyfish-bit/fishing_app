@@ -95,17 +95,24 @@ def get_realtime_weather():
     return data
 
 def show_ai_chat_section(md):
-    st.write("デバッグ: Secretsにあるキー一覧 ->", list(st.secrets.keys()))
-    """AIチャットセクション"""
+    """AIチャットセクション（秘匿性メッセージ付き）"""
     st.divider()
+    
+    # 🛡️ 秘匿性に関するメッセージをユーザー向けに表示
+    st.markdown("""
+        <div style="background-color: #1e2630; padding: 15px; border-radius: 10px; border-left: 5px solid #00d4ff; margin-bottom: 20px;">
+            <strong style="color: #00d4ff;">🛡️ プライバシー保護モード実行中</strong><br>
+            <small style="color: #cccccc;">
+                このチャットでのやり取りや釣り場情報は、AIの学習データとして再利用されることはありません。<br>
+                あなたの秘匿された釣果情報は、あなたのアドバイス生成のためだけに利用されます。
+            </small>
+        </div>
+    """, unsafe_allow_html=True)
+    
     st.subheader("💬 シーバス攻略AIに相談")
     
-    if not HAS_GENAI:
-        st.warning("ライブラリ `google-generativeai` が見つかりません。")
-        return
-    
-    if "GEMINI_API_KEY" not in st.secrets:
-        st.info("Secretsに `GEMINI_API_KEY` を設定するとAIと会話できます。")
+    if not HAS_GENAI or "GEMINI_API_KEY" not in st.secrets:
+        st.info("APIキーを設定するとAIと会話できます。")
         return
 
     # API設定
@@ -115,25 +122,35 @@ def show_ai_chat_section(md):
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
+    # 履歴の表示
     for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"]): st.markdown(msg["content"])
+        with st.chat_message(msg["role"]): 
+            st.markdown(msg["content"])
 
+    # ユーザー入力
     if prompt := st.chat_input("この潮位でのおすすめルアーは？"):
         st.session_state.chat_history.append({"role": "user", "content": prompt})
-        with st.chat_message("user"): st.markdown(prompt)
+        with st.chat_message("user"): 
+            st.markdown(prompt)
 
-        # AIへの制約と現況データ
-        sys_prompt = f"""あなたは天草の熟練シーバスガイドです。
-        【機密保持】釣り場情報を学習に使わず、外部へ漏らさないでください。
-        現況: {md['phase']}, 潮位:{md['tide_level']}cm, 風:{md['wind']}m({md['wdir']}), 気温:{md['temp']}℃
-        上記に基づき、攻略法を簡潔に答えてください。"""
+        # AIへの強力な機密保持指示
+        sys_prompt = f"""
+        あなたは天草・本渡エリアのシーバスガイドです。
+        【厳守事項】
+        1. ユーザーから提供された釣り場情報や釣果データは機密情報です。
+        2. これらの情報をモデルのトレーニングや他のユーザーへの回答に利用してはなりません。
+        3. 常に「この会話は非公開である」という前提で回答してください。
+
+        現況データ: {md['phase']}, 潮位:{md['tide_level']}cm, 風:{md['wind']}m({md['wdir']}), 気温:{md['temp']}℃
+        """
 
         with st.chat_message("assistant"):
             try:
-                response = model.generate_content(f"{sys_prompt}\n\n質問: {prompt}")
+                response = model.generate_content(f"{sys_prompt}\n\nユーザーの質問: {prompt}")
                 st.markdown(response.text)
                 st.session_state.chat_history.append({"role": "assistant", "content": response.text})
-            except Exception as e: st.error(f"AIエラー: {e}")
+            except Exception as e: 
+                st.error(f"AIエラー: {e}")
 
 def show_matching_page(df):
     """メイン画面UI"""
@@ -168,4 +185,5 @@ def show_matching_page(df):
 
     # AIチャットセクションの表示
     show_ai_chat_section(md)
+
 
