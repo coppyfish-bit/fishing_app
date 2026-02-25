@@ -116,16 +116,20 @@ def show_ai_chat_section(md):
         return
 
     # API設定
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('models/gemini-1.5-flash')
+    model = None
+    model_names = ['gemini-1.5-flash', 'models/gemini-1.5-flash',]
 
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-
-    # 履歴の表示
-    for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"]): 
-            st.markdown(msg["content"])
+   for m_name in model_names:
+        try:
+            model = genai.GenerativeModel(m_name)
+            # 試しに空のリクエストを送って、本当に使えるかテスト（任意）
+            break 
+        except:
+            continue
+            
+    if not model:
+        st.error("利用可能なAIモデルが見つかりません。")
+        return
 
     # ユーザー入力
     if prompt := st.chat_input("この潮位でのおすすめルアーは？"):
@@ -185,6 +189,7 @@ def show_matching_page(df):
 
     # AIチャットセクションの表示
     show_ai_chat_section(md)
+
 
 
 
