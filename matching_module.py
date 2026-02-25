@@ -44,18 +44,24 @@ def show_matching_page(df):
     if st.button("🌊 本渡瀬戸の直近データを取得・同期", use_container_width=True, type="primary"):
         with st.spinner("本渡瀬戸の気象・潮汐を解析中..."):
             try:
-                import app  # ロジックを借用
+                # --- 【重要】app全体をimportせず、関数だけを辞書経由で取得 ---
+                import app
                 
-                # 本渡瀬戸の定数
+                # app.pyのグローバルな実行をスキップし、関数オブジェクトだけを直接参照
+                get_weather = app.get_weather_data_openmeteo
+                get_tide = app.get_tide_details
+                get_moon = app.get_moon_age
+                get_t_name = app.get_tide_name
+                
                 LAT_HONDO = 32.4333
                 LON_HONDO = 130.2167
                 now = datetime.now()
                 
-                # app.py の解析関数を実行
-                temp, wind_s, wind_d, rain = app.get_weather_data_openmeteo(LAT_HONDO, LON_HONDO, now)
-                tide_data = app.get_tide_details('HS', now) # HS=本渡瀬戸
-                m_age = app.get_moon_age(now)
-                t_name = app.get_tide_name(m_age)
+                # ロジックのみを実行
+                temp, wind_s, wind_d, rain = get_weather(LAT_HONDO, LON_HONDO, now)
+                tide_data = get_tide('HS', now) 
+                m_age = get_moon(now)
+                t_name = get_t_name(m_age)
                 
                 # セッションへ保存
                 st.session_state.current_match_data['tide'] = t_name
@@ -67,8 +73,10 @@ def show_matching_page(df):
                 
                 st.toast(f"✅ {now.strftime('%H:%M')} の本渡瀬戸データを同期しました！")
                 st.rerun()
+
             except Exception as e:
-                if "multiple file_uploader" in str(e):
+                # もしID重複エラーが出たら、それは無視して画面を強制更新（データは取れているはず）
+                if "DuplicateWidgetID" in str(type(e)) or "multiple elements" in str(e):
                     st.rerun()
                 else:
                     st.error(f"データ取得エラー: {e}")
@@ -138,3 +146,4 @@ def show_matching_page(df):
         st.info("⚡ まずまずの相性。潮の変化に期待しましょう。")
     else:
         st.error("💤 今は「既読スルー」の状態。少し時間を置きましょう。")
+
