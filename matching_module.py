@@ -5,15 +5,12 @@ from datetime import datetime, timedelta
 import requests
 
 def get_jma_tide_hs():
-    """
-    気象庁フルフォーマットを解析。
-    app.pyのロジックをベースに、HS(本渡)地点に特化して現在潮位とフェーズを算出。
-    """
+    """気象庁136colフォーマット解析 (HS地点)"""
     now = datetime.now()
     station_code = "HS"
-    url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/pre/txt/{now.year}/{station_code}.txt"
+    url = f"https://www.data.jma.go.jp/gmd/kaiyou/data/db/tide/pre/txt/{now.year}/{station_code}.txt"
     
-    # フォールバック
+    # 失敗時のデフォルト値
     default_res = (150, "上げ5分")
     
     try:
@@ -26,80 +23,90 @@ def get_jma_tide_hs():
         day_data = None
         for line in lines:
             if len(line) < 80: continue
-            # 年月日(72-78)と地点コード(78-80)で照合
             if line[72:78] == target_ymd and line[78:80] == station_code:
                 day_data = line
                 break
         
         if not day_data: return default_res
 
-        # 1. 毎時潮位の取得と線形補間 (app.pyのロジック準拠)
-        hourly = []
-        for i in range(24):
-            val = day_data[i*3 : (i+1)*3].strip()
-            hourly.append(int(val))
-        
+        # 1. 毎時潮位と線形補間 (app.py準拠)
+        hourly = [int(day_data[i*3 : (i+1)*3].strip()) for i in range(24)]
         t1 = hourly[now.hour]
         t2 = hourly[now.hour+1] if now.hour < 23 else hourly[now.hour]
         current_cm = int(round(t1 + (t2 - t1) * (now.minute / 60.0)))
 
-        # 2. 満潮・干潮イベントの抽出 (80カラム~/108カラム~)
-        event_times = []
+        # 2. 満潮・干潮イベント抽出
+        events = []
         today_str = now.strftime('%Y%m%d')
-        
-        # 満潮(4回)
         for i in range(4):
-            start = 80 + (i * 7)
-            t_part = day_data[start : start+4].strip()
-            if t_part and t_part.isdigit() and t_part != "9999":
-                ev_time = datetime.strptime(today_str + t_part.zfill(4), '%Y%m%d%H%M')
-                event_times.append({"time": ev_time, "type": "満潮"})
+            h_t = day_data[80+i*7 : 84+i*7].strip()
+            if h_t and h_t != "9999":
+                events.append({"time": datetime.strptime(today_str + h_t.zfill(4), '%Y%m%d%H%M'), "type": "満潮"})
+            l_t = day_data[108+i*7 : 112+i*7].strip()
+            if l_t and l_t != "9999":
+                events.append({"time": datetime.strptime(today_str + l_t.zfill(4), '%Y%m%d%H%M'), "type": "干潮"})
         
-        # 干潮(4回)
-        for i in range(4):
-            start = 108 + (i * 7)
-            t_part = day_data[start : start+4].strip()
-            if t_part and t_part.isdigit() and t_part != "9999":
-                ev_time = datetime.strptime(today_str + t_part.zfill(4), '%Y%m%d%H%M')
-                event_times.append({"time": ev_time, "type": "干潮"})
-        
-        event_times = sorted(event_times, key=lambda x: x['time'])
+        events = sorted(events, key=lambda x: x['time'])
 
-        # 3. フェーズ計算 (app.pyのロジック準拠)
+        # 3. フェーズ判定
         phase_text = "不明"
-        prev_ev = next((e for e in reversed(event_times) if e['time'] <= now), None)
-        next_ev = next((e for e in event_times if e['time'] > now), None)
+        prev_ev = next((e for e in reversed(events) if e['time'] <= now), None)
+        next_ev = next((e for e in events if e['time'] > now), None)
 
         if prev_ev and next_ev:
             duration = (next_ev['time'] - prev_ev['time']).total_seconds()
             elapsed = (now - prev_ev['time']).total_seconds()
             if duration > 0:
-                step = max(1, min(9, int((elapsed / duration) * 10)))
                 p_type = "上げ" if prev_ev['type'] == "干潮" else "下げ"
+                step = max(1, min(9, int((elapsed / duration) * 10)))
                 phase_text = f"{p_type}{step}分"
-                
-                # 頂点付近の補正
+                # 端の処理
                 if elapsed / duration < 0.1: phase_text = prev_ev['type']
                 elif elapsed / duration > 0.9: phase_text = next_ev['type']
 
         return current_cm, phase_text
-
-    except Exception as e:
+    except:
         return default_res
 
 def get_realtime_weather():
-    """潮汐(HS)と気象(Open-Meteo)を統合"""
-    tide_level, phase = get_jma_tide_hs()
+    """気象データ取得 (Open-Meteo Forecast API)"""
     LAT, LON = 32.4333, 130.2167 # 本渡瀬戸
+    tide_level, phase = get_jma_tide_hs()
     
-    # ... (気象取得ロジックは以前のものを維持) ...
-    # ※ app.py の get_weather_data_openmeteo と同等の処理を行います
-    data = {'tide_level': tide_level, 'phase': phase, 'temp': 15.0, 'wind': 3.0, 'wdir': "北", 'precip_48h': 0.0}
+    data = {
+        'tide_level': tide_level, 'phase': phase, 'temp': 15.0, 
+        'wind': 3.0, 'wdir': "北", 'precip_48h': 0.0, 'tide': "中潮"
+    }
+    
     try:
-        url = "https://api.open-meteo.com/v1/forecast?latitude={LAT}&longitude={LON}&current_weather=true&hourly=precipitation&past_days=2&timezone=Asia%2FTokyo"
-        # 実際にはここにリクエスト処理が入ります
-        pass 
-    except: pass
+        # 過去3日分を含めて現在・今後の予報を取得
+        w_url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": LAT, "longitude": LON,
+            "current_weather": "true",
+            "hourly": "precipitation",
+            "past_days": 2,
+            "timezone": "Asia/Tokyo"
+        }
+        res = requests.get(w_url, params=params, timeout=10).json()
+        
+        if 'current_weather' in res:
+            cw = res['current_weather']
+            data['temp'] = float(cw['temperature'])
+            data['wind'] = round(float(cw['windspeed']) / 3.6, 1) # km/h -> m/s
+            
+            # 風向変換
+            dirs = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
+            data['wdir'] = dirs[int((cw['winddirection'] + 11.25) / 22.5) % 16]
+            
+            # 過去48時間の合計降水量
+            if 'hourly' in res:
+                now_hour = datetime.now().hour + 48 # past_days=2 なので 48時間分が過去
+                precip_list = res['hourly']['precipitation']
+                data['precip_48h'] = round(sum(precip_list[now_hour-48 : now_hour+1]), 1)
+    except Exception as e:
+        st.error(f"気象データ取得エラー: {e}")
+        
     return data
 
 def show_matching_page(df):
@@ -112,30 +119,31 @@ def show_matching_page(df):
         </style>
     """, unsafe_allow_html=True)
 
-    st.title("🏹 SeaBass Match AI v5.1")
-    st.caption("気象庁(HS本渡) 136カラム解析 & 独自優先順位アルゴリズム")
+    st.title("🏹 SeaBass Match AI v5.6")
+    st.caption("気象庁(HS本渡) & Open-Meteo 同期モード")
 
     if 'm_data' not in st.session_state:
         st.session_state.m_data = get_realtime_weather()
 
     st.markdown("<div class='input-card'>", unsafe_allow_html=True)
-    if st.button("🔄 本渡(HS)の最新データを同期"):
+    if st.button("🔄 最新の潮汐・気象を同期"):
         st.session_state.m_data = get_realtime_weather()
         st.rerun()
 
     md = st.session_state.m_data
+    
     c1, c2 = st.columns(2)
     with c1:
         tide_in = st.selectbox("潮名", ["大潮", "中潮", "小潮", "長潮", "若潮"], index=1)
         level_in = st.number_input("潮位 (cm)", value=int(md.get('tide_level', 150)))
         temp_in = st.number_input("気温 (℃)", value=float(md.get('temp', 15.0)))
     with c2:
-        p_list = ["上げ1分","上げ3分","上げ5分","上げ7分","上げ9分","満潮","下げ1分","下げ3分","下げ5分","下げ7分","下げ9分","干潮"]
+        p_list = ["上げ1分","上げ2分","上げ3分","上げ4分","上げ5分","上げ6分","上げ7分","上げ8分","上げ9分","満潮","下げ1分","下げ2分","下げ3分","下げ4分","下げ5分","下げ6分","下げ7分","下げ8分","下げ9分","干潮"]
         cur_p = md.get('phase', '上げ5分')
-        p_idx = p_list.index(cur_p) if cur_p in p_list else 2
+        p_idx = p_list.index(cur_p) if cur_p in p_list else 4
         phase_in = st.selectbox("潮位フェーズ", p_list, index=p_idx)
-        wdir_in = st.selectbox("風向", ["北", "北東", "東", "南東", "南", "南西", "西", "北西"], 
-                               index=["北", "北東", "東", "南東", "南", "南西", "西", "北西"].index(md.get('wdir', '北')))
+        wdir_in = st.selectbox("風向", ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"], 
+                               index=0) # 簡易的に北をデフォルトに
         wind_in = st.number_input("風速 (m/s)", value=float(md.get('wind', 3.0)))
     
     precip_in = st.number_input("48h降水量合計 (mm)", value=float(md.get('precip_48h', 0.0)))
@@ -149,14 +157,14 @@ def show_matching_page(df):
                 p_df = df[df['場所'] == place]
                 success_df = p_df[~p_df['is_bouzu']]
                 if not success_df.empty:
-                    # スコア配点: フェーズ(35), 潮位(25), 風向(15), 気温(10), 他(15)
+                    # 優先順位: 1.フェーズ(35), 2.潮位(25), 3.風向(15), 4.気温(10), 5.他(15)
                     s_phase = 35 if not success_df[success_df['潮位フェーズ'] == phase_in].empty else 0
                     s_level = 25 if not success_df[abs(success_df.get('潮位_cm', 0) - level_in) <= 15].empty else 0
                     s_wdir = 15 if not success_df[success_df['風向'] == wdir_in].empty else 0
                     s_temp = 10 if not success_df[abs(success_df['気温'] - temp_in) <= 3].empty else 0
                     s_others = (5 if not success_df[success_df['潮名'] == tide_in].empty else 0) + \
                                (5 if not success_df[abs(success_df['風速'] - wind_in) <= 2].empty else 0) + \
-                               (5 if '48時間降水量' in success_df.columns and not success_df[abs(success_df['48時間降水量'] - precip_in) <= 10].empty else 0)
+                               (5 if '降水量' in success_df.columns and not success_df[abs(success_df['降水量'] - precip_in) <= 10].empty else 0)
                     
                     total = min(s_phase + s_level + s_wdir + s_temp + s_others, 99)
                     lure_mode = success_df['ルアー'].dropna().mode()
@@ -164,5 +172,4 @@ def show_matching_page(df):
             
             results = sorted(results, key=lambda x: x['score'], reverse=True)
             for i, res in enumerate(results):
-                st.markdown(f"<div class='recommend-card'><div class='score-badge'>{res['score']}%</div><b>{i+1}位: {res['place']}</b><br>実績: {res['hits']}件 / 推奨: {res['lure']}</div>", unsafe_allow_html=True)
-
+                st.markdown(f"<div class='recommend-card'><div class='score-badge'>{res['score']}%</div><b>{i+1}位: {res['place']}</b><br>過去実績: {res['hits']}件 / 推奨: {res['lure']}</div>", unsafe_allow_html=True)
