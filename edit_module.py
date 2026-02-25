@@ -3,35 +3,36 @@ def render_edit_form(df, idx, conn, url):
     if 'filename' in df.columns and df.at[idx, 'filename']:
         st.image(df.at[idx, 'filename'], width=400)
     
-    # --- 🔄 【ここが再取得ボタン】 ---
-    # 視認性を高めるため、フォームの直前に目立つ形で配置
+# --- 🔄 【再取得ボタン】 ---
     st.markdown("---")
     st.write("💡 **データが正しくない場合はこちら**")
     if st.button(f"🔄 気象・潮汐データを再取得する", key=f"recalc_btn_{idx}", use_container_width=True):
         try:
-            with st.spinner("気象庁とOpen-Meteoから最新データを取得中..."):
+            with st.spinner("最新データを取得中..."):
                 # 文字列のdatetimeをオブジェクトに変換
                 dt_obj = datetime.strptime(df.at[idx, 'datetime'], '%Y/%m/%d %H:%M')
                 lat = float(df.at[idx, 'lat'])
                 lon = float(df.at[idx, 'lon'])
                 
-                # app.pyから関数を読み込む（app.pyと同じファイルなら不要ですが、安全のためここで定義）
-                # ※ここでお使いの関数名に合わせてください
-                from app import get_weather_data_openmeteo, find_nearest_tide_station, get_tide_details
+                # --- 【重要】ここで直接 app.py の関数をインポートせず、
+                # もし可能なら app.py 側でこれらの関数を「共通モジュール」に切り出すのがベストですが、
+                # 暫定処置として、ボタンが押された時だけ読み込みを試みます。
+                import app 
                 
-                temp, wind_s, wind_d, rain = get_weather_data_openmeteo(lat, lon, dt_obj)
-                station = find_nearest_tide_station(lat, lon)
-                tide_res = get_tide_details(station['code'], dt_obj)
+                # app.get_weather_data_openmeteo のように呼び出す
+                temp, wind_s, wind_d, rain = app.get_weather_data_openmeteo(lat, lon, dt_obj)
+                station = app.find_nearest_tide_station(lat, lon)
+                tide_res = app.get_tide_details(station['code'], dt_obj)
                 
-                # DataFrameの内容をメモリ上で書き換える
+                # 反映
                 df.at[idx, '気温'] = temp
                 df.at[idx, '風速'] = wind_s
                 if tide_res:
                     df.at[idx, '潮位_cm'] = tide_res['cm']
                 
-                st.toast("✅ 最新データを取得しました！ 下のフォームで確認して保存してください。")
+                st.toast("✅ 最新データを取得しました！")
         except Exception as e:
-            st.error(f"再取得に失敗しました: {e}")
+            st.error(f"再取得に失敗しました。app.py内の関数を読み込めません。: {e}")
     st.markdown("---")
 
     # 2. 編集フォーム
@@ -78,3 +79,4 @@ def render_edit_form(df, idx, conn, url):
             conn.update(spreadsheet=url, data=save_df.iloc[::-1])
             st.warning("削除が完了しました。")
             st.rerun()
+
