@@ -7,7 +7,7 @@ import requests
 def get_jma_tide_hs():
     """
     気象庁の 136カラム固定長データを解析。
-    日付の空白位置に依存しない数値判定ロジックに修正。
+    日付判定を「数値抽出」から「文字列検索」に切り替え、不一致を解消。
     """
     now = datetime.now()
     url = f"https://www.data.jma.go.jp/gmd/kaiyou/data/db/tide/suisan/txt/{now.year}/HS.txt"
@@ -17,29 +17,29 @@ def get_jma_tide_hs():
         res.raise_for_status()
         lines = res.text.splitlines()
         
-        target_y = int(now.strftime('%y'))
-        target_m = now.month
-        target_d = now.day
+        # 判定用：今日の「日」を2桁で用意（25日なら '25'）
+        day_str = now.strftime('%d').replace('0', ' ') if now.day < 10 else now.strftime('%d')
+        month_val = now.month
         
         day_line = None
         for line in lines:
-            if len(line) < 80: continue
+            if len(line) < 100: continue
+            
+            # 地点コードが HS かつ、76-77桁目が「月」、78-79桁目が「日」であるかを確認
             try:
-                # 文字位置ではなく、中身の数値を抽出して比較
-                line_y = int(line[72:75].strip())
-                line_m = int(line[75:77].strip())
-                line_d = int(line[77:79].strip())
+                l_month = int(line[75:77].strip())
+                l_day = int(line[77:79].strip())
                 
-                if line_y == target_y and line_m == target_m and line_d == target_d:
+                if l_month == month_val and l_day == now.day:
                     day_line = line
                     break
             except:
                 continue
         
         if not day_line:
-            return 150, "日付不一致"
+            return 150, "行特定失敗"
 
-        # 1. 毎時潮位 (3文字ずつ24時間分)
+        # 1. 毎時潮位 (1-72桁)
         hourly = []
         for i in range(24):
             val = day_line[i*3 : (i+1)*3].strip()
@@ -57,7 +57,6 @@ def get_jma_tide_hs():
                 p = start_pos + (i * 7)
                 t_str = day_line[p : p+4].strip()
                 if t_str and t_str != "9999":
-                    # 4桁(HHMM)に補完してパース
                     ev_t = datetime.strptime(today_str + t_str.zfill(4), '%Y%m%d%H%M')
                     events.append({"time": ev_t, "type": e_type})
         
@@ -79,7 +78,7 @@ def get_jma_tide_hs():
             
         return current_cm, phase
     except Exception as e:
-        return 150, f"エラー:{str(e)[:10]}"
+        return 150, f"Error:{str(e)[:5]}"
 
 def get_realtime_weather():
     """気象と潮汐を統合取得"""
@@ -113,7 +112,7 @@ def get_realtime_weather():
 
 def show_matching_page(df):
     """メイン診断UI"""
-    st.title("🏹 SeaBass Match AI v6.6")
+    st.title("🏹 SeaBass Match AI v6.7")
 
     if 'm_data' not in st.session_state:
         st.session_state.m_data = get_realtime_weather()
@@ -124,6 +123,7 @@ def show_matching_page(df):
 
     md = st.session_state.m_data
 
+    # UI表示
     st.info(f"現在の本渡瀬戸: 【{md['phase']}】 {md['tide_level']}cm / {md['temp']}℃ / {md['wind']}m ({md['wdir']})")
 
     with st.expander("条件を微調整して診断", expanded=True):
