@@ -16,7 +16,7 @@ def show_edit_page(conn, url):
     df = df.iloc[::-1].copy()
 
     # --- A. 直近5件の表示 ---
-    st.markdown("### 📸 修正")
+    st.markdown("### 📸 最近の記録を修正")
     df_recent = df.head(5)
     
     for idx in df_recent.index:
@@ -88,36 +88,47 @@ def render_edit_form(df, idx, conn, url):
         new_wind = c2.number_input("風速(m)", value=float(df.at[idx, '風速']), key=f"w_{idx}")
         new_tide = c3.number_input("潮位(cm)", value=int(df.at[idx, '潮位_cm']), key=f"td_{idx}")
         
-        # 潮位フェーズの入力欄を追加
+        # 潮位フェーズの入力欄
         current_phase = df.at[idx, '潮位フェーズ'] if '潮位フェーズ' in df.columns and pd.notna(df.at[idx, '潮位フェーズ']) else ""
         new_phase = c4.text_input("潮位フェーズ", value=current_phase, key=f"ph_{idx}", placeholder="例: 上げ3分")
         
         new_memo = st.text_area("備考", value=df.at[idx, '備考'] if pd.notna(df.at[idx, '備考']) else "", key=f"m_{idx}")
 
+        st.markdown("---")
+        # --- 削除の安全装置 ---
+        st.write("⚠️ **データの削除**")
+        confirm_delete = st.checkbox("このデータを完全に削除してもよろしいですか？", key=f"conf_{idx}")
+
         c_sub, c_del = st.columns(2)
-        if c_sub.form_submit_button("✅ 更新", use_container_width=True):
+        
+        # 更新ボタン
+        if c_sub.form_submit_button("✅ 更新保存", use_container_width=True):
             df.at[idx, '魚種'] = new_fish
             df.at[idx, '全長_cm'] = new_len
             df.at[idx, '場所'] = new_place
             df.at[idx, '気温'] = new_temp
             df.at[idx, '風速'] = new_wind
             df.at[idx, '潮位_cm'] = new_tide
-            df.at[idx, '潮位フェーズ'] = new_phase # 追加
+            df.at[idx, '潮位フェーズ'] = new_phase
             df.at[idx, '備考'] = new_memo
             
-            # 保存時に一時的な列を削除
-            save_df = df.drop(columns=['search_label']) if 'search_label' in df.columns else df
-            conn.update(spreadsheet=url, data=save_df.iloc[::-1]) # スプレッドシートの元の順序（昇順）に戻して保存
-            
-            st.cache_data.clear() # キャッシュを消して即時反映
-            st.success("更新完了！")
-            st.rerun()
-
-        if c_del.form_submit_button("🗑️ 削除", type="primary", use_container_width=True):
-            df = df.drop(idx)
+            # 保存処理
             save_df = df.drop(columns=['search_label']) if 'search_label' in df.columns else df
             conn.update(spreadsheet=url, data=save_df.iloc[::-1])
             
             st.cache_data.clear()
-            st.warning("削除しました。")
+            st.success("更新完了しました！")
             st.rerun()
+
+        # 削除ボタン（確認チェックボックスがONの時のみ動作）
+        if c_del.form_submit_button("🗑️ 削除実行", type="primary", use_container_width=True):
+            if confirm_delete:
+                df = df.drop(idx)
+                save_df = df.drop(columns=['search_label']) if 'search_label' in df.columns else df
+                conn.update(spreadsheet=url, data=save_df.iloc[::-1])
+                
+                st.cache_data.clear()
+                st.warning("データを削除しました。")
+                st.rerun()
+            else:
+                st.error("削除するには、上のチェックボックスをONにしてください。")
