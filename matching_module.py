@@ -103,7 +103,7 @@ def show_matching_page(df):
     st.title("🏹 SeaBass Match AI v7.5")
 
     # 初回または更新ボタンでデータ取得
-    if 'm_data' not in st.session_state or st.button("🔄 最新の海況を同期"):
+    if 'm_data' not in st.session_state or st.button("🔄 最新の海況を同期(本渡瀬戸)"):
         with st.spinner("潮汐・気象データを取得中..."):
             st.session_state.m_data = get_realtime_weather()
         st.rerun()
@@ -162,3 +162,4 @@ def show_matching_page(df):
                     <small>推奨ルアー: {res['lure']} / 過去実績: {res['count']}件</small>
                 </div>
                 """, unsafe_allow_html=True)
+
