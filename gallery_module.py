@@ -96,7 +96,7 @@ def show_gallery_page(df):
     df_gallery['datetime_parsed'] = pd.to_datetime(df_gallery['datetime_tmp'], errors='coerce')
 
     # --- 3. 検索パネル ---
-    with st.expander("🔍 FILTERING RECORDS", expanded=False):
+    with st.expander("🔍 Filter", expanded=False):
         col_f, col_p = st.columns(2)
         fish_list = ["すべて"] + sorted(df_gallery['魚種'].unique().tolist())
         selected_fish = col_f.selectbox("🐟 SPECIES", fish_list)
@@ -158,3 +158,4 @@ def show_gallery_page(df):
                 </a>
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
+
