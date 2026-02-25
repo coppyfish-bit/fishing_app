@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime, date
 
 def show_gallery_page(df):
     st.subheader("🖼️ 全釣果ギャラリー")
@@ -10,12 +11,7 @@ def show_gallery_page(df):
 
     df_gallery = df.copy()
 
-    # --- カラム名の存在確認 ---
-    if 'filename' not in df_gallery.columns:
-        st.error("スプレッドシートに 'filename' 列が見つかりません。")
-        return
-
-    # --- 1. 日時のソート処理 ---
+    # --- 1. 前処理（ソート用日時の作成） ---
     def clean_datetime_str(x):
         if pd.isna(x): return x
         return str(x).replace("/", "-").strip()
@@ -26,7 +22,47 @@ def show_gallery_page(df):
         errors='coerce', 
         dayfirst=False
     )
+
+    # --- 2. サイドバー・フィルター機能 ---
+    st.sidebar.markdown("### 🔍 釣果を絞り込む")
+
+    # 魚種で絞り込み
+    fish_list = ["すべて"] + sorted(df_gallery['魚種'].unique().tolist())
+    selected_fish = st.sidebar.selectbox("魚種を選択", fish_list)
+
+    # 場所で絞り込み
+    place_list = ["すべて"] + sorted(df_gallery['場所'].unique().tolist())
+    selected_place = st.sidebar.selectbox("場所を選択", place_list)
+
+    # 期間で絞り込み
+    min_date = df_gallery['datetime_parsed'].min().date() if not df_gallery['datetime_parsed'].isna().all() else date(2024, 1, 1)
+    max_date = date.today()
     
+    date_range = st.sidebar.date_input(
+        "期間を選択",
+        value=(min_date, max_date),
+        min_value=min_date,
+        max_value=max_date
+    )
+
+    # --- 3. フィルタリングの実行 ---
+    # 魚種
+    if selected_fish != "すべて":
+        df_gallery = df_gallery[df_gallery['魚種'] == selected_fish]
+    
+    # 場所
+    if selected_place != "すべて":
+        df_gallery = df_gallery[df_gallery['場所'] == selected_place]
+    
+    # 期間（date_rangeが開始と終了のペアである場合）
+    if isinstance(date_range, tuple) and len(date_range) == 2:
+        start_date, end_date = date_range
+        df_gallery = df_gallery[
+            (df_gallery['datetime_parsed'].dt.date >= start_date) & 
+            (df_gallery['datetime_parsed'].dt.date <= end_date)
+        ]
+
+    # 最新順に並べ替え
     df_gallery = df_gallery.sort_values(
         by=['datetime_parsed', 'datetime_tmp'], 
         ascending=[False, False], 
@@ -40,7 +76,13 @@ def show_gallery_page(df):
         (df_gallery['filename'].astype(str) != "")
     ]
 
-    # --- 2. グリッド表示 ---
+    if valid_rows.empty:
+        st.warning("条件に一致する釣果がありません。")
+        return
+
+    st.write(f"検索結果: {len(valid_rows)} 件")
+
+    # --- 4. グリッド表示 ---
     for i in range(0, len(valid_rows), 3):
         chunk = valid_rows.iloc[i : i + 3]
         cols = st.columns(3) 
@@ -54,20 +96,16 @@ def show_gallery_page(df):
                 dt_val = row.get('datetime_parsed')
                 display_dt = dt_val.strftime('%Y-%m-%d %H:%M') if pd.notnull(dt_val) else str(row.get('datetime', '-'))[:16]
                 
-                # 表示用データの抽出
                 fish_info = f"{row.get('魚種', '-')} {row.get('全長_cm', '-')}cm"
                 place_name = row.get('場所', '-')
                 temp = f"{row.get('気温', '-')}℃"
                 wind = f"{row.get('風向', '')}{row.get('風速', '-')}m"
-                rain = f"{row.get('降水量', '0')}mm" # 降水量を追加
+                rain = f"{row.get('降水量', '0')}mm"
                 
                 tide_name = row.get('潮名', '-')
                 tide_phase = row.get('潮位フェーズ', '-')
-                tide_cm = f"{row.get('潮位_cm', '-')}cm" # 潮位(cm)を追加
+                tide_cm = f"{row.get('潮位_cm', '-')}cm"
 
-                # --- 文字を大きくしたオーバーレイ HTML ---
-                # font-sizeを 0.72rem -> 0.85rem など全体的にアップ
-                # 魚種(fish_info)を 0.85rem -> 1.05rem にアップ
                 overlay_html = f"""
                 <a href="{map_url}" target="_blank" style="text-decoration: none; color: inherit;">
                     <div style="position: relative; width: 100%; margin-bottom: 20px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
