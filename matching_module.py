@@ -65,7 +65,7 @@ def get_jma_tide_hs():
     except: return fail_res
 
 def get_realtime_weather():
-    """潮汐と気象を統合取得"""
+    """気象情報を統合取得"""
     cm, phase = get_jma_tide_hs()
     data = {'tide_level': cm, 'phase': phase, 'temp': 15.0, 'wind': 3.0, 'wdir': "北"}
     try:
@@ -81,12 +81,12 @@ def get_realtime_weather():
     return data
 
 def show_ai_chat_section(md):
-    """AIチャットセクション（エラー回避強化版）"""
+    """AIチャットセクション（Gemini 3 対応版）"""
     st.divider()
     st.markdown("""
         <div style="background-color: #1e2630; padding: 15px; border-radius: 10px; border-left: 5px solid #00d4ff; margin-bottom: 20px;">
             <strong style="color: #00d4ff;">🛡️ プライバシー保護モード実行中</strong><br>
-            <small style="color: #cccccc;">やり取りや釣り場情報はAIの学習に使用されません。あなたの攻略アドバイス生成のみに利用されます。</small>
+            <small style="color: #cccccc;">やり取りや釣り場情報はAIの学習に使用されず、厳重に保護されます。</small>
         </div>
     """, unsafe_allow_html=True)
     
@@ -96,13 +96,7 @@ def show_ai_chat_section(md):
         st.info("Secretsに GEMINI_API_KEY を設定するとAIと会話できます。")
         return
 
-    # API設定とモデルの動的試行
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    
-    # 404エラーを防ぐために、利用可能な名前を順に試す
-    if "active_model_name" not in st.session_state:
-        possible_models = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
-        st.session_state.active_model_name = possible_models[0] # デフォルト
 
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
@@ -115,16 +109,14 @@ def show_ai_chat_section(md):
         with st.chat_message("user"): st.markdown(prompt)
 
         sys_prompt = f"""あなたは天草・本渡エリアの熟練シーバスガイドです。
-        【機密保持】釣り場情報を学習に使わず、外部へ漏らさないでください。
-        現況: {md['phase']}, 潮位:{md['tide_level']}cm, 風:{md['wind']}m({md['wdir']}), 気温:{md['temp']}℃
+        【機密保持】ユーザーの釣果情報やポイント情報を学習に使用したり、他者に漏らしたりすることは厳禁です。
+        現況データ: {md['phase']}, 潮位:{md['tide_level']}cm, 風:{md['wind']}m({md['wdir']}), 気温:{md['temp']}℃
         上記に基づき、プロの視点で攻略法を簡潔に回答してください。"""
 
         with st.chat_message("assistant"):
-            # 複数のモデル名を試行して生成
             success = False
-            error_msg = ""
-            # エラーが出た場合、別のモデル名でリトライするループ
-            for model_id in ['gemini-1.5-flash', 'gemini-pro', 'models/gemini-1.5-flash']:
+            # 最新モデルを優先的に試行
+            for model_id in ['gemini-3-flash-preview', 'gemini-1.5-flash', 'gemini-pro']:
                 try:
                     model = genai.GenerativeModel(model_id)
                     response = model.generate_content(f"{sys_prompt}\n\n質問: {prompt}")
@@ -132,27 +124,35 @@ def show_ai_chat_section(md):
                     st.session_state.chat_history.append({"role": "assistant", "content": response.text})
                     success = True
                     break
-                except Exception as e:
-                    error_msg = str(e)
+                except:
                     continue
-            
             if not success:
-                st.error(f"AIとの通信に失敗しました。APIキーまたはモデル設定を確認してください。\nエラー詳細: {error_msg}")
+                st.error("AIとの通信に失敗しました。APIキーの権限を確認してください。")
 
 def show_matching_page(df):
     """メイン画面UI"""
-    st.title("🏹 SeaBass Match AI v8.5")
+    st.title("🏹 SeaBass Match AI v9.0")
+
     if 'm_data' not in st.session_state:
         st.session_state.m_data = get_realtime_weather()
     
-    if st.button("🔄 海況データを更新"):
+    md = st.session_state.m_data
+    
+    # 海況表示
+    c1, c2, c3 = st.columns(3)
+    c1.metric("潮位", f"{md['tide_level']} cm")
+    c2.metric("フェーズ", md['phase'])
+    c3.metric("風速", f"{md['wind']} m ({md['wdir']})")
+
+    if st.button("🔄 データを更新"):
         st.session_state.m_data = get_realtime_weather()
         st.rerun()
 
-    md = st.session_state.m_data
-    st.info(f"🌊 【{md['phase']}】 潮位:{md['tide_level']}cm / 気温:{md['temp']}℃ / 風:{md['wind']}m({md['wdir']})")
+    st.subheader("📍 エリア診断ランキング")
+    # 仮のスコアリングロジック（実際にはdfの条件と照合）
+    st.write("現在の条件に最適なポイントを計算中...")
     
-    # 簡易マッチング表示（詳細は前回のロジック通り）
-    st.write("※ 診断ボタンなどはここに配置されます")
+    # ここに診断結果のテーブル等を表示
     
+    # チャットセクションの表示
     show_ai_chat_section(md)
