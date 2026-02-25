@@ -18,6 +18,7 @@ from gallery_module import show_gallery_page
 from analysis_module import show_analysis_page # この名前であることを確認
 from monthly_stats import show_monthly_stats  # 追加
 import streamlit.components.v1 as components
+from matching_module import show_matching_page
 
 # 1. ブラウザのタブ用設定（ファビコン）
 icon_url = "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
@@ -291,9 +292,8 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 df, df_master = get_all_data(conn, url)
 
 # --- タブ設定 ---
-tabs = st.tabs(["記録", "編集", "ギャラリー", "分析（時合）", "月別統計", "スズキ戦略分析"])
-tab1, tab2, tab3, tab4, tab5, tab6 = tabs
-
+tabs = st.tabs(["記録", "編集", "ギャラリー", "分析（時合）", "月別統計", "スズキ戦略分析", "💖 マッチング"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = tabs
 with tab1:
     # --- ロゴとタイトルのデザイン ---
     st.markdown(f"""
@@ -545,6 +545,10 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
+with tab7:
+    show_matching_page(df)
+
 
 
 
