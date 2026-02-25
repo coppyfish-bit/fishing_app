@@ -2,108 +2,95 @@ import streamlit as st
 import requests
 from datetime import datetime
 
-def get_jma_tide_hs():
+def show_matching_page(df):
     """
-    気象庁HS地点(本渡)のテキストデータを解析。
-    空白混じりの特殊フォーマットを完全デバッグ済み。
+    潮汐データ取得の徹底デバッグ用ページ
     """
+    st.title("🔍 潮汐取得デバッグモード")
+    
     now = datetime.now()
-    # 2026年最新URL
-    url = f"https://www.data.jma.go.jp/gmd/kaiyou/data/db/tide/suisan/txt/{now.year}/HS.txt"
+    station_code = "HS"
+    url = f"https://www.data.jma.go.jp/gmd/kaiyou/data/db/tide/suisan/txt/{now.year}/{station_code}.txt"
     
-    # 万が一の時のデフォルト値
-    fail_res = (150, "取得失敗")
-    
+    st.write(f"### 1. リクエスト情報")
+    st.write(f"- 取得URL: `{url}`")
+    st.write(f"- 現在時刻: `{now.strftime('%Y-%m-%d %H:%M:%S')}`")
+
     try:
         res = requests.get(url, timeout=10)
-        if res.status_code != 200: return fail_res
+        st.write(f"- ステータスコード: `{res.status_code}`")
         
+        if res.status_code != 200:
+            st.error("気象庁のサーバーにアクセスできません。")
+            return
+
         lines = res.text.splitlines()
+        st.write(f"- 総行数: `{len(lines)}` 行")
+
+        # 今日の日付判定用
         target_y = int(now.strftime('%y'))
         target_m = now.month
         target_d = now.day
         
         day_line = None
-        for line in lines:
-            if len(line) < 130: continue
-            # 73-78カラムの日付を、空白を考慮して確実に取得
+        st.write(f"### 2. 行特定プロセス (Target: Y={target_y}, M={target_m}, D={target_d})")
+        
+        for i, line in enumerate(lines):
+            if len(line) < 80: continue
+            
+            # 生データをそのまま抽出（スライス位置確認）
+            raw_y = line[72:74]
+            raw_m = line[74:76]
+            raw_d = line[76:78]
+            raw_st = line[78:80]
+
             try:
-                # 気象庁特有の「0を空白にする」処理を strip() で回避
-                l_y = int(line[72:74].strip())
-                l_m = int(line[74:76].strip())
-                l_d = int(line[76:78].strip())
-                l_st = line[78:80].strip()
+                l_y = int(raw_y.strip())
+                l_m = int(raw_m.strip())
+                l_d = int(raw_d.strip())
                 
-                if l_y == target_y and l_m == target_m and l_d == target_d and l_st == "HS":
+                # 地点と日付が一致する行を1つだけ詳しく表示
+                if l_y == target_y and l_m == target_m and l_d == target_d:
+                    st.success(f"一致する行を発見しました (Index: {i})")
+                    st.code(line, language="text")
+                    st.write(f"抽出値: 年=`{l_y}`, 月=`{l_m}`, 日=`{l_d}`, 地点=`{raw_st}`")
                     day_line = line
                     break
-            except: continue
+            except:
+                continue
 
-        if not day_line: return fail_res
+        if not day_line:
+            st.error("今日の日付の行が見つかりませんでした。スライス位置か日付形式が違います。")
+            return
 
-        # --- 毎時潮位の解析 (1-72カラム) ---
+        st.write(f"### 3. 解析テスト")
+        
+        # 毎時潮位
         hourly = []
         for i in range(24):
             val = day_line[i*3 : (i+1)*3].strip()
-            # 潮位がマイナスの場合（-10cmなど）も考慮
             hourly.append(int(val) if val else 0)
-        
-        # 線形補間で現在時刻の潮位を算出
-        h = now.hour
-        m = now.minute
-        t1 = hourly[h]
-        t2 = hourly[h+1] if h < 23 else hourly[h]
-        current_cm = int(t1 + (t2 - t1) * (m / 60.0))
+        st.write(f"- 解析した毎時潮位: `{hourly}`")
 
-        # --- 満干潮時刻の解析 (81-136カラム) ---
+        # 満干潮時刻の変換テスト
         events = []
-        # 満潮(81-108), 干潮(109-136) 各4スロット
+        st.write("- 時刻変換テスト:")
         for start, e_type in [(80, "満潮"), (108, "干潮")]:
             for i in range(4):
                 pos = start + (i * 7)
-                t_str = day_line[pos : pos+4].strip()
-                if t_str and t_str != "9999":
-                    # 時刻(HHMM)を datetime に変換
-                    ev_t = datetime.strptime(now.strftime('%Y%m%d') + t_str.zfill(4), '%Y%m%d%H%M')
-                    events.append({"time": ev_t, "type": e_type})
-        
+                t_str = day_line[pos : pos+4].replace(" ", "0") # 空白を0に
+                
+                if t_str and t_str != "9999" and t_str != "0000":
+                    try:
+                        # 変換に失敗しやすい場所
+                        ev_t = datetime.strptime(now.strftime('%Y%m%d') + t_str.zfill(4), '%Y%m%d%H%M')
+                        events.append({"time": ev_t, "type": e_type})
+                        st.write(f"  OK: `{t_str}` -> `{ev_t}` ({e_type})")
+                    except Exception as e:
+                        st.error(f"  NG: `{t_str}` 変換失敗 -> `{e}`")
+
         events.sort(key=lambda x: x['time'])
-
-        # --- フェーズ判定 ---
-        phase = "判定中"
-        prev = next((e for e in reversed(events) if e['time'] <= now), None)
-        nxt = next((e for e in events if e['time'] > now), None)
-
-        if prev and nxt:
-            dur = (nxt['time'] - prev['time']).total_seconds()
-            ela = (now - prev['time']).total_seconds()
-            p_label = "上げ" if prev['type'] == "干潮" else "下げ"
-            # 10分割して○分とする
-            step = max(1, min(9, int((ela / dur) * 10)))
-            phase = f"{p_label}{step}分"
-            # 潮止まり付近のラベル調整
-            if (ela/dur) < 0.1: phase = prev['type']
-            elif (ela/dur) > 0.9: phase = nxt['type']
-
-        return current_cm, phase
+        st.write(f"- 最終イベントリスト: `{events}`")
 
     except Exception as e:
-        return 150, f"Error:{str(e)[:5]}"
-
-def show_matching_page(df):
-    """
-    メイン画面への統合
-    """
-    st.title("🏹 SeaBass Match AI v7.2")
-    
-    # データを取得
-    cm, phase = get_jma_tide_hs()
-    
-    # デバッグ表示（成功すればここが動く）
-    if phase == "取得失敗":
-        st.error("⚠️ 気象庁のデータが見つかりませんでした。手動で設定してください。")
-    else:
-        st.success(f"✅ 本渡瀬戸のデータを同期しました: {phase} ({cm}cm)")
-
-    # ユーザー確認用
-    st.info(f"現在の本渡瀬戸: 【{phase}】 {cm}cm")
+        st.exception(e)
