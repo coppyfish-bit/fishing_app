@@ -23,38 +23,37 @@ def show_gallery_page(df):
         dayfirst=False
     )
 
-    # --- 2. サイドバー・フィルター機能 ---
-    st.sidebar.markdown("### 🔍 釣果を絞り込む")
+    # --- 2. メイン画面内の検索パネル (スマホ対応) ---
+    # st.expander を使うことで、使わない時は閉じておけます
+    with st.expander("🔍 釣果を絞り込む", expanded=False):
+        col_f, col_p = st.columns(2)
+        
+        # 魚種で絞り込み
+        fish_list = ["すべて"] + sorted(df_gallery['魚種'].unique().tolist())
+        selected_fish = col_f.selectbox("🐟 魚種", fish_list)
 
-    # 魚種で絞り込み
-    fish_list = ["すべて"] + sorted(df_gallery['魚種'].unique().tolist())
-    selected_fish = st.sidebar.selectbox("魚種を選択", fish_list)
+        # 場所で絞り込み
+        place_list = ["すべて"] + sorted(df_gallery['場所'].unique().tolist())
+        selected_place = col_p.selectbox("📍 場所", place_list)
 
-    # 場所で絞り込み
-    place_list = ["すべて"] + sorted(df_gallery['場所'].unique().tolist())
-    selected_place = st.sidebar.selectbox("場所を選択", place_list)
-
-    # 期間で絞り込み
-    min_date = df_gallery['datetime_parsed'].min().date() if not df_gallery['datetime_parsed'].isna().all() else date(2024, 1, 1)
-    max_date = date.today()
-    
-    date_range = st.sidebar.date_input(
-        "期間を選択",
-        value=(min_date, max_date),
-        min_value=min_date,
-        max_value=max_date
-    )
+        # 期間で絞り込み
+        min_date = df_gallery['datetime_parsed'].min().date() if not df_gallery['datetime_parsed'].isna().all() else date(2024, 1, 1)
+        max_date = date.today()
+        
+        date_range = st.date_input(
+            "📅 期間を選択",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date
+        )
 
     # --- 3. フィルタリングの実行 ---
-    # 魚種
     if selected_fish != "すべて":
         df_gallery = df_gallery[df_gallery['魚種'] == selected_fish]
     
-    # 場所
     if selected_place != "すべて":
         df_gallery = df_gallery[df_gallery['場所'] == selected_place]
     
-    # 期間（date_rangeが開始と終了のペアである場合）
     if isinstance(date_range, tuple) and len(date_range) == 2:
         start_date, end_date = date_range
         df_gallery = df_gallery[
@@ -72,17 +71,16 @@ def show_gallery_page(df):
     # 有効な画像データの抽出
     valid_rows = df_gallery[
         df_gallery['filename'].notna() & 
-        (df_gallery['filename'].astype(str).str.lower() != "nan") &
-        (df_gallery['filename'].astype(str) != "")
+        (df_gallery['filename'].astype(str).str.lower() != "nan")
     ]
 
     if valid_rows.empty:
         st.warning("条件に一致する釣果がありません。")
         return
 
-    st.write(f"検索結果: {len(valid_rows)} 件")
+    st.caption(f"📊 検索結果: {len(valid_rows)} 件")
 
-    # --- 4. グリッド表示 ---
+    # --- 4. グリッド表示 (3つずつ columns を作成してスマホ順序を維持) ---
     for i in range(0, len(valid_rows), 3):
         chunk = valid_rows.iloc[i : i + 3]
         cols = st.columns(3) 
