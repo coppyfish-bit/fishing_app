@@ -340,7 +340,7 @@ with tab1:
     if "group_id" not in st.session_state: st.session_state.group_id = "default"
     if "target_dt" not in st.session_state: st.session_state.target_dt = datetime.now()
 
-    uploaded_file = st.file_uploader("釣果写真をアップロードして解析開始", type=["jpg", "jpeg", "png", "heic"])
+   uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"], key="main_fish_uploader")
     
     if uploaded_file:
         img_for_upload = Image.open(uploaded_file)
@@ -548,6 +548,7 @@ with tab6:
 
 with tab7:
     show_matching_page(df)
+
 
 
 
