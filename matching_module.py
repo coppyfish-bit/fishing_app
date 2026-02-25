@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import app  # 気象取得関数を利用するためにインポート
+# import app  <-- ここにあった import を削除
 
 def show_matching_page(df):
-    # --- デザインCSS（既存のスタイルを維持） ---
+    # --- デザインCSS ---
     st.markdown("""
         <style>
         .match-container {{
@@ -43,30 +43,27 @@ def show_matching_page(df):
 
     st.title("💖 SEABASS MATCH")
     
-    # --- 🛠️ 追加：リアルタイムデータ取得ボタン ---
-    st.markdown("### 1. 今のコンディションを提示する")
-    
-    # セッション状態の初期化
+    # --- セッション状態の初期化 ---
     if 'current_match_data' not in st.session_state:
         st.session_state.current_match_data = {
             'tide': "中潮", 'wind': 3.0, 'phase': "上げ3分", 'wdir': "北"
         }
 
+    # --- リアルタイムデータ取得ボタン ---
+    st.markdown("### 1. 今のコンディションを提示する")
+    
     if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width=True, type="primary"):
-        with st.spinner("本渡瀬戸のデータを取得中..."):
-            # 本渡瀬戸の座標 (app.pyのTIDE_STATIONSから引用)
+        with st.spinner("本渡瀬戸のデータを同期中..."):
+            # 【重要】循環参照を防ぐため、ここでインポートする
+            import app 
+            
             LAT_HONDO = 32.4333
             LON_HONDO = 130.2167
             now = datetime.now()
             
-            # 1. 気象取得 (app.pyの関数を利用)
+            # app.py の関数を使用してデータを取得
             temp, wind_s, wind_d, rain = app.get_weather_data_openmeteo(LAT_HONDO, LON_HONDO, now)
-            
-            # 2. 潮位取得 (app.pyの関数を利用)
-            # 本渡瀬戸のコードは 'HS'
             tide_data = app.get_tide_details('HS', now)
-            
-            # 3. 潮名（月齢から算出）
             m_age = app.get_moon_age(now)
             t_name = app.get_tide_name(m_age)
             
@@ -74,29 +71,53 @@ def show_matching_page(df):
             st.session_state.current_match_data['tide'] = t_name
             st.session_state.current_match_data['wind'] = float(wind_s) if wind_s else 3.0
             st.session_state.current_match_data['wdir'] = wind_d if wind_d else "北"
+            
+            # 潮位フェーズの同期
             if tide_data and 'phase' in tide_data:
                 st.session_state.current_match_data['phase'] = tide_data['phase']
             
-            st.toast("✅ 本渡瀬戸の最新データを同期しました！")
+            st.toast("✅ 本渡瀬戸の最新データを取得しました！")
+            st.rerun()
 
-    # --- 入力エリア (自動取得した値をデフォルトに設定) ---
+    # --- 入力エリア ---
     col1, col2 = st.columns(2)
+    
+    tide_options = ["大潮", "中潮", "小潮", "長潮", "若潮"]
     with col1:
-        c_tide = st.selectbox("現在の潮", ["大潮", "中潮", "小潮", "長潮", "若潮"], 
-                              index=["大潮", "中潮", "小潮", "長潮", "若潮"].index(st.session_state.current_match_data['tide']))
+        # 同期された値のインデックスを探す（なければ0）
+        try:
+            t_idx = tide_options.index(st.session_state.current_match_data['tide'])
+        except:
+            t_idx = 0
+            
+        c_tide = st.selectbox("現在の潮", tide_options, index=t_idx)
         c_wind = st.slider("現在の風速 (m/s)", 0.0, 15.0, st.session_state.current_match_data['wind'])
+        
     with col2:
-        # フェーズは選択肢にない場合を考慮して安全にインデックス取得
-        phase_list = ["上げ3分", "上げ7分", "下げ3分", "下げ7分", "干潮付近", "満潮付近"]
-        default_phase = st.session_state.current_match_data['phase']
-        phase_idx = phase_list.index(default_phase) if default_phase in phase_list else 0
+        phase_options = ["上げ1分", "上げ2分", "上げ3分", "上げ4分", "上げ5分", "上げ6分", "上げ7分", "上げ8分", "上げ9分",
+                         "下げ1分", "下げ2分", "下げ3分", "下げ4分", "下げ5分", "下げ6分", "下げ7分", "下げ8分", "下げ9分",
+                         "満潮付近", "干潮付近"]
         
-        c_phase = st.selectbox("現在の時合", phase_list, index=phase_idx)
+        # 取得したフェーズが選択肢にあるか確認
+        curr_ph = st.session_state.current_match_data['phase']
+        p_idx = phase_options.index(curr_ph) if curr_ph in phase_options else 2 # デフォルト上げ3分
         
-        wdir_list = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
-        default_wdir = st.session_state.current_match_data['wdir']
-        wdir_idx = wdir_list.index(default_wdir) if default_wdir in wdir_list else 0
-        c_wdir = st.selectbox("現在の風向", wdir_list, index=wdir_idx)
+        c_phase = st.selectbox("現在の時合", phase_options, index=p_idx)
+        
+        wdir_options = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
+        curr_wdir = st.session_state.current_match_data['wdir']
+        wd_idx = wdir_options.index(curr_wdir) if curr_wdir in wdir_options else 0
+        
+        c_wdir = st.selectbox("現在の風向", wdir_options, index=wd_idx)
+
+    # --- 分析ロジック（スズキの好み） ---
+    df_s = df[df['魚種'].str.contains('スズキ', na=False)].copy()
+    if df_s.empty: 
+        df_s = df.copy()
+
+    fav_tide = df_s['潮名'].mode()[0] if not df_s['潮名'].empty else "大潮"
+    fav_phase = df_s['潮位フェーズ'].mode()[0] if not df_s['潮位フェーズ'].empty else "上げ3分"
+    fav_wind_dir = df_s['風向'].mode()[0] if not df_s['風向'].empty else "北"
 
     # --- スコア計算 ---
     match_score = 10
@@ -106,11 +127,8 @@ def show_matching_page(df):
     
     # --- 結果表示 ---
     st.markdown("---")
-    
-    # 代表的な1枚を取得
     sample_img = df_s['filename'].iloc[0] if 'filename' in df_s.columns and not df_s['filename'].empty else "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
 
-    # HTML表示部分（変数を確実に埋め込むために f-string を使用）
     html_content = f"""
         <div class="match-container">
             <div class="profile-card">
@@ -124,16 +142,4 @@ def show_matching_page(df):
                 </div>
             </div>
             <div style="font-size: 1.2rem; color: #eee;">マッチング度</div>
-            <div style="font-size: 5rem; font-weight: 900; color: #ff416c; line-height:1; margin-bottom:20px;">{match_score}%</div>
-        </div>
-    """
-    st.markdown(html_content, unsafe_allow_html=True)
-
-    if match_score >= 80:
-        st.balloons()
-        st.success("🔥 運命の出会い！今すぐポイントへ向かってください。")
-    elif match_score >= 50:
-        st.info("⚡ 悪くない相性です。粘ればチャンスがあるかも？")
-    else:
-        st.error("💤 スズキは今、寝ているようです。家でルアーを磨きましょう。")
-
+            <div style="font-size: 5rem; font-weight: 900; color: #ff416c; line-
