@@ -2,17 +2,17 @@ import streamlit as st
 import pandas as pd
 
 def show_matching_page(df):
-    # --- デザインCSS ---
+    # --- デザインCSS（波括弧を二重 {{ }} にしてエラーを回避） ---
     st.markdown("""
         <style>
-        .match-container {
+        .match-container {{
             background: linear-gradient(180deg, #1e2630 0%, #0e1117 100%);
             padding: 30px;
             border-radius: 30px;
             text-align: center;
             border: 1px solid #333;
-        }
-        .profile-card {
+        }}
+        .profile-card {{
             background: #262730;
             border-radius: 20px;
             padding: 10px;
@@ -20,26 +20,14 @@ def show_matching_page(df):
             max-width: 400px;
             box-shadow: 0 15px 35px rgba(255, 65, 108, 0.3);
             border: 2px solid #ff416c;
-        }
-        .seabass-img {
+        }}
+        .seabass-img {{
             width: 100%;
             border-radius: 15px;
             aspect-ratio: 1/1;
             object-fit: cover;
-        }
-        .heart-btn {
-            background: #ff416c;
-            color: white;
-            padding: 15px 30px;
-            border-radius: 50px;
-            font-size: 1.5rem;
-            font-weight: bold;
-            display: inline-block;
-            margin-top: 20px;
-            box-shadow: 0 5px 15px rgba(255, 65, 108, 0.4);
-            text-decoration: none;
-        }
-        .status-badge {
+        }}
+        .status-badge {{
             background: rgba(0, 255, 208, 0.1);
             color: #00ffd0;
             padding: 5px 15px;
@@ -47,7 +35,7 @@ def show_matching_page(df):
             font-size: 0.8rem;
             margin: 5px;
             display: inline-block;
-        }
+        }}
         </style>
     """, unsafe_allow_html=True)
 
@@ -60,13 +48,14 @@ def show_matching_page(df):
 
     # --- 分析ロジック ---
     # スズキ系のみ抽出
-    df_s = df[df['魚種'].str.contains('スズキ', na=False)]
-    if df_s.empty: df_s = df
+    df_s = df[df['魚種'].str.contains('スズキ', na=False)].copy()
+    if df_s.empty: 
+        df_s = df.copy()
 
-    # スズキの好みを抽出
+    # スズキの好みを抽出（最頻値）
     fav_tide = df_s['潮名'].mode()[0] if not df_s['潮名'].empty else "大潮"
     fav_phase = df_s['潮位フェーズ'].mode()[0] if not df_s['潮位フェーズ'].empty else "上げ3分"
-    fav_wind_dir = df_s['風向'].mode()[0] if not df_s['風向'].empty else "北"
+    fav_wind_dir = df_s['風向'].mode()[0] if not df_s['風向'].empty else "不明"
 
     # --- 入力エリア ---
     st.markdown("### 今日のコンディションを提示する")
@@ -87,23 +76,27 @@ def show_matching_page(df):
     # --- 結果表示 ---
     st.markdown("---")
     
-    # 代表的な1枚を取得（なければデフォルト画像）
-    sample_img = df_s['filename'].iloc[0] if not df_s['filename'].empty else "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
+    # 代表的な1枚を取得
+    sample_img = df_s['filename'].iloc[0] if 'filename' in df_s.columns and not df_s['filename'].empty else "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
 
-    st.markdown(f"""
+    # HTML表示部分（変数を確実に埋め込むために f-string を使用）
+    html_content = f"""
         <div class="match-container">
             <div class="profile-card">
                 <img src="{sample_img}" class="seabass-img">
                 <div style="padding:15px; text-align:left;">
-                    <h2 style="margin:0;">スズキ (Seabass) <span style="font-size:1rem; color:#888;">24歳</span></h2>
-                    <p style="color:#ccc; font-size:0.9rem;">「{fav_tide}の{fav_phase}に、{fav_wdir}風が吹いてるとつい口を使っちゃうかも...💋」</p>
+                    <h2 style="margin:0; color:white;">スズキ (Seabass) <span style="font-size:1rem; color:#888;">24歳</span></h2>
+                    <p style="color:#ccc; font-size:0.9rem; margin-top:10px;">
+                        「{fav_tide}の{fav_phase}に、{fav_wind_dir}風が吹いてるとつい口を使っちゃうかも...💋」
+                    </p>
                     <div class="status-badge">#偏食家</div><div class="status-badge">#シャロー好き</div>
                 </div>
             </div>
             <div style="font-size: 1.2rem; color: #eee;">マッチング度</div>
-            <div style="font-size: 4rem; font-weight: 900; color: #ff416c; line-height:1;">{match_score}%</div>
+            <div style="font-size: 5rem; font-weight: 900; color: #ff416c; line-height:1; margin-bottom:20px;">{match_score}%</div>
         </div>
-    """, unsafe_allow_html=True)
+    """
+    st.markdown(html_content, unsafe_allow_html=True)
 
     if match_score >= 80:
         st.balloons()
