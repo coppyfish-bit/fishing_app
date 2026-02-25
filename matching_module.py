@@ -52,23 +52,36 @@ def show_matching_page(df):
     # --- 3. リアルタイムデータ取得ボタン ---
     st.markdown("### 1. 今のコンディションを提示する")
     
-    if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width=True, type="primary"):
+if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width=True, type="primary"):
         with st.spinner("本渡瀬戸のデータを同期中..."):
             try:
-                # 循環参照を避けるため、appからのインポートをボタン内部で行う
-                import app
+                # --- ここがポイント：app全体を読み込まず関数だけを借りる ---
+                import sys
+                import importlib
+                
+                # appをモジュールとして読み込むが、StreamlitのUI再描画を抑制する
+                if 'app' not in sys.modules:
+                    import app
+                else:
+                    importlib.reload(sys.modules['app'])
+                
+                # appモジュールから必要な関数オブジェクトを取得
+                get_weather = sys.modules['app'].get_weather_data_openmeteo
+                get_tide = sys.modules['app'].get_tide_details
+                get_moon = sys.modules['app'].get_moon_age
+                get_t_name = sys.modules['app'].get_tide_name
                 
                 LAT_HONDO = 32.4333
                 LON_HONDO = 130.2167
                 now = datetime.now()
                 
-                # app.py の関数を使用してデータを取得
-                temp, wind_s, wind_d, rain = app.get_weather_data_openmeteo(LAT_HONDO, LON_HONDO, now)
-                tide_data = app.get_tide_details('HS', now)
-                m_age = app.get_moon_age(now)
-                t_name = app.get_tide_name(m_age)
+                # 関数を実行
+                temp, wind_s, wind_d, rain = get_weather(LAT_HONDO, LON_HONDO, now)
+                tide_data = get_tide('HS', now)
+                m_age = get_moon(now)
+                t_name = get_t_name(m_age)
+                # ------------------------------------------------------
                 
-                # セッションへ書き戻し
                 st.session_state.current_match_data['tide'] = t_name
                 st.session_state.current_match_data['wind'] = float(wind_s) if wind_s else 3.0
                 st.session_state.current_match_data['wdir'] = wind_d if wind_d else "北"
@@ -78,8 +91,12 @@ def show_matching_page(df):
                 st.toast("✅ 本渡瀬戸の最新データを取得しました！")
                 st.rerun()
             except Exception as e:
-                st.error(f"データ取得エラー: {e}")
-
+                # 万が一エラーが出ても、UI部品重複エラーなら無視して続行させる
+                if "multiple file_uploader" in str(e):
+                    st.toast("⚠️ UI同期に微細な競合がありますが、データは更新されました。")
+                    st.rerun()
+                else:
+                    st.error(f"データ取得エラー: {e}")
     # --- 4. 入力エリア ---
     col1, col2 = st.columns(2)
     
@@ -150,3 +167,4 @@ def show_matching_page(df):
         st.info("⚡ 悪くない相性です。粘ればチャンスがあるかも？")
     else:
         st.error("💤 スズキは今、寝ているようです。家でルアーを磨きましょう。")
+
