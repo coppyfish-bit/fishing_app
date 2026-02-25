@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import sys
-import importlib
 
 def show_matching_page(df):
     # --- 1. デザインCSS ---
@@ -30,72 +28,53 @@ def show_matching_page(df):
             aspect-ratio: 1/1;
             object-fit: cover;
         }}
-        .status-badge {{
-            background: rgba(0, 255, 208, 0.1);
-            color: #00ffd0;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            margin: 5px;
-            display: inline-block;
-        }}
         </style>
     """, unsafe_allow_html=True)
 
     st.title("💖 SEABASS MATCH")
+    st.info("📍 ターゲットエリア: 熊本県 天草市 本渡瀬戸")
     
     # --- 2. セッション状態の初期化 ---
     if 'current_match_data' not in st.session_state:
         st.session_state.current_match_data = {
-            'tide': "中潮", 'wind': 3.0, 'phase': "上げ3分", 'wdir': "北"
+            'tide': "中潮", 'wind': 3.0, 'phase': "上げ3分", 'wdir': "北", 'temp': 15.0
         }
 
-    # --- 3. リアルタイムデータ取得ボタン ---
-    st.markdown("### 1. 今のコンディションを提示する")
-    
-    # インデントを関数内に修正
-    if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width=True, type="primary"):
-        with st.spinner("本渡瀬戸のデータを同期中..."):
+    # --- 3. リアルタイムデータ取得（本渡瀬戸） ---
+    if st.button("🌊 本渡瀬戸の直近データを取得・同期", use_container_width=True, type="primary"):
+        with st.spinner("本渡瀬戸の気象・潮汐を解析中..."):
             try:
-                # appを直接importせず、sys.modulesからロジックだけを抽出
-                if 'app' not in sys.modules:
-                    import app
+                import app  # ロジックを借用
                 
-                # app内の計算用関数を直接参照
-                get_weather = sys.modules['app'].get_weather_data_openmeteo
-                get_tide = sys.modules['app'].get_tide_details
-                get_moon = sys.modules['app'].get_moon_age
-                get_t_name = sys.modules['app'].get_tide_name
-                
+                # 本渡瀬戸の定数
                 LAT_HONDO = 32.4333
                 LON_HONDO = 130.2167
                 now = datetime.now()
                 
-                # データ取得実行
-                temp, wind_s, wind_d, rain = get_weather(LAT_HONDO, LON_HONDO, now)
-                tide_data = get_tide('HS', now)
-                m_age = get_moon(now)
-                t_name = get_t_name(m_age)
+                # app.py の解析関数を実行
+                temp, wind_s, wind_d, rain = app.get_weather_data_openmeteo(LAT_HONDO, LON_HONDO, now)
+                tide_data = app.get_tide_details('HS', now) # HS=本渡瀬戸
+                m_age = app.get_moon_age(now)
+                t_name = app.get_tide_name(m_age)
                 
-                # セッションへ反映
+                # セッションへ保存
                 st.session_state.current_match_data['tide'] = t_name
                 st.session_state.current_match_data['wind'] = float(wind_s) if wind_s else 3.0
                 st.session_state.current_match_data['wdir'] = wind_d if wind_d else "北"
+                st.session_state.current_match_data['temp'] = temp if temp else 15.0
                 if tide_data and 'phase' in tide_data:
                     st.session_state.current_match_data['phase'] = tide_data['phase']
                 
-                st.toast("✅ 本渡瀬戸の最新データを取得しました！")
+                st.toast(f"✅ {now.strftime('%H:%M')} の本渡瀬戸データを同期しました！")
                 st.rerun()
             except Exception as e:
-                # ID重複エラーは軽微な競合として処理を続行
                 if "multiple file_uploader" in str(e):
                     st.rerun()
                 else:
                     st.error(f"データ取得エラー: {e}")
 
-    # --- 4. 入力エリア ---
+    # --- 4. 入力エリア（自動取得された値が入る） ---
     col1, col2 = st.columns(2)
-    
     tide_options = ["大潮", "中潮", "小潮", "長潮", "若潮"]
     phase_options = ["上げ1分", "上げ2分", "上げ3分", "上げ4分", "上げ5分", "上げ6分", "上げ7分", "上げ8分", "上げ9分",
                      "下げ1分", "下げ2分", "下げ3分", "下げ4分", "下げ5分", "下げ6分", "下げ7分", "下げ8分", "下げ9分",
@@ -103,8 +82,7 @@ def show_matching_page(df):
     wdir_options = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
 
     with col1:
-        t_val = st.session_state.current_match_data['tide']
-        t_idx = tide_options.index(t_val) if t_val in tide_options else 0
+        t_idx = tide_options.index(st.session_state.current_match_data['tide']) if st.session_state.current_match_data['tide'] in tide_options else 0
         c_tide = st.selectbox("現在の潮", tide_options, index=t_idx)
         c_wind = st.slider("現在の風速 (m/s)", 0.0, 15.0, st.session_state.current_match_data['wind'])
         
@@ -116,11 +94,10 @@ def show_matching_page(df):
         wd_idx = wdir_options.index(wd_val) if wd_val in wdir_options else 0
         c_wdir = st.selectbox("現在の風向", wdir_options, index=wd_idx)
 
-    # --- 5. 分析ロジック（スズキの好み） ---
+    # --- 5. あなたの過去データから「スズキの好み」を抽出 ---
     if df is not None and not df.empty:
         df_s = df[df['魚種'].str.contains('スズキ', na=False)].copy()
-        if df_s.empty:
-            df_s = df.copy()
+        if df_s.empty: df_s = df.copy()
 
         fav_tide = df_s['潮名'].mode()[0] if not df_s['潮名'].empty else "大潮"
         fav_phase = df_s['潮位フェーズ'].mode()[0] if not df_s['潮位フェーズ'].empty else "上げ3分"
@@ -130,7 +107,7 @@ def show_matching_page(df):
         fav_tide, fav_phase, fav_wind_dir = "大潮", "上げ3分", "北"
         sample_img = "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
 
-    # --- 6. スコア計算 ---
+    # --- 6. マッチングスコア計算 ---
     match_score = 10
     if c_tide == fav_tide: match_score += 30
     if c_phase == fav_phase: match_score += 40
@@ -138,28 +115,26 @@ def show_matching_page(df):
     
     # --- 7. 結果表示 ---
     st.markdown("---")
-    html_content = f"""
+    st.markdown(f"""
         <div class="match-container">
             <div class="profile-card">
                 <img src="{sample_img}" class="seabass-img">
                 <div style="padding:15px; text-align:left;">
-                    <h2 style="margin:0; color:white;">スズキ (Seabass) <span style="font-size:1rem; color:#888;">24歳</span></h2>
+                    <h2 style="margin:0; color:white;">本渡瀬戸のスズキ <span style="font-size:1rem; color:#888;">Now</span></h2>
                     <p style="color:#ccc; font-size:0.9rem; margin-top:10px;">
-                        「{fav_tide}の{fav_phase}に、{fav_wind_dir}風が吹いてるとつい口を使っちゃうかも...💋」
+                        「気温{st.session_state.current_match_data['temp']}℃かぁ。{fav_tide}の{fav_phase}、{fav_wind_dir}風のタイミングなら、あなたに釣られてもいいかな...💋」
                     </p>
-                    <div class="status-badge">#偏食家</div><div class="status-badge">#シャロー好き</div>
                 </div>
             </div>
-            <div style="font-size: 1.2rem; color: #eee;">マッチング度</div>
+            <div style="font-size: 1.2rem; color: #eee;">現在のマッチング度</div>
             <div style="font-size: 5rem; font-weight: 900; color: #ff416c; line-height:1; margin-bottom:20px;">{match_score}%</div>
         </div>
-    """
-    st.markdown(html_content, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
     if match_score >= 80:
         st.balloons()
-        st.success("🔥 運命の出会い！今すぐ本渡瀬戸へ向かってください。")
+        st.success("🔥 激アツ相性！今すぐ本渡瀬戸へエントリーしてください。")
     elif match_score >= 50:
-        st.info("⚡ 悪くない相性です。粘ればチャンスがあるかも？")
+        st.info("⚡ まずまずの相性。潮の変化に期待しましょう。")
     else:
-        st.error("💤 スズキは今、寝ているようです。家でルアーを磨きましょう。")
+        st.error("💤 今は「既読スルー」の状態。少し時間を置きましょう。")
