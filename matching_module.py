@@ -1,20 +1,20 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime
 import requests
 
 def get_jma_tide_hs():
     """
-    気象庁 suisan/txt フォーマット(136col)を精密解析。
-    ご提示いただいた実データに基づき、スペース混じりの数値を正確に取得します。
+    気象庁の潮汐データ(HS:本渡)を解析して、現在の潮位とフェーズを返します。
     """
     now = datetime.now()
     station_code = "HS"
+    # 2026年のデータURL
     url = f"https://www.data.jma.go.jp/gmd/kaiyou/data/db/tide/suisan/txt/{now.year}/{station_code}.txt"
     
-    # 取得失敗時のデフォルト値
-    default_res = (150, "上げ5分")
+    # 万が一取得できなかった場合のデフォルト値
+    default_res = (150, "取得失敗")
     
     try:
         res = requests.get(url, timeout=10)
@@ -23,79 +23,81 @@ def get_jma_tide_hs():
         
         lines = res.text.splitlines()
         
-        # ターゲット日付の構築 (例: 26 225 = 2026年2月25日)
-        # データの73-75カラムが年(2桁)、76-77カラムが月、78カラムが日
-        day_data = None
+        # 1. 今日のデータ行を特定
+        # フォーマット: 73-75(年2桁), 76-77(月), 78-79(日)
+        target_y = now.strftime('%y')
+        target_m = now.strftime('%m')
+        target_d = now.strftime('%d')
+        
+        day_line = None
         for line in lines:
             if len(line) < 80: continue
-            # 地点コードHSを確認し、日付が一致する行を探す
-            try:
-                line_y = int(line[72:75].strip())
-                line_m = int(line[75:77].strip())
-                line_d = int(line[77:79].strip())
-                if line_y == int(now.strftime('%y')) and line_m == now.month and line_d == now.day:
-                    day_data = line
-                    break
-            except:
-                continue
+            line_y = line[72:75].strip().zfill(2)
+            line_m = line[75:77].strip().zfill(2)
+            line_d = line[77:79].strip().zfill(2)
+            
+            if line_y == target_y and line_m == target_m and line_d == target_d:
+                day_line = line
+                break
         
-        if not day_data:
+        if not day_line:
             return default_res
 
-        # 1. 毎時潮位の取得 (1-72カラム)
+        # 2. 毎時潮位の取得 (1-72カラム、3文字ずつ24時間分)
         hourly = []
         for i in range(24):
-            val = day_data[i*3 : (i+1)*3].replace(" ", "")
-            hourly.append(int(val) if val else 0)
+            val_str = day_line[i*3 : (i+1)*3].strip()
+            # 空欄や異常値のハンドリング
+            hourly.append(int(val_str) if val_str and val_str != "" else 0)
         
+        # 現在時刻の潮位を線形補間
         t1 = hourly[now.hour]
         t2 = hourly[now.hour+1] if now.hour < 23 else hourly[now.hour]
         current_cm = int(round(t1 + (t2 - t1) * (now.minute / 60.0)))
 
-        # 2. 満潮・干潮時刻の抽出
+        # 3. 満潮・干潮時刻を抽出してフェーズ判定
         events = []
         today_str = now.strftime('%Y%m%d')
-        # 満潮(80-107カラム)
-        for i in range(4):
-            start = 80 + (i * 7)
-            t_part = day_data[start : start+4].replace(" ", "")
-            if t_part and t_part != "9999":
-                ev_time = datetime.strptime(today_str + t_part.zfill(4), '%Y%m%d%H%M')
-                events.append({"time": ev_time, "type": "満潮"})
-        # 干潮(108-135カラム)
-        for i in range(4):
-            start = 108 + (i * 7)
-            t_part = day_data[start : start+4].replace(" ", "")
-            if t_part and t_part != "9999":
-                ev_time = datetime.strptime(today_str + t_part.zfill(4), '%Y%m%d%H%M')
-                events.append({"time": ev_time, "type": "干潮"})
+        
+        # 満潮(80-107), 干潮(108-135) 各4つずつ
+        for start_idx, ev_type in [(80, "満潮"), (108, "干潮")]:
+            for i in range(4):
+                pos = start_idx + (i * 7)
+                t_part = day_line[pos : pos+4].strip()
+                if t_part and t_part != "9999" and len(t_part) == 4:
+                    ev_time = datetime.strptime(today_str + t_part, '%Y%m%d%H%M')
+                    events.append({"time": ev_time, "type": ev_type})
         
         events = sorted(events, key=lambda x: x['time'])
 
-        # 3. 潮位フェーズ判定
-        phase_text = "不明"
+        # フェーズ判定ロジック
+        phase_text = "解析中"
         prev_ev = next((e for e in reversed(events) if e['time'] <= now), None)
         next_ev = next((e for e in events if e['time'] > now), None)
 
         if prev_ev and next_ev:
             duration = (next_ev['time'] - prev_ev['time']).total_seconds()
             elapsed = (now - prev_ev['time']).total_seconds()
-            if duration > 0:
-                p_type = "上げ" if prev_ev['type'] == "干潮" else "下げ"
-                step = max(1, min(9, int((elapsed / duration) * 10)))
-                phase_text = f"{p_type}{step}分"
-                # 端の処理
-                ratio = elapsed / duration
-                if ratio < 0.1: phase_text = prev_ev['type']
-                elif ratio > 0.9: phase_text = next_ev['type']
+            p_type = "上げ" if prev_ev['type'] == "干潮" else "下げ"
+            step = max(1, min(9, int((elapsed / duration) * 10)))
+            phase_text = f"{p_type}{step}分"
+            
+            # 潮止まり付近の表現
+            ratio = elapsed / duration
+            if ratio < 0.1: phase_text = prev_ev['type']
+            elif ratio > 0.9: phase_text = next_ev['type']
+        elif prev_ev: # 次のイベントが明日になる場合
+            phase_text = f"{prev_ev['type']}直後"
 
         return current_cm, phase_text
-    except:
+    except Exception as e:
+        print(f"Error in tide fetch: {e}")
         return default_res
 
 def get_realtime_weather():
-    """Open-Meteo Forecast API で現況と48h降水量を同期取得"""
-    LAT, LON = 32.4333, 130.2167 # 本渡(HS)
+    """気象データと潮汐データを統合して取得"""
+    # 本渡(HS)の座標
+    LAT, LON = 32.4333, 130.2167 
     tide_level, phase = get_jma_tide_hs()
     
     data = {
@@ -120,12 +122,15 @@ def get_realtime_weather():
             data['wdir'] = dirs[int((cw['winddirection'] + 11.25) / 22.5) % 16]
             
             if 'hourly' in res:
-                now_idx = 48 + datetime.now().hour
+                # 現在時刻に合わせた降水量の抽出
+                now_hour = datetime.now().hour
                 precip_list = res['hourly']['precipitation']
-                data['precip_48h'] = round(sum(precip_list[now_idx-48 : now_idx+1]), 1)
+                # 過去48時間分のインデックス(簡易版)
+                data['precip_48h'] = round(sum(precip_list[48:48+now_hour]), 1)
     except:
         pass
     return data
+
 
 def show_matching_page(df):
     """マッチングメイン画面"""
@@ -194,3 +199,4 @@ def show_matching_page(df):
             results = sorted(results, key=lambda x: x['score'], reverse=True)
             for i, res in enumerate(results):
                 st.markdown(f"<div class='recommend-card'><div class='score-badge'>{res['score']}%</div><b>{i+1}位: {res['place']}</b><br>成功実績: {res['hits']}件 / 推奨: {res['lure']}</div>", unsafe_allow_html=True)
+
