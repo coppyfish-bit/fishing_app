@@ -34,10 +34,10 @@ def show_matching_page(df):
     st.title("💖 SEABASS MATCH")
     st.info("📍 ターゲットエリア: 熊本県 天草市 本渡瀬戸")
     
-    # --- 2. セッション状態の初期化 ---
+# --- 2. セッション状態の初期化 ---
     if 'current_match_data' not in st.session_state:
         st.session_state.current_match_data = {
-            'tide': "中潮", 'wind': 3.0, 'phase': "上げ3分", 'wdir': "北", 'temp': 15.0
+            'tide': "中潮", 'wind': 3.0, 'phase': "上げ3分", 'wdir': "北", 'temp': 15.0 # tempを追加
         }
 
     # --- 3. リアルタイムデータ取得（本渡瀬戸） ---
@@ -146,4 +146,5 @@ def show_matching_page(df):
         st.info("⚡ まずまずの相性。潮の変化に期待しましょう。")
     else:
         st.error("💤 今は「既読スルー」の状態。少し時間を置きましょう。")
+
 
