@@ -390,116 +390,108 @@ with tab1:
         angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"])
         memo = st.text_area("🗒️ 備考")
 
-if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
-        try:
-            with st.spinner("📊 データ解析中..."):
-                target_dt = st.session_state.target_dt   
-                
-                # 1. 気象・場所情報
-                temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(st.session_state.lat, st.session_state.lon, target_dt)
-                m_age = get_moon_age(target_dt)
-                t_name = get_tide_name(m_age)
-                station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
-                
-                # 2. 潮汐データの取得（前後1日分を統合）
-                all_events = []
-                tide_cm = 0
-                for delta in [-1, 0, 1]:
-                    d_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
-                    if d_data:
-                        if 'events' in d_data: 
-                            all_events.extend(d_data['events'])
-                        if delta == 0: 
-                            tide_cm = d_data['cm']
+# --- 🚀 記録ボタンを Tab1 かつ uploaded_file がある時だけに限定 ---
+        # インデントを uploaded_file の中に一歩入れます
+        if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
+            try:
+                with st.spinner("📊 データ解析中..."):
+                    target_dt = st.session_state.target_dt   
+                    
+                    # 1. 気象・場所情報
+                    temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(st.session_state.lat, st.session_state.lon, target_dt)
+                    m_age = get_moon_age(target_dt)
+                    t_name = get_tide_name(m_age)
+                    station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
+                    
+                    # 2. 潮汐データの取得（前後1日分を統合）
+                    all_events = []
+                    tide_cm = 0
+                    for delta in [-1, 0, 1]:
+                        d_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
+                        if d_data:
+                            if 'events' in d_data: 
+                                all_events.extend(d_data['events'])
+                            if delta == 0: 
+                                tide_cm = d_data['cm']
 
-                # 重要：時間順に並べ、重複を排除
-                all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
+                    # 重要：時間順に並べ、重複を排除
+                    all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
 
-                # --- 3. 【重要】境界線（6:21と6:22）の判定ロジック ---
-                # 判定基準を5分未来にずらすことで、同時刻のイベントを確実に「過去」として捕まえる
-                search_dt = target_dt + timedelta(minutes=5)
-                
-                # 直前の干潮を探す
-                past_lows = [e for e in all_events if e['time'] <= search_dt and '干' in e['type']]
-                prev_l = past_lows[-1]['time'] if past_lows else None
-                
-                # 直前の満潮を探す
-                past_highs = [e for e in all_events if e['time'] <= search_dt and '満' in e['type']]
-                prev_h = past_highs[-1]['time'] if past_highs else None
+                    # --- 3. 潮位フェーズ判定ロジック ---
+                    search_dt = target_dt + timedelta(minutes=5)
+                    past_lows = [e for e in all_events if e['time'] <= search_dt and '干' in e['type']]
+                    prev_l = past_lows[-1]['time'] if past_lows else None
+                    past_highs = [e for e in all_events if e['time'] <= search_dt and '満' in e['type']]
+                    prev_h = past_highs[-1]['time'] if past_highs else None
 
-                # 直後のイベントを探す
-                next_l = next((e['time'] for e in all_events if e['time'] > search_dt and '干' in e['type']), None)
-                next_h = next((e['time'] for e in all_events if e['time'] > search_dt and '満' in e['type']), None)
+                    next_l = next((e['time'] for e in all_events if e['time'] > search_dt and '干' in e['type']), None)
+                    next_h = next((e['time'] for e in all_events if e['time'] > search_dt and '満' in e['type']), None)
 
-                # 潮位フェーズ判定用の前後イベント
-                prev_ev = next((e for e in reversed(all_events) if e['time'] <= search_dt), None)
-                next_ev = next((e for e in all_events if e['time'] > search_dt), None)
-                
-                tide_phase = "不明"
-                if prev_ev and next_ev:
-                    duration = (next_ev['time'] - prev_ev['time']).total_seconds()
-                    elapsed = (target_dt - prev_ev['time']).total_seconds()
-                    if duration > 0:
-                        elapsed = max(0, elapsed) # マイナス防止
-                        p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
-                        step = max(1, min(9, int((elapsed / duration) * 10)))
-                        tide_phase = f"{p_type}{step}分"
+                    prev_ev = next((e for e in reversed(all_events) if e['time'] <= search_dt), None)
+                    next_ev = next((e for e in all_events if e['time'] > search_dt), None)
+                    
+                    tide_phase = "不明"
+                    if prev_ev and next_ev:
+                        duration = (next_ev['time'] - prev_ev['time']).total_seconds()
+                        elapsed = (target_dt - prev_ev['time']).total_seconds()
+                        if duration > 0:
+                            elapsed = max(0, elapsed)
+                            p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
+                            step = max(1, min(9, int((elapsed / duration) * 10)))
+                            tide_phase = f"{p_type}{step}分"
 
-                # 4. 次の潮までの時間（分）
-                val_next_high = int((next_h - target_dt).total_seconds() / 60) if next_h else ""
-                val_next_low = int((next_l - target_dt).total_seconds() / 60) if next_l else ""
+                    val_next_high = int((next_h - target_dt).total_seconds() / 60) if next_h else ""
+                    val_next_low = int((next_l - target_dt).total_seconds() / 60) if next_l else ""
 
-                # 5. 画像処理
-                img_final = Image.open(uploaded_file)
-                try:
-                    exif_orient = img_final._getexif()
-                    if exif_orient:
-                        orient = next((k for k, v in ExifTags.TAGS.items() if v == 'Orientation'), None)
-                        if orient in exif_orient:
-                            if exif_orient[orient] == 3: img_final = img_final.rotate(180, expand=True)
-                            elif exif_orient[orient] == 6: img_final = img_final.rotate(270, expand=True)
-                            elif exif_orient[orient] == 8: img_final = img_final.rotate(90, expand=True)
-                except: 
-                    pass
+                    # 4. 画像処理
+                    img_final = Image.open(uploaded_file)
+                    try:
+                        exif_orient = img_final._getexif()
+                        if exif_orient:
+                            orient = next((k for k, v in ExifTags.TAGS.items() if v == 'Orientation'), None)
+                            if orient in exif_orient:
+                                if exif_orient[orient] == 3: img_final = img_final.rotate(180, expand=True)
+                                elif exif_orient[orient] == 6: img_final = img_final.rotate(270, expand=True)
+                                elif exif_orient[orient] == 8: img_final = img_final.rotate(90, expand=True)
+                    except: pass
 
-                img_final.thumbnail((800, 800), Image.Resampling.LANCZOS)
-                img_bytes = io.BytesIO()
-                img_final.convert('RGB').save(img_bytes, format='JPEG', quality=70, optimize=True)
-                img_bytes.seek(0)
+                    img_final.thumbnail((800, 800), Image.Resampling.LANCZOS)
+                    img_bytes = io.BytesIO()
+                    img_final.convert('RGB').save(img_bytes, format='JPEG', quality=70, optimize=True)
+                    img_bytes.seek(0)
 
-                # 6. 保存実行（Cloudinary & Google Sheets）
-                res = cloudinary.uploader.upload(img_bytes, folder="fishing_app")
-                
-                save_data = {
-                    "filename": res.get("secure_url"), 
-                    "datetime": target_dt.strftime("%Y/%m/%d %H:%M"),
-                    "date": target_dt.strftime("%Y/%m/%d"), 
-                    "time": target_dt.strftime("%H:%M"),
-                    "lat": float(st.session_state.lat), "lon": float(st.session_state.lon),
-                    "気温": temp, "風速": wind_s, "風向": wind_d, "降水量": rain_48, 
-                    "潮位_cm": tide_cm, "月齢": m_age, "潮名": t_name,
-                    "次の満潮まで_分": val_next_high, "次の干潮まで_分": val_next_low,
-                    "直前の満潮_時刻": prev_h.strftime('%Y/%m/%d %H:%M') if prev_h else "",
-                    "直前の干潮_時刻": prev_l.strftime('%Y/%m/%d %H:%M') if prev_l else "",
-                    "潮位フェーズ": tide_phase, "場所": place_name, "魚種": final_fish_name,
-                    "全長_cm": float(st.session_state.length_val), "ルアー": lure, "備考": memo,
-                    "group_id": target_group_id, "観測所": station_info['name'], "釣り人": angler
-                }
+                    # 5. 保存実行
+                    res = cloudinary.uploader.upload(img_bytes, folder="fishing_app")
+                    
+                    save_data = {
+                        "filename": res.get("secure_url"), 
+                        "datetime": target_dt.strftime("%Y/%m/%d %H:%M"),
+                        "date": target_dt.strftime("%Y/%m/%d"), 
+                        "time": target_dt.strftime("%H:%M"),
+                        "lat": float(st.session_state.lat), "lon": float(st.session_state.lon),
+                        "気温": temp, "風速": wind_s, "風向": wind_d, "降水量": rain_48, 
+                        "潮位_cm": tide_cm, "月齢": m_age, "潮名": t_name,
+                        "次の満潮まで_分": val_next_high, "次の干潮まで_分": val_next_low,
+                        "直前の満潮_時刻": prev_h.strftime('%Y/%m/%d %H:%M') if prev_h else "",
+                        "直前の干潮_時刻": prev_l.strftime('%Y/%m/%d %H:%M') if prev_l else "",
+                        "潮位フェーズ": tide_phase, "場所": place_name, "魚種": final_fish_name,
+                        "全長_cm": float(st.session_state.length_val), "ルアー": lure, "備考": memo,
+                        "group_id": target_group_id, "観測所": station_info['name'], "釣り人": angler
+                    }
 
-                df_main = conn.read(spreadsheet=url)
-                new_row = pd.DataFrame([save_data])
-                updated_df = pd.concat([df_main, new_row], ignore_index=True)
-                conn.update(spreadsheet=url, data=updated_df)
-                
-                st.cache_data.clear() 
-                st.success("✅ 記録完了しました！")
-                st.balloons()
-                time.sleep(1)
-                st.rerun()
+                    df_main = conn.read(spreadsheet=url)
+                    new_row = pd.DataFrame([save_data])
+                    updated_df = pd.concat([df_main, new_row], ignore_index=True)
+                    conn.update(spreadsheet=url, data=updated_df)
+                    
+                    st.cache_data.clear() 
+                    st.success("✅ 記録完了しました！")
+                    st.balloons()
+                    time.sleep(1)
+                    st.rerun()
 
-        except Exception as e:
-            st.error(f"❌ 保存失敗: {e}")
-
+            except Exception as e:
+                st.error(f"❌ 保存失敗: {e}")
 # ↓ ここから下の「with tab...」が、すべて同じ左端の高さにあるか確認してください
 with tab2:
     show_edit_page(conn, url)
@@ -520,6 +512,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
