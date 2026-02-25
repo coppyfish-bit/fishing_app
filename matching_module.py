@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import math
+import sys
+import importlib
 
 def show_matching_page(df):
     # --- 1. デザインCSS ---
@@ -52,20 +53,15 @@ def show_matching_page(df):
     # --- 3. リアルタイムデータ取得ボタン ---
     st.markdown("### 1. 今のコンディションを提示する")
     
-if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width=True, type="primary"):
+    # インデントを関数内に修正
+    if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width=True, type="primary"):
         with st.spinner("本渡瀬戸のデータを同期中..."):
             try:
-                # --- ここがポイント：app全体を読み込まず関数だけを借りる ---
-                import sys
-                import importlib
-                
-                # appをモジュールとして読み込むが、StreamlitのUI再描画を抑制する
+                # appを直接importせず、sys.modulesからロジックだけを抽出
                 if 'app' not in sys.modules:
                     import app
-                else:
-                    importlib.reload(sys.modules['app'])
                 
-                # appモジュールから必要な関数オブジェクトを取得
+                # app内の計算用関数を直接参照
                 get_weather = sys.modules['app'].get_weather_data_openmeteo
                 get_tide = sys.modules['app'].get_tide_details
                 get_moon = sys.modules['app'].get_moon_age
@@ -75,13 +71,13 @@ if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width
                 LON_HONDO = 130.2167
                 now = datetime.now()
                 
-                # 関数を実行
+                # データ取得実行
                 temp, wind_s, wind_d, rain = get_weather(LAT_HONDO, LON_HONDO, now)
                 tide_data = get_tide('HS', now)
                 m_age = get_moon(now)
                 t_name = get_t_name(m_age)
-                # ------------------------------------------------------
                 
+                # セッションへ反映
                 st.session_state.current_match_data['tide'] = t_name
                 st.session_state.current_match_data['wind'] = float(wind_s) if wind_s else 3.0
                 st.session_state.current_match_data['wdir'] = wind_d if wind_d else "北"
@@ -91,12 +87,12 @@ if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width
                 st.toast("✅ 本渡瀬戸の最新データを取得しました！")
                 st.rerun()
             except Exception as e:
-                # 万が一エラーが出ても、UI部品重複エラーなら無視して続行させる
+                # ID重複エラーは軽微な競合として処理を続行
                 if "multiple file_uploader" in str(e):
-                    st.toast("⚠️ UI同期に微細な競合がありますが、データは更新されました。")
                     st.rerun()
                 else:
                     st.error(f"データ取得エラー: {e}")
+
     # --- 4. 入力エリア ---
     col1, col2 = st.columns(2)
     
@@ -167,4 +163,3 @@ if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width
         st.info("⚡ 悪くない相性です。粘ればチャンスがあるかも？")
     else:
         st.error("💤 スズキは今、寝ているようです。家でルアーを磨きましょう。")
-
