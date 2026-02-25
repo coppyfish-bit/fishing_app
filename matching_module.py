@@ -51,23 +51,24 @@ def show_matching_page(df):
     # --- 3. リアルタイムデータ取得ボタン ---
     st.markdown("### 1. 今のコンディションを提示する")
     
-    if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width=True, type="primary"):
+if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width=True, type="primary"):
         with st.spinner("本渡瀬戸のデータを同期中..."):
-            # 循環参照を避けるためにここでインポート
             try:
-                import app 
+                # --- ここを修正 ---
+                # app.py全体をインポートせず、関数だけをピンポイントで取り出す
+                from app import get_weather_data_openmeteo, get_tide_details, get_moon_age, get_tide_name 
                 
                 LAT_HONDO = 32.4333
                 LON_HONDO = 130.2167
                 now = datetime.now()
                 
-                # app.py の関数を使用
-                temp, wind_s, wind_d, rain = app.get_weather_data_openmeteo(LAT_HONDO, LON_HONDO, now)
-                tide_data = app.get_tide_details('HS', now)
-                m_age = app.get_moon_age(now)
-                t_name = app.get_tide_name(m_age)
+                # 関数を直接呼び出す（app. をつけない）
+                temp, wind_s, wind_d, rain = get_weather_data_openmeteo(LAT_HONDO, LON_HONDO, now)
+                tide_data = get_tide_details('HS', now)
+                m_age = get_moon_age(now)
+                t_name = get_tide_name(m_age)
+                # -----------------
                 
-                # セッションへ書き戻し
                 st.session_state.current_match_data['tide'] = t_name
                 st.session_state.current_match_data['wind'] = float(wind_s) if wind_s else 3.0
                 st.session_state.current_match_data['wdir'] = wind_d if wind_d else "北"
@@ -151,3 +152,4 @@ def show_matching_page(df):
         st.info("⚡ 悪くない相性です。粘ればチャンスがあるかも？")
     else:
         st.error("💤 スズキは今、寝ているようです。家でルアーを磨きましょう。")
+
