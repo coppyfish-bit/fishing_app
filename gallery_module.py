@@ -11,7 +11,7 @@ def show_gallery_page(df):
 
     df_gallery = df.copy()
 
-    # --- 1. 日時のソート処理 ---
+    # --- 1. ソート処理 ---
     def clean_datetime_str(x):
         if pd.isna(x): return x
         return str(x).replace("/", "-").strip()
@@ -30,61 +30,88 @@ def show_gallery_page(df):
         na_position='last'
     )
 
-    # --- 2. カラム名チェックとデータの絞り込み ---
-    # 'filename' 列がない場合のエラー回避
+    # --- 2. 有効データの抽出 ---
     target_col = 'filename'
     if target_col not in df_gallery.columns:
-        st.error(f"スプレッドシートに '{target_col}' 列が見つかりません。")
+        st.error(f"'{target_col}'列が見つかりません。")
         return
 
-    # 有効な画像があるデータのみ抽出
     valid_rows = df_gallery[
         df_gallery[target_col].notna() & 
-        (df_gallery[target_col].astype(str).str.lower() != "nan") &
-        (df_gallery[target_col].astype(str) != "")
+        (df_gallery[target_col].astype(str).str.lower() != "nan")
     ]
 
-    if valid_rows.empty:
-        st.warning("表示できる写真がありません。")
-        return
+    # --- 3. レスポンシブ・グリッド表示 (スマホ1列固定) ---
+    # Streamlitのcolumnsを使わず、CSSで制御します
+    st.markdown("""
+        <style>
+        .gallery-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: flex-start;
+        }
+        .gallery-item {
+            flex: 1 1 calc(33.333% - 15px); /* PCは3列 */
+            box-sizing: border-box;
+            min-width: 280px;
+        }
+        @media (max-width: 600px) {
+            .gallery-item {
+                flex: 1 1 100%; /* スマホは1列 */
+            }
+        }
+        .card {
+            position: relative;
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            background: #1e1e1e;
+        }
+        .card img {
+            width: 100%;
+            aspect-ratio: 1/1;
+            object-fit: cover;
+            display: block;
+        }
+        .card-info {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            padding: 10px;
+            background: linear-gradient(transparent, rgba(0,0,0,0.95));
+            color: white;
+            font-size: 0.75rem;
+            line-height: 1.4;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-    # --- 3. グリッド表示 (スマホの順番崩れ対策) ---
-    # スマホで「1→2→3」と縦に並ぶように、1つのコンテナに順次配置します
-    
-    # PC表示用のカラム作成
-    cols = st.columns(3)
-    
-    for i, (idx, row) in enumerate(valid_rows.iterrows()):
-        # ここが重要：i % 3 で列を順番に入れ替えることで
-        # PCでは横並び、スマホでは上から順に「1, 2, 3...」と表示されます
-        with cols[i % 3]:
-            img_url = row.get(target_col)
-            lat = row.get('lat')
-            lon = row.get('lon')
-            
-            # Google Maps URLの作成
-            if pd.notnull(lat) and lat != 0:
-                map_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
-            else:
-                map_url = "#"
+    # ギャラリー全体を囲むコンテナを開始
+    gallery_html = '<div class="gallery-grid">'
 
-            # 日時表示の整形
-            dt_val = row.get('datetime_parsed')
-            display_dt = dt_val.strftime('%Y-%m-%d %H:%M') if pd.notnull(dt_val) else str(row.get('datetime', '-'))[:16]
-            
-            # 各種情報の取得
-            fish_info = f"{row.get('魚種', '-')} {row.get('全長_cm', '-')}cm"
-            place_name = row.get('場所', '-')
-            tide_info = f"{row.get('潮名', '-')} ({row.get('潮位フェーズ', '-')})"
-            env_info = f"🌡️ {row.get('気温', '-')}℃ / 💨 {row.get('風速', '-')}m"
+    for _, row in valid_rows.iterrows():
+        img_url = row.get(target_col)
+        lat, lon = row.get('lat'), row.get('lon')
+        map_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}" if pd.notnull(lat) and lat != 0 else "#"
+        
+        dt_val = row.get('datetime_parsed')
+        display_dt = dt_val.strftime('%Y-%m-%d %H:%M') if pd.notnull(dt_val) else str(row.get('datetime', '-'))[:16]
+        
+        fish_info = f"{row.get('魚種', '-')} {row.get('全長_cm', '-')}cm"
+        place_name = row.get('場所', '-')
+        tide_info = f"{row.get('潮名', '-')} ({row.get('潮位フェーズ', '-')})"
+        env_info = f"🌡️ {row.get('気温', '-')}℃ / 💨 {row.get('風速', '-')}m"
 
-            # HTMLによるカード表示
-            card_html = f"""
+        # 1枚ずつのカードをHTMLに追加
+        gallery_html += f"""
+        <div class="gallery-item">
             <a href="{map_url}" target="_blank" style="text-decoration: none; color: inherit;">
-                <div style="position: relative; width: 100%; margin-bottom: 15px; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background: #1e1e1e;">
-                    <img src="{img_url}" style="width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block;">
-                    <div style="position: absolute; bottom: 0; width: 100%; padding: 6px; background: linear-gradient(transparent, rgba(0,0,0,0.9)); color: white; font-size: 0.7rem; line-height: 1.3;">
-                        <b style="color: #00ffd0; font-size: 0.8rem;">{fish_info}</b><br>
+                <div class="card">
+                    <img src="{img_url}">
+                    <div class="card-info">
+                        <b style="color: #00ffd0; font-size: 0.9rem;">{fish_info}</b><br>
                         📍 {place_name}<br>
                         📅 {display_dt}<br>
                         🌊 {tide_info}<br>
@@ -92,5 +119,8 @@ def show_gallery_page(df):
                     </div>
                 </div>
             </a>
-            """
-            st.markdown(card_html, unsafe_allow_html=True)
+        </div>
+        """
+
+    gallery_html += '</div>' # コンテナを閉じる
+    st.markdown(gallery_html, unsafe_allow_html=True)
