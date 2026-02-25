@@ -109,7 +109,7 @@ def show_ai_chat_section(md):
         </div>
     """, unsafe_allow_html=True)
     
-    st.subheader("💬 シーバス攻略AIに相談")
+    st.subheader("💬 シーバスガイドAI ザミュエル佐藤に相談")
     
     if not HAS_GENAI or "GEMINI_API_KEY" not in st.secrets:
         st.info("APIキーを設定するとAIと会話できます。")
@@ -185,5 +185,6 @@ def show_matching_page(df):
 
     # AIチャットセクションの表示
     show_ai_chat_section(md)
+
 
 
