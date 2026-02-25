@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import math
 
 def show_matching_page(df):
-    # --- 1. デザインCSS（二重波括弧でSyntaxErrorを防止） ---
+    # --- 1. デザインCSS ---
     st.markdown("""
         <style>
         .match-container {{
@@ -51,24 +52,23 @@ def show_matching_page(df):
     # --- 3. リアルタイムデータ取得ボタン ---
     st.markdown("### 1. 今のコンディションを提示する")
     
-if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width=True, type="primary"):
+    if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width=True, type="primary"):
         with st.spinner("本渡瀬戸のデータを同期中..."):
             try:
-                # --- ここを修正 ---
-                # app.py全体をインポートせず、関数だけをピンポイントで取り出す
-                from app import get_weather_data_openmeteo, get_tide_details, get_moon_age, get_tide_name 
+                # 循環参照を避けるため、appからのインポートをボタン内部で行う
+                import app
                 
                 LAT_HONDO = 32.4333
                 LON_HONDO = 130.2167
                 now = datetime.now()
                 
-                # 関数を直接呼び出す（app. をつけない）
-                temp, wind_s, wind_d, rain = get_weather_data_openmeteo(LAT_HONDO, LON_HONDO, now)
-                tide_data = get_tide_details('HS', now)
-                m_age = get_moon_age(now)
-                t_name = get_tide_name(m_age)
-                # -----------------
+                # app.py の関数を使用してデータを取得
+                temp, wind_s, wind_d, rain = app.get_weather_data_openmeteo(LAT_HONDO, LON_HONDO, now)
+                tide_data = app.get_tide_details('HS', now)
+                m_age = app.get_moon_age(now)
+                t_name = app.get_tide_name(m_age)
                 
+                # セッションへ書き戻し
                 st.session_state.current_match_data['tide'] = t_name
                 st.session_state.current_match_data['wind'] = float(wind_s) if wind_s else 3.0
                 st.session_state.current_match_data['wdir'] = wind_d if wind_d else "北"
@@ -93,14 +93,12 @@ if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width
         t_val = st.session_state.current_match_data['tide']
         t_idx = tide_options.index(t_val) if t_val in tide_options else 0
         c_tide = st.selectbox("現在の潮", tide_options, index=t_idx)
-        
         c_wind = st.slider("現在の風速 (m/s)", 0.0, 15.0, st.session_state.current_match_data['wind'])
         
     with col2:
         p_val = st.session_state.current_match_data['phase']
         p_idx = phase_options.index(p_val) if p_val in phase_options else 2
         c_phase = st.selectbox("現在の時合", phase_options, index=p_idx)
-        
         wd_val = st.session_state.current_match_data['wdir']
         wd_idx = wdir_options.index(wd_val) if wd_val in wdir_options else 0
         c_wdir = st.selectbox("現在の風向", wdir_options, index=wd_idx)
@@ -152,4 +150,3 @@ if st.button("🌊 本渡瀬戸の今を自動取得する", use_container_width
         st.info("⚡ 悪くない相性です。粘ればチャンスがあるかも？")
     else:
         st.error("💤 スズキは今、寝ているようです。家でルアーを磨きましょう。")
-
