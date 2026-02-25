@@ -42,6 +42,7 @@ def show_matching_page(df):
         .recommend-card { background: linear-gradient(135deg, #2c3e50 0%, #000000 100%); padding: 20px; border-radius: 15px; border-left: 5px solid #ff4b6c; margin-bottom: 15px; color: white; position: relative; }
         .score-badge { position: absolute; top: 20px; right: 20px; font-size: 1.8rem; font-weight: bold; color: #ff4b6c; }
         .lure-tag { background: #444; color: #00ffd0; padding: 2px 8px; border-radius: 5px; font-size: 0.8rem; }
+        .ranker-badge { color: #ffd700; font-size: 0.9rem; font-weight: bold; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -50,7 +51,6 @@ def show_matching_page(df):
     if 'm_data' not in st.session_state:
         st.session_state.m_data = {'tide':"中潮", 'temp':15.0, 'wind':3.0, 'tide_level':100, 'phase':"上げ5分"}
 
-    # --- 条件入力セクション ---
     st.markdown("<div class='input-card'>", unsafe_allow_html=True)
     if st.button("🔄 今の本渡瀬戸に合わせる"):
         st.session_state.m_data = get_realtime_weather()
@@ -66,16 +66,12 @@ def show_matching_page(df):
         wind = st.number_input("風速 (m/s)", value=float(st.session_state.m_data['wind']))
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- 自動マッチング実行 ---
     if st.button("💘 この条件で最高のエリアを探す"):
         if df is not None and not df.empty:
-            df['is_bouzu'] = df['魚種'].str.contains('ボウズ', na=False)
-            
-            # 条件に合致する過去データを抽出（潮名で絞り込み）
+            df['is_bouzu'] = df['魚種'].astype(str).str.contains('ボウズ', na=False)
             match_df = df[df['潮名'] == tide].copy()
             
             if not match_df.empty:
-                # エリアごとに集計
                 results = []
                 for place in match_df['場所'].unique():
                     p_df = match_df[match_df['場所'] == place]
@@ -83,36 +79,39 @@ def show_matching_page(df):
                     
                     if not p_df.empty:
                         success_rate = (len(success_df) / len(p_df)) * 100
-                        # 今回選んだフェーズでの実績があるか
                         phase_hits = len(success_df[success_df['潮位フェーズ'] == phase])
-                        # スコア計算（成功率 + 時合一致ボーナス）
-                        score = int(success_rate + (10 if phase_hits > 0 else 0))
-                        score = min(score, 100)
+                        score = min(int(success_rate + (10 if phase_hits > 0 else 0)), 100)
                         
-                        best_lure = success_df['ルアー'].mode()[0] if not success_df.empty and 'ルアー' in success_df.columns else "未登録"
+                        # 【修正】 modeの結果があるか安全に確認
+                        lure_mode = success_df['ルアー'].dropna().mode()
+                        best_lure = lure_mode[0] if not lure_mode.empty else "未登録"
+                        
+                        # 最大サイズ（ランカー実績）の取得
+                        max_size = success_df['全長_cm'].max() if not success_df.empty else 0
                         
                         results.append({
                             'place': place, 'score': score, 'hits': len(success_df), 
-                            'lure': best_lure, 'phase_match': phase_hits > 0
+                            'lure': best_lure, 'phase_match': phase_hits > 0,
+                            'max_size': max_size
                         })
                 
-                # スコア順に並び替え
                 results = sorted(results, key=lambda x: x['score'], reverse=True)
 
                 st.subheader("📍 あなたにオススメのエリア")
                 for res in results:
                     bonus_star = "⭐ 時合が完璧！" if res['phase_match'] else ""
+                    ranker_info = f"🏆 最大実績: {res['max_size']}cm" if res['max_size'] > 0 else ""
+                    
                     st.markdown(f"""
                         <div class='recommend-card'>
                             <div class='score-badge'>{res['score']}%</div>
                             <div style='font-size:1.3rem; font-weight:bold;'>{res['place']}</div>
                             <div style='margin: 5px 0;'>過去の釣果: {res['hits']}件 <span style='color:#ff8e53;'>{bonus_star}</span></div>
-                            <div>実績ルアー: <span class='lure-tag'>{res['lure']}</span></div>
+                            <div class='ranker-badge'>{ranker_info}</div>
+                            <div style='margin-top:8px;'>実績ルアー: <span class='lure-tag'>{res['lure']}</span></div>
                         </div>
                     """, unsafe_allow_html=True)
                 
                 if results[0]['score'] > 80: st.balloons()
             else:
-                st.info(f"残念ながら、{tide}での過去データがまだありません。")
-        else:
-            st.error("分析データが空です。")
+                st.info(f"{tide}でのデータがまだありません。")
