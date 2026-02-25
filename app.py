@@ -300,7 +300,7 @@ with tab1:
         <div style="text-align: center; padding: 20px 0;">
             <img src="{icon_url}" style="width: 120px; filter: drop-shadow(0 0 10px rgba(0, 255, 208, 0.4));">
             <h1 style="color: #ffffff !important; font-size: 2rem; font-weight: 900; letter-spacing: 0.1rem; margin-top: 10px; border-bottom: none;">
-                OCEAN <span style="color: #00ffd0;">STRATEGY</span>
+                Kyou Tsuri <span style="color: #00ffd0;">Dou</span>
             </h1>
             <p style="color: #888; font-size: 0.8rem; text-transform: uppercase;">Advanced Anglers Log System</p>
         </div>
@@ -545,6 +545,7 @@ with tab5:
 with tab6:
     from strategy_analysis import show_strategy_analysis
     show_strategy_analysis(df)
+
 
 
 
