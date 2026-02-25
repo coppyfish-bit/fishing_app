@@ -79,7 +79,7 @@ def show_gallery_page(df):
         </style>
     """, unsafe_allow_html=True)
 
-    st.title("🖼️ PHOTO GALLERY")
+    st.title("🖼️GALLERY")
     
     if df is None or df.empty:
         st.info("No records found.")
@@ -158,3 +158,4 @@ def show_gallery_page(df):
                 </a>
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
+
