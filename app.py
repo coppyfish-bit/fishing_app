@@ -522,9 +522,13 @@ def main():
                         st.balloons()
                         time.sleep(1)
                         st.rerun()
+                        # --- データの読み込み（ここですでに df を取得済み） ---
+                        df, df_master = get_all_data(conn, url)
     
                 except Exception as e:
                     st.error(f"❌ 保存失敗: {e}")
+
+                    
     # ↓ ここから下の「with tab...」が、すべて同じ左端の高さにあるか確認してください
     with tab2:
         show_edit_page(conn, url)
@@ -557,6 +561,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
