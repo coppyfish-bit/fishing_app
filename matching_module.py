@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --- データ取得関数 ---
 def get_jma_tide_hs():
@@ -26,30 +26,41 @@ def get_jma_tide_hs():
     return 150, "下げ"
 
 def get_weather():
-    """天草の現在気象を取得（気温・風速・風向・降水量）"""
+    """天草の現在気象を取得（気温・風・48時間降水量）"""
     try:
+        # 過去2日間を含めて降水データを取得
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=2)
+        
         res = requests.get("https://api.open-meteo.com/v1/forecast", params={
             "latitude": 32.4333, "longitude": 130.2167, 
             "current_weather": "true",
-            "hourly": "precipitation" # 降水量を取得
+            "hourly": "precipitation",
+            "start_date": start_date.strftime('%Y-%m-%d'),
+            "end_date": end_date.strftime('%Y-%m-%d'),
+            "timezone": "Asia/Tokyo"
         }, timeout=5).json()
         
         cw = res['current_weather']
-        # 現在の時間の降水量を取得
-        now_hour = datetime.now().hour
-        precip = res['hourly']['precipitation'][now_hour] if 'hourly' in res else 0.0
+        
+        # 48時間降水量の合計を計算（直近48個のデータを合算）
+        precip_48h = 0.0
+        if 'hourly' in res and 'precipitation' in res['hourly']:
+            precip_list = res['hourly']['precipitation']
+            # リストの最後（現在）から遡って48時間分を合計
+            precip_48h = sum(precip_list[-48:])
         
         dirs = ["北", "北東", "東", "南東", "南", "南西", "西", "北西"]
         wdir_text = dirs[int((cw['winddirection'] + 22.5) / 45) % 8]
         
-        return cw['temperature'], round(cw['windspeed']/3.6, 1), wdir_text, precip
+        return cw['temperature'], round(cw['windspeed']/3.6, 1), wdir_text, round(precip_48h, 1)
     except:
         return 20.0, 2.0, "北", 0.0
 
 # --- メイン表示関数 ---
 def show_matching_page(df):
     st.title("🏹 SeaBass Matcher Pro")
-    st.caption("月・潮位・気象条件から過去の爆釣データを検索")
+    st.caption("月・潮位・気象条件（48h降水量含む）から過去データを検索")
 
     # セッション状態の初期化
     if 'tide' not in st.session_state: st.session_state.tide = 150
@@ -57,20 +68,20 @@ def show_matching_page(df):
     if 'wind' not in st.session_state: st.session_state.wind = 2.0
     if 'wdir' not in st.session_state: st.session_state.wdir = "北"
     if 'temp' not in st.session_state: st.session_state.temp = 20.0
-    if 'precip' not in st.session_state: st.session_state.precip = 0.0
+    if 'precip_48h' not in st.session_state: st.session_state.precip_48h = 0.0
     if 'month' not in st.session_state: st.session_state.month = datetime.now().month
 
     # --- 1. 入力セクション ---
     with st.expander("🌍 海況・気象データの設定", expanded=True):
         if st.button("🔄 リアルタイム情報を取得"):
             t_cm, t_ph = get_jma_tide_hs()
-            temp_val, wind_spd, wdir_val, precip_val = get_weather()
+            temp_val, wind_spd, wdir_val, p48_val = get_weather()
             st.session_state.tide = t_cm
             st.session_state.phase = t_ph
             st.session_state.temp = temp_val
             st.session_state.wind = wind_spd
             st.session_state.wdir = wdir_val
-            st.session_state.precip = precip_val
+            st.session_state.precip_48h = p48_val
             st.session_state.month = datetime.now().month
             st.rerun()
 
@@ -83,7 +94,8 @@ def show_matching_page(df):
         
         c4, c5, c6, c7 = st.columns(4)
         temp_input = c4.number_input("気温(℃)", -10.0, 45.0, value=st.session_state.temp)
-        precip_input = c5.number_input("降水量(mm)", 0.0, 100.0, value=st.session_state.precip)
+        # 降水量を48時間降水量に変更
+        precip_input = c5.number_input("48h降水量(mm)", 0.0, 300.0, value=st.session_state.precip_48h)
         wind_input = c6.number_input("風速(m)", 0.0, 20.0, value=st.session_state.wind)
         wdir_options = ["北", "北東", "東", "南東", "南", "南西", "西", "北西"]
         default_w = st.session_state.wdir if st.session_state.wdir in wdir_options else "北"
@@ -110,9 +122,10 @@ def show_matching_page(df):
         try:
             if abs(row['気温'] - temp_input) <= 3: score += 10
         except: pass
-        # 降水量 (10点) - 0mmかそれ以外か、あるいは近い値か
+        # 48h降水量判定 (10点) - エクセル側のカラム名は「降水量」を想定
         try:
-            if abs(row['降水量'] - precip_input) <= 1: score += 10
+            # 過去48時間の合計値同士を比較（±5mm以内なら加点）
+            if abs(row['降水量'] - precip_input) <= 5: score += 10
         except: pass
         
         return score
@@ -121,7 +134,7 @@ def show_matching_page(df):
         df['マッチ度'] = df.apply(calculate_score, axis=1)
         ranking = df.sort_values('マッチ度', ascending=False).drop_duplicates(subset=['場所']).head(5)
 
-        st.subheader("📍 おすすめポイント（気象条件を加味）")
+        st.subheader("📍 おすすめポイント（48h降水量などを考慮）")
         
         for i, row in ranking.iterrows():
             with st.container():
@@ -130,8 +143,8 @@ def show_matching_page(df):
                 with cols[1]:
                     st.markdown(f"### {row['場所']}")
                     st.write(f"📏 **過去実績:** {row['魚種']} {row['全長_cm']}cm")
-                    st.caption(f"🌡️ 気温: {row['気温']}℃ | ☔ 降水: {row['降水量']}mm | 💨 風: {row.get('風向')} {row.get('風速')}m")
+                    st.caption(f"🌡️ 気温: {row['気温']}℃ | ☔ 48h降水: {row['降水量']}mm | 💨 風: {row.get('風向')} {row.get('風速')}m")
                     st.write(f"🎣 **使用ルアー:** {row['ルアー']}")
                 st.divider()
     else:
-        st.warning("データファイルが正しく読み込まれていません。")
+        st.warning("データファイルが読み込まれていません。")
