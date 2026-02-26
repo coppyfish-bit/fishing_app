@@ -7,7 +7,7 @@ def show_ai_page(conn, url):
     st.header("😈 魔界釣果アドバイザー：デーモン佐藤")
 
     # APIキー設定
-    api_key = st.secrets.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key:
         st.error("APIキーがないぞ！Secretsに設定して出直してこい。")
         return
@@ -80,3 +80,4 @@ def show_ai_page(conn, url):
     if st.sidebar.button("チャット履歴を浄化"):
         st.session_state.messages = []
         st.rerun()
+
