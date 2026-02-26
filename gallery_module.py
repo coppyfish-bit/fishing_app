@@ -94,8 +94,10 @@ def show_gallery_page(df):
 
     df_gallery['datetime_tmp'] = df_gallery['datetime'].apply(clean_datetime_str)
     df_gallery['datetime_parsed'] = pd.to_datetime(df_gallery['datetime_tmp'], errors='coerce')
+    # 解析に失敗した行（空欄など）を念のため除外または補完
+    df_gallery = df_gallery.dropna(subset=['datetime_parsed'])
 
-    # --- 3. 検索パネル ---
+# --- 3. 検索パネル ---
     with st.expander("🔍 Filter", expanded=False):
         col_f, col_p = st.columns(2)
         fish_list = ["すべて"] + sorted(df_gallery['魚種'].unique().tolist())
@@ -103,16 +105,31 @@ def show_gallery_page(df):
         place_list = ["すべて"] + sorted(df_gallery['場所'].unique().tolist())
         selected_place = col_p.selectbox("📍 FIELD", place_list)
 
-        min_date = df_gallery['datetime_parsed'].min().date() if not df_gallery['datetime_parsed'].isna().all() else date(2024, 1, 1)
-        date_range = st.date_input("📅 DATE RANGE", value=(min_date, date.today()), min_value=min_date, max_value=date.today())
+        # 修正：今日の日付を基準に、データがなければ1年前をデフォルトにする
+        absolute_min = df_gallery['datetime_parsed'].min().date() if not df_gallery.empty else date(2024, 1, 1)
+        
+        # date_input の初期値を (最小日, 今日の23:59まで含むイメージ) に設定
+        # 登録直後のデータが「今日」の場合、これなら確実に入る
+        date_range = st.date_input(
+            "📅 DATE RANGE", 
+            value=(absolute_min, date.today()), 
+            min_value=absolute_min, 
+            max_value=date.today()
+        )
 
-    # フィルタリング
+    # --- フィルタリング ---
     if selected_fish != "すべて":
         df_gallery = df_gallery[df_gallery['魚種'] == selected_fish]
     if selected_place != "すべて":
         df_gallery = df_gallery[df_gallery['場所'] == selected_place]
-    if isinstance(date_range, tuple) and len(date_range) == 2:
-        df_gallery = df_gallery[(df_gallery['datetime_parsed'].dt.date >= date_range[0]) & (df_gallery['datetime_parsed'].dt.date <= date_range[1])]
+    
+    # 修正：date_range がちゃんと2つ（開始と終了）選ばれている時だけ絞り込む
+    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+        start_date, end_date = date_range
+        df_gallery = df_gallery[
+            (df_gallery['datetime_parsed'].dt.date >= start_date) & 
+            (df_gallery['datetime_parsed'].dt.date <= end_date)
+        ]
 
     df_gallery = df_gallery.sort_values(by=['datetime_parsed', 'datetime_tmp'], ascending=[False, False])
     valid_rows = df_gallery[df_gallery['filename'].notna() & (df_gallery['filename'].astype(str).str.lower() != "nan")]
@@ -158,4 +175,5 @@ def show_gallery_page(df):
                 </a>
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
+
 
