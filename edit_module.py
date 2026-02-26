@@ -36,36 +36,49 @@ def render_edit_form(df, idx, conn, url):
     if st.button(f"🔄 気象・潮汐データを再取得する", key=f"btn_{idx}", use_container_width=True):
         try:
             with st.spinner("最新データを計算中..."):
+# --- edit_module.py の再取得ボタン内 ---
                 import app
                 raw_dt = str(df.at[idx, 'datetime']).replace("-", "/").strip()
-                parts = raw_dt.split(":")
-                clean_dt_str = f"{parts[0]}:{parts[1]}" if len(parts) > 2 else raw_dt
-                dt_obj = datetime.strptime(clean_dt_str, '%Y/%m/%d %H:%M')
+                dt_obj = datetime.strptime(raw_dt[:16], '%Y/%m/%d %H:%M')
                 
                 lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
                 temp, w_s, w_d, rain = app.get_weather_data_openmeteo(lat, lon, dt_obj)
                 station = app.find_nearest_tide_station(lat, lon)
-                tide_res = app.get_tide_details(station['code'], dt_obj)
                 
-                # フェーズ取得ロジックの強化（キー名の揺れに対応）
-                obtained_phase = "不明"
-                if tide_res:
-                    for k in ['phase', 'phase_text', 'tide_phase']:
-                        if k in tide_res and tide_res[k]:
-                            obtained_phase = tide_res[k]
-                            break
+                # 潮汐データを取得（前後1日分を統合して計算する、登録時と同じロジック）
+                all_events = []
+                tide_cm = 0
+                for delta in [-1, 0, 1]:
+                    d_data = app.get_tide_details(station['code'], dt_obj + timedelta(days=delta))
+                    if d_data:
+                        if 'events' in d_data: all_events.extend(d_data['events'])
+                        if delta == 0: tide_cm = d_data['cm']
 
+                all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
+                
+                # 潮位フェーズ判定（登録時と全く同じ計算式）
+                tide_phase = "不明"
+                search_dt = dt_obj + timedelta(minutes=5)
+                prev_ev = next((e for e in reversed(all_events) if e['time'] <= search_dt), None)
+                next_ev = next((e for e in all_events if e['time'] > search_dt), None)
+                
+                if prev_ev and next_ev:
+                    duration = (next_ev['time'] - prev_ev['time']).total_seconds()
+                    elapsed = (dt_obj - prev_ev['time']).total_seconds()
+                    if duration > 0:
+                        p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
+                        step = max(1, min(9, int((elapsed / duration) * 10)))
+                        tide_phase = f"{p_type}{step}分"
+
+                # 画面上のセッションに保存
                 st.session_state[temp_data_key] = {
-                    "temp": temp, 
-                    "wind_s": w_s,
-                    "wind_d": w_d, 
-                    "rain": rain,
-                    "tide_cm": tide_res['cm'] if tide_res else 0,
-                    "tide_name": tide_res.get('tide_name', "不明") if tide_res else "不明",
-                    "phase": obtained_phase
+                    "temp": temp, "wind_s": w_s, "wind_d": w_d, "rain": rain,
+                    "tide_cm": tide_cm,
+                    "tide_name": app.get_tide_name(app.get_moon_age(dt_obj)),
+                    "phase": tide_phase
                 }
                 st.session_state[form_version_key] += 1
-                st.rerun() 
+                st.rerun()
         except Exception as e:
             st.error(f"再取得エラー: {e}")
 
@@ -136,3 +149,4 @@ def render_edit_form(df, idx, conn, url):
                 st.session_state[temp_data_key] = None
                 st.cache_data.clear()
                 st.rerun()
+
