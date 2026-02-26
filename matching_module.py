@@ -7,108 +7,83 @@ from datetime import datetime, timedelta, timezone
 LAT = 32.45
 LON = 130.19
 PHASES = ["満潮", "下げ1分", "下げ3分", "下げ5分", "下げ7分", "下げ9分", "干潮", "上げ1分", "上げ3分", "上げ5分", "上げ7分", "上げ9分"]
-DIRS_16 = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
-
-def get_weather_data_openmeteo(lat, lon, dt):
-    """Open-Meteo APIから気象データを取得"""
-    try:
-        url = "https://archive-api.open-meteo.com/v1/archive"
-        params = {
-            "latitude": lat, "longitude": lon,
-            "start_date": (dt - timedelta(days=2)).strftime('%Y-%m-%d'),
-            "end_date": dt.strftime('%Y-%m-%d'),
-            "hourly": "temperature_2m,windspeed_10m,winddirection_10m,precipitation",
-            "timezone": "Asia/Tokyo"
-        }
-        res = requests.get(url, params=params, timeout=10).json()
-        h = res['hourly']
-        idx = -1 
-        temp = h['temperature_2m'][idx]
-        wind_speed = round(h['windspeed_10m'][idx] / 3.6, 1)
-        wind_deg = h['winddirection_10m'][idx]
-        precip_48h = round(sum(h['precipitation'][-48:]), 1)
-
-        def get_wind_dir(deg):
-            return DIRS_16[int((deg + 11.25) / 22.5) % 16]
-        
-        return temp, wind_speed, get_wind_dir(wind_deg), precip_48h
-    except:
-        return None, None, "不明", 0.0
 
 def show_matching_page(df=None):
     st.title("🏹 SeaBass Matcher Pro")
 
-    # 1. 日本時間の取得
     jst = timezone(timedelta(hours=9))
     now = datetime.now(jst).replace(tzinfo=None)
 
-    # 2. セッション状態の初期化
     if 'input_vals' not in st.session_state:
-        st.session_state.input_vals = {
-            'month': now.month, 'tide': 150, 'phase': "下げ5分",
-            'temp': 10.0, 'rain': 0.0, 'wind_dir': "北", 'wind_speed': 3.0
-        }
+        st.session_state.input_vals = {'month': now.month, 'tide': 150, 'phase': "下げ5分", 'temp': 10.0, 'rain': 0.0, 'wind_dir': "北", 'wind_speed': 3.0}
 
-    # 3. 自動取得ボタン
-    if st.button("🔄 現在の本渡瀬戸の状況を精密取得"):
-        with st.spinner('潮汐・気象データを精密解析中...'):
-            temp, w_speed, w_dir, rain48 = get_weather_data_openmeteo(LAT, LON, now)
-            
+    if st.button("🔄 現在の本渡瀬戸の状況を自動取得"):
+        with st.spinner('潮汐・気象データを解析中...'):
             tide_val = 150
-            phase_val = "下げ5分"
+            phase_val = "不明"
+            
             try:
+                # 気象庁の潮汐データ取得
                 url = f"https://www.data.jma.go.jp/gmd/kaiyou/data/db/tide/suisan/txt/{now.year}/HS.txt"
                 res = requests.get(url, timeout=10)
                 lines = res.text.splitlines()
                 
-                # 3日間の潮汐イベントを抽出（精密判定用）
+                # 3日間の全イベント（満潮・干潮）を網羅的に抽出
                 events = []
                 for d_off in [-1, 0, 1]:
                     t_d = now + timedelta(days=d_off)
                     d_str = t_d.strftime('%Y%m%d')
                     d_line = next((l for l in lines if len(l) > 100 and int(l[76:78]) == t_d.day and l[78:80].strip() == "HS"), None)
                     if d_line:
+                        # 満潮・干潮の全4セット分をスキャン
                         for start, e_type in [(80, "満潮"), (108, "干潮")]:
                             for i in range(4):
                                 pos = start + (i * 7)
                                 t_raw = d_line[pos : pos+4].strip()
                                 v_raw = d_line[pos+4 : pos+7].strip()
-                                if t_raw and t_raw != "9999":
+                                if t_raw and t_raw != "9999" and t_raw.isdigit():
                                     events.append({
                                         "time": datetime.strptime(d_str + t_raw, '%Y%m%d%H%M'),
                                         "type": e_type,
                                         "value": int(v_raw)
                                     })
                 
+                # 時刻順に並べて「今」を挟む2点を特定
                 events.sort(key=lambda x: x['time'])
                 prev_e = next((e for e in reversed(events) if e['time'] <= now), None)
                 next_e = next((e for e in events if e['time'] > now), None)
 
                 if prev_e and next_e:
-                    # 潮位の線形補間
-                    time_ratio = (now - prev_e['time']).total_seconds() / (next_e['time'] - prev_e['time']).total_seconds()
-                    tide_val = int(prev_e['value'] + (next_e['value'] - prev_e['value']) * time_ratio)
-                    
-                    # --- 詳細フェーズ判定ロジック (水位変化量ベース) ---
-                    total_diff = abs(next_e['value'] - prev_e['value'])
-                    move_ratio = abs(tide_val - prev_e['value']) / total_diff
+                    # 現在の潮位（線形補間）
+                    time_diff_total = (next_e['time'] - prev_e['time']).total_seconds()
+                    time_diff_now = (now - prev_e['time']).total_seconds()
+                    tide_val = int(prev_e['value'] + (next_e['value'] - prev_e['value']) * (time_diff_now / time_diff_total))
+
+                    # --- ご提案の「時間10分割」ロジック ---
+                    ratio = time_diff_now / time_diff_total
                     direction = "下げ" if prev_e['type'] == "満潮" else "上げ"
 
-                    if move_ratio < 0.05: phase_val = prev_e['type']
-                    elif move_ratio > 0.95: phase_val = next_e['type']
-                    elif move_ratio < 0.20: phase_val = f"{direction}1分"
-                    elif move_ratio < 0.40: phase_val = f"{direction}3分"
-                    elif move_ratio < 0.60: phase_val = f"{direction}5分"
-                    elif move_ratio < 0.80: phase_val = f"{direction}7分"
+                    if ratio < 0.05: phase_val = prev_e['type']     # 始点
+                    elif ratio > 0.95: phase_val = next_e['type']   # 終点
+                    elif ratio < 0.20: phase_val = f"{direction}1分"
+                    elif ratio < 0.40: phase_val = f"{direction}3分"
+                    elif ratio < 0.60: phase_val = f"{direction}5分"
+                    elif ratio < 0.80: phase_val = f"{direction}7分"
                     else: phase_val = f"{direction}9分"
-            except: pass
+            except Exception as e:
+                st.error(f"解析エラー: {e}")
+
+            # 気象データ取得（Open-Meteo関数を別途定義して呼び出し）
+            temp, w_speed, w_dir, rain48 = get_weather_data_openmeteo(LAT, LON, now)
 
             st.session_state.input_vals.update({
                 'month': now.month, 'tide': tide_val, 'phase': phase_val,
                 'temp': temp if temp else 10.0, 'rain': rain48,
-                'wind_dir': w_dir, 'wind_speed': w_speed if w_speed else 0.0
+                'wind_dir': w_dir, 'wind_speed': w_speed
             })
-            st.success(f"最新情報を取得：現在は「{phase_val}」です")
+            st.success(f"解析完了：現在は「{phase_val}」です（直前:{prev_e['time'].strftime('%H:%M')} / 次:{next_e['time'].strftime('%H:%M')}）")
+
+    # --- 4. 手入力・微調整フォーム（以下、前回同様のUI） ---
 
     # 4. 手入力・微調整フォーム
     with st.expander("📝 フィールド状況の微調整", expanded=True):
@@ -161,3 +136,4 @@ def show_matching_page(df=None):
                     with c_b:
                         st.write(f"🌊 {row.get('潮位フェーズ','-')} ({row.get('潮位_cm','-')}cm)")
                     st.progress(row['マッチ度'] / 100)
+
