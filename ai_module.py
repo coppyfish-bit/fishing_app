@@ -73,7 +73,7 @@ def show_ai_page(conn, url, df, md=None):
         <div class="header-container">
             <img src="{avatar_display_url}" class="header-img">
             <div>
-                <h2 style="color: #ff4b4b; margin: 0;">魔界通信</h2>
+                <h2 style="color: #ff4b4b; margin: 0;">デーモン佐藤の召喚</h2>
                 <p style="color: #00ff00; font-size: 0.8rem; margin: 5px 0;">● 安定接続：知能特化モード</p>
             </div>
         </div>
@@ -118,4 +118,5 @@ def show_ai_page(conn, url, df, md=None):
 
             except Exception as e:
                 st.error(f"魔界通信事故: {e}")
+
 
