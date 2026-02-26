@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 # --- データ取得関数 ---
 
 def get_jma_tide_hs():
-    """気象庁HPから本渡の正確な潮汐データを取得し、10段階フェーズを算出"""
+    """気象庁HPから本渡のデータのうち、現在時刻に最も近い潮位を取得"""
     now = datetime.now()
     url = f"https://www.data.jma.go.jp/gmd/kaiyou/data/db/tide/suisan/txt/{now.year}/HS.txt"
     try:
@@ -19,13 +19,22 @@ def get_jma_tide_hs():
         
         if not day_line: return 150, "取得失敗(日付なし)", False
 
-        # 現在潮位の計算
-        hourly = [int(day_line[i*3 : (i+1)*3].strip() or 0) for i in range(24)]
-        h, m = now.hour, now.minute
-        t1, t2 = hourly[h], hourly[h+1] if h < 23 else hourly[h]
-        current_cm = int(t1 + (t2 - t1) * (m / 60.0))
+        # --- 現在時刻に最も近い潮位を特定 ---
+        # 0時から23時までの1時間ごとの潮位リスト(各3桁)
+        hourly_tides = [int(day_line[i*3 : (i+1)*3].strip() or 0) for i in range(24)]
+        
+        # 現在が何分かによって、前後のどちらが近いか判定
+        current_hour = now.hour
+        if now.minute >= 30 and current_hour < 23:
+            # 30分以降なら「次の正時」が近い
+            target_hour = current_hour + 1
+        else:
+            # 30分未満なら「今の正時」が近い
+            target_hour = current_hour
+            
+        current_cm = hourly_tides[target_hour]
 
-        # --- 10段階フェーズ判定ロジック ---
+        # --- 10段階フェーズ判定（満干潮の時刻を基準に計算） ---
         events = []
         today_str = now.strftime('%Y%m%d')
         for start, e_type in [(80, "満潮"), (108, "干潮")]:
@@ -37,7 +46,6 @@ def get_jma_tide_hs():
                     events.append({"time": ev_time, "type": e_type})
         
         events.sort(key=lambda x: x['time'])
-
         prev_e = next((e for e in reversed(events) if e['time'] <= now), None)
         next_e = next((e for e in events if e['time'] > now), None)
         
@@ -51,11 +59,13 @@ def get_jma_tide_hs():
             elif elapsed / duration > 0.9: phase_text = next_e['type']
             else: phase_text = f"{label}{progress}分"
         else:
-            phase_text = "下げ5分" # 判定不能時のデフォルト
+            phase_text = "下げ5分"
 
         return current_cm, phase_text, True
     except:
         return 150, "エラー", False
+
+# ... (get_weather, show_matching_page 等の他関数は前回と同様)
 
 def get_weather():
     """天草の現在気象を取得（気温・風・48時間降水量）"""
@@ -160,3 +170,4 @@ def show_matching_page(df):
                 st.divider()
     else:
         st.warning("データが読み込まれていません。")
+
