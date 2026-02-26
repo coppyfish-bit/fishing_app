@@ -44,18 +44,31 @@ def render_edit_form(df, idx, conn, url):
                 
                 lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
                 temp, w_s, w_d, rain = app.get_weather_data_openmeteo(lat, lon, dt_obj)
+# --- 🔄 再取得ボタン内の処理（修正版） ---
                 station = app.find_nearest_tide_station(lat, lon)
                 tide_res = app.get_tide_details(station['code'], dt_obj)
                 
-                # 保存するデータの辞書（潮名を追加）
+                # デバッグ用：tide_resの中身を一時的に表示して確認することも可能です
+                # st.write(tide_res) 
+                
+                # キー名が 'phase' か 'phase_text' か等、app.py側の実装に合わせて柔軟に取得
+                obtained_phase = "不明"
+                if tide_res:
+                    # 候補となるキーを順番にチェック
+                    for key in ['phase', 'phase_text', 'tide_phase']:
+                        if key in tide_res and tide_res[key]:
+                            obtained_phase = tide_res[key]
+                            break
+
                 st.session_state[temp_data_key] = {
                     "temp": temp, 
                     "wind_s": w_s,
                     "wind_d": w_d, 
                     "rain": rain,
                     "tide_cm": tide_res['cm'] if tide_res else 0,
-                    "tide_name": tide_res.get('tide_name', "不明") if tide_res else "不明", # 潮名(大潮など)
-                    "phase": tide_res.get('phase', "不明") if tide_res else "不明"
+                    "tide_name": tide_res.get('tide_name', "不明") if tide_res else "不明",
+                    "phase": obtained_phase  # 取得したフェーズを確実にセット
+                }
                 }
                 st.session_state[form_version_key] += 1
                 st.success("最新データをフォームに反映しました！")
@@ -137,3 +150,4 @@ def render_edit_form(df, idx, conn, url):
                 st.rerun()
             else:
                 st.error("チェックボックスを確認してください。")
+
