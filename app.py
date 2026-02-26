@@ -220,7 +220,6 @@ def get_tide_details(station_code, dt):
         # 重要：ここで時間順に並べ替える
         event_times = sorted(event_times, key=lambda x: x['time'])
         
-        return {"cm": current_cm, "events": event_times}
 
         # 4. フェーズ計算
         phase_text = "不明"
@@ -553,6 +552,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
