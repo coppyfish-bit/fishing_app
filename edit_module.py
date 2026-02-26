@@ -4,24 +4,20 @@ from datetime import datetime, timedelta
 
 def show_edit_page(conn, url):
     st.subheader("🔄 登録情報の修正・削除")
-    # 常に最新のデータを読み込む
     df = conn.read(spreadsheet=url, ttl="0s")
     if df.empty:
         st.info("データがありません。")
         return
     
-    # 表示のために最新順にする
     df = df.iloc[::-1].copy()
 
     st.markdown("### 📸 最近の記録を修正")
-    # 最新5件を表示（必要に応じて件数は変更してください）
     df_recent = df.head(5)
     for idx in df_recent.index:
         label = f"✨ 最新: {df.at[idx, 'datetime']} | {df.at[idx, '場所']} | {df.at[idx, '魚種']}"
         with st.expander(label, expanded=False):
             render_edit_form(df, idx, conn, url)
 
-# --- フォーム表示と再計算の関数 ---
 def render_edit_form(df, idx, conn, url):
     if 'filename' in df.columns and df.at[idx, 'filename']:
         st.image(df.at[idx, 'filename'], width=400)
@@ -32,26 +28,29 @@ def render_edit_form(df, idx, conn, url):
     if form_version_key not in st.session_state:
         st.session_state[form_version_key] = 0
 
-    st.write("💡 **データが正しくない場合はこちら**")
-    
-    # --- 🔄 再取得ボタン ---
     if st.button(f"🔄 気象・潮汐データを再取得する", key=f"btn_{idx}", use_container_width=True):
         try:
             with st.spinner("最新データを計算中..."):
                 import app
-                # 日時パースエラー回避ロジック
-                raw_dt = str(df.at[idx, 'datetime']).replace("-", "/").strip()
-                # 秒などが含まれていても「yyyy/mm/dd HH:MM」の16文字だけを抽出
-                clean_dt_str = raw_dt[:16]
-                dt_obj = datetime.strptime(clean_dt_str, '%Y/%m/%d %H:%M')
+                # --- 🔥 エラー解決の核心部 🔥 ---
+                raw_val = str(df.at[idx, 'datetime']).replace("-", "/").strip()
+                # 最初の16文字を取得し、もし最後が「:」ならそれを捨てる
+                clean_dt_str = raw_val[:16]
+                if clean_dt_str.endswith(":"):
+                    clean_dt_str = clean_dt_str[:-1]
+                
+                # フォーマットを柔軟に試行
+                try:
+                    dt_obj = datetime.strptime(clean_dt_str, '%Y/%m/%d %H:%M')
+                except:
+                    # 分が1桁の場合などの予備
+                    dt_obj = pd.to_datetime(clean_dt_str)
+                # ------------------------------
                 
                 lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
-                
-                # 気象データ取得
                 temp, w_s, w_d, rain = app.get_weather_data_openmeteo(lat, lon, dt_obj)
                 station = app.find_nearest_tide_station(lat, lon)
                 
-                # --- 🌊 潮汐計算 (登録時と全く同じ「前後3日分統合」ロジック) ---
                 all_events = []
                 tide_cm = 0
                 for delta in [-1, 0, 1]:
@@ -60,10 +59,8 @@ def render_edit_form(df, idx, conn, url):
                         if 'events' in d_data: all_events.extend(d_data['events'])
                         if delta == 0: tide_cm = d_data['cm']
 
-                # 重複排除とソート
                 all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
                 
-                # フェーズ計算
                 tide_phase = "不明"
                 search_dt = dt_obj + timedelta(minutes=5)
                 prev_ev = next((e for e in reversed(all_events) if e['time'] <= search_dt), None)
@@ -77,12 +74,8 @@ def render_edit_form(df, idx, conn, url):
                         step = max(1, min(9, int((elapsed / duration) * 10)))
                         tide_phase = f"{p_type}{step}分"
 
-                # 再取得したデータをセッションに一時保存
                 st.session_state[temp_data_key] = {
-                    "temp": temp, 
-                    "wind_s": w_s,
-                    "wind_d": w_d, 
-                    "rain": rain,
+                    "temp": temp, "wind_s": w_s, "wind_d": w_d, "rain": rain,
                     "tide_cm": tide_cm,
                     "tide_name": app.get_tide_name(app.get_moon_age(dt_obj)),
                     "phase": tide_phase
@@ -92,7 +85,6 @@ def render_edit_form(df, idx, conn, url):
         except Exception as e:
             st.error(f"再取得エラー: {e}")
 
-    # 表示値の決定（再取得データがあれば優先、なければ既存データ）
     has_temp_data = temp_data_key in st.session_state and st.session_state[temp_data_key] is not None
     t_data = st.session_state.get(temp_data_key, {})
     
@@ -104,9 +96,7 @@ def render_edit_form(df, idx, conn, url):
     val_tide_name = t_data["tide_name"] if has_temp_data else (str(df.at[idx, '潮名']) if '潮名' in df.columns else "不明")
     val_phase = t_data["phase"] if has_temp_data else (str(df.at[idx, '潮位フェーズ']) if '潮位フェーズ' in df.columns else "不明")
 
-    # --- 修正フォーム ---
-    ver = st.session_state[form_version_key]
-    with st.form(key=f"form_{idx}_v{ver}"):
+    with st.form(key=f"form_{idx}_v{st.session_state[form_version_key]}"):
         st.write("📝 **釣果・環境データの修正**")
         col_f, col_l, col_p = st.columns([2, 1, 2])
         new_fish = col_f.text_input("魚種", value=df.at[idx, '魚種'])
@@ -132,7 +122,6 @@ def render_edit_form(df, idx, conn, url):
         c_save, c_del = st.columns(2)
         
         if c_save.form_submit_button("✅ 更新内容を保存する", use_container_width=True):
-            # スプレッドシートへ反映
             df.at[idx, '魚種'] = new_fish
             df.at[idx, '全長_cm'] = new_len
             df.at[idx, '場所'] = new_place
@@ -145,14 +134,11 @@ def render_edit_form(df, idx, conn, url):
             if '潮位フェーズ' in df.columns: df.at[idx, '潮位フェーズ'] = new_phase
             df.at[idx, '備考'] = new_memo
             
-            # キャッシュ用カラムを除去して保存
             save_df = df.drop(columns=['search_label']) if 'search_label' in df.columns else df
-            # 最新順から元の順序に戻して保存
             conn.update(spreadsheet=url, data=save_df.iloc[::-1])
-            
             st.session_state[temp_data_key] = None
             st.cache_data.clear()
-            st.success("修正を保存しました！")
+            st.success("保存しました！")
             st.rerun()
 
         if c_del.form_submit_button("🗑️ 削除実行", type="primary", use_container_width=True):
