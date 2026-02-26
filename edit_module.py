@@ -56,18 +56,19 @@ def render_edit_form(df, idx, conn, url):
             with st.spinner("地点に合わせて精密データを再計算中..."):
                 import app  # app.pyがmain化されている前提
                 
-# --- 日時変換の修正版（どんな余分なデータも除去） ---
-                raw_dt_str = str(df.at[idx, 'datetime']).replace("-", "/")
-                # 最初の16文字（"YYYY/MM/DD HH:MM"）だけを強制的に抽出
-                clean_dt_str = raw_dt_str[:16] 
+# --- 日時解析の最終安定版 ---
+                raw_val = str(df.at[idx, 'datetime']).replace("-", "/").strip()
                 
-                try:
+                # app.pyにある共通関数を使うのが一番確実
+                import app
+                dt_obj = app.safe_strptime(raw_val)
+                
+                # もしapp側の関数でうまくいかない場合の予備ロジック
+                if dt_obj is None:
+                    # 分まで（秒以降をカット）して解析
+                    clean_dt_str = raw_val.split(":")[0] + ":" + raw_val.split(":")[1]
                     dt_obj = datetime.strptime(clean_dt_str, '%Y/%m/%d %H:%M')
-                except ValueError:
-                    # もし秒が ":00" ではなく " 00" のようになっているケースも考慮
-                    st.error(f"日時形式エラー: {clean_dt_str} を解析できません。")
-                    return
-                # --------------------------------------------------
+                # ---------------------------
                 
                 lat = float(df.at[idx, 'lat'])
                 lon = float(df.at[idx, 'lon'])
@@ -144,4 +145,5 @@ def render_edit_form(df, idx, conn, url):
                 st.rerun()
             else:
                 st.error("削除するにはチェックを入れてください。")
+
 
