@@ -21,7 +21,7 @@ def show_ai_page(conn, url, df):
     else:
         avatar_display_url = "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
 
-    # --- 🎨 CSS（LINE風UI & ボタン装飾） ---
+    # --- 🎨 CSS（LINE風UI & 装飾） ---
     st.markdown(f"""
         <style>
         .stApp {{ background-color: #0e1117; }}
@@ -43,18 +43,23 @@ def show_ai_page(conn, url, df):
         }}
         .header-img {{ width: 80px; height: 80px; border-radius: 10px; margin-right: 20px; object-fit: cover; }}
         
-        /* 浄化ボタンを赤く目立たせる */
+        /* 浄化ボタン */
         div.stButton > button:first-child {{
             background-color: #ff4b4b; color: white; border-radius: 20px;
-            width: 100%; border: none; font-weight: bold;
+            width: 100%; border: none; font-weight: bold; height: 3em;
         }}
         </style>
     """, unsafe_allow_html=True)
 
-    # --- 🔑 API設定 ---
+    # --- 🔑 API設定（検索ツールを再召喚） ---
     api_key = st.secrets.get("GEMINI_API_KEY")
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-3-flash-preview')
+    
+    # 再び検索の魔力を込める。ただし安定性を祈れ。
+    model = genai.GenerativeModel(
+        model_name='gemini-3-flash-preview',
+        tools=[{'google_search_retrieval': {}}]
+    )
 
     # --- 😈 ヘッダーエリア ---
     st.markdown(f"""
@@ -62,20 +67,20 @@ def show_ai_page(conn, url, df):
             <img src="{avatar_display_url}" class="header-img">
             <div>
                 <h2 style="color: #ff4b4b; margin: 0;">魔界トーク</h2>
-                <p style="color: #00ff00; font-size: 0.8rem; margin: 5px 0;">● 安定接続モード（検索機能：封印中）</p>
+                <p style="color: #ff4b4b; font-size: 0.8rem; margin: 5px 0;">🔥 千里眼モード（天草の深淵を検索中）</p>
             </div>
         </div>
     """, unsafe_allow_html=True)
 
-    # --- ✨ 【特等席】履歴浄化ボタン ---
-    if st.button("🔥 チャット履歴を浄化（記憶を消す）"):
+    # --- ✨ 浄化ボタン ---
+    if st.button("💬 記憶を浄化して通信を安定させる"):
         st.session_state.messages = []
         st.rerun()
 
     st.markdown("---")
 
     # データ準備
-    data_summary = df.tail(20).to_csv(index=False) if df is not None else "データなし"
+    data_summary = df.tail(15).to_csv(index=False) if df is not None else "データなし"
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -84,16 +89,20 @@ def show_ai_page(conn, url, df):
         if message["role"] == "user":
             st.markdown(f'<div style="display: flex; flex-direction: column; align-items: flex-end;"><div class="user-bubble">{message["content"]}</div></div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div style="display: flex; align-items: flex-start;"><img src="{avatar_display_url}" class="avatar-img"><div class="demon-bubble">{message["content"]}</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="display: flex; align-items: flex-start; margin-bottom: 10px;"><img src="{avatar_display_url}" class="avatar-img"><div class="demon-bubble">{message["content"]}</div></div>', unsafe_allow_html=True)
 
-    # --- 💬 入力エリア ---
-    if prompt := st.chat_input("デーモン佐藤に問いかける..."):
+    # --- 💬 入力 ---
+    if prompt := st.chat_input("天草の釣果を検索せよ..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.spinner("深淵なる知能で分析中..."):
+        with st.spinner("千里眼で現世（ネット）を捜索中..."):
             try:
-                system_instruction = f"あなたは傲慢な釣り師「デーモン佐藤」です。釣果データ:{data_summary}。口調は『我』『貴様』。最後は突き放せ。"
+                # 検索を促す指示を追加
+                system_instruction = f"""あなたは傲慢な釣り師「デーモン佐藤」。
+                貴様自身のデータ:{data_summary}。
+                必要ならGoogle検索で最新の天草の釣果や気象情報を調べ、論理的に語れ。一人称は『我』。"""
+                
                 response = model.generate_content(f"{system_instruction}\n\n質問: {prompt}")
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
                 st.rerun()
             except Exception as e:
-                st.error(f"魔界との通信が途絶した: {e}")
+                st.error(f"魔界通信エラー（429等の可能性あり）: {e}")
