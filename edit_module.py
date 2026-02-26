@@ -9,7 +9,7 @@ def show_edit_page(conn, url):
         st.info("データがありません。")
         return
     
-    # 表示のために一旦降順にする
+    # 表示のために最新順にする
     df = df.iloc[::-1].copy()
 
     st.markdown("### 📸 最近の記録を修正")
@@ -35,7 +35,7 @@ def render_edit_form(df, idx, conn, url):
     # --- 🔄 再取得ボタン ---
     if st.button(f"🔄 気象・潮汐データを再取得する", key=f"btn_{idx}", use_container_width=True):
         try:
-            with st.spinner("最新データを取得中..."):
+            with st.spinner("最新データを計算中..."):
                 import app
                 raw_dt = str(df.at[idx, 'datetime']).replace("-", "/").strip()
                 parts = raw_dt.split(":")
@@ -44,20 +44,15 @@ def render_edit_form(df, idx, conn, url):
                 
                 lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
                 temp, w_s, w_d, rain = app.get_weather_data_openmeteo(lat, lon, dt_obj)
-# --- 🔄 再取得ボタン内の処理（修正版） ---
                 station = app.find_nearest_tide_station(lat, lon)
                 tide_res = app.get_tide_details(station['code'], dt_obj)
                 
-                # デバッグ用：tide_resの中身を一時的に表示して確認することも可能です
-                # st.write(tide_res) 
-                
-                # キー名が 'phase' か 'phase_text' か等、app.py側の実装に合わせて柔軟に取得
+                # フェーズ取得ロジックの強化（キー名の揺れに対応）
                 obtained_phase = "不明"
                 if tide_res:
-                    # 候補となるキーを順番にチェック
-                    for key in ['phase', 'phase_text', 'tide_phase']:
-                        if key in tide_res and tide_res[key]:
-                            obtained_phase = tide_res[key]
+                    for k in ['phase', 'phase_text', 'tide_phase']:
+                        if k in tide_res and tide_res[k]:
+                            obtained_phase = tide_res[k]
                             break
 
                 st.session_state[temp_data_key] = {
@@ -67,14 +62,12 @@ def render_edit_form(df, idx, conn, url):
                     "rain": rain,
                     "tide_cm": tide_res['cm'] if tide_res else 0,
                     "tide_name": tide_res.get('tide_name', "不明") if tide_res else "不明",
-                    "phase": obtained_phase  # 取得したフェーズを確実にセット
-                }
+                    "phase": obtained_phase
                 }
                 st.session_state[form_version_key] += 1
-                st.success("最新データをフォームに反映しました！")
                 st.rerun() 
         except Exception as e:
-            st.error(f"エラー: {e}")
+            st.error(f"再取得エラー: {e}")
 
     # 表示値の決定（再取得データがあれば優先）
     has_temp_data = temp_data_key in st.session_state and st.session_state[temp_data_key] is not None
@@ -84,8 +77,6 @@ def render_edit_form(df, idx, conn, url):
     val_wind_s = float(t_data["wind_s"]) if has_temp_data else float(df.at[idx, '風速'])
     val_wind_d = t_data["wind_d"] if has_temp_data else (str(df.at[idx, '風向']) if '風向' in df.columns else "不明")
     val_rain = float(t_data["rain"]) if has_temp_data else (float(df.at[idx, '降水量']) if '降水量' in df.columns else 0.0)
-    
-    # 潮汐データ
     val_tide_cm = int(t_data["tide_cm"]) if has_temp_data else int(df.at[idx, '潮位_cm'])
     val_tide_name = t_data["tide_name"] if has_temp_data else (str(df.at[idx, '潮名']) if '潮名' in df.columns else "不明")
     val_phase = t_data["phase"] if has_temp_data else (str(df.at[idx, '潮位フェーズ']) if '潮位フェーズ' in df.columns else "不明")
@@ -107,14 +98,12 @@ def render_edit_form(df, idx, conn, url):
         c4, c5, c6 = st.columns(3)
         new_rain = c4.number_input("降水(48h)", value=val_rain)
         new_tide_cm = c5.number_input("潮位(cm)", value=val_tide_cm)
-        new_tide_name = c6.text_input("潮名", value=val_tide_name) # 潮名を追加
+        new_tide_name = c6.text_input("潮名", value=val_tide_name)
         
-        # 潮位フェーズと備考
-        new_phase = st.text_input("潮位フェーズ（上げ七分など）", value=val_phase)
+        new_phase = st.text_input("潮位フェーズ", value=val_phase)
         new_memo = st.text_area("備考", value=df.at[idx, '備考'] if pd.notna(df.at[idx, '備考']) else "")
 
         st.markdown("---")
-        st.write("⚠️ **データの削除**")
         confirm_delete = st.checkbox("このデータを完全に削除してもよろしいですか？", key=f"del_check_{idx}")
 
         c_save, c_del = st.columns(2)
@@ -136,7 +125,7 @@ def render_edit_form(df, idx, conn, url):
             conn.update(spreadsheet=url, data=save_df.iloc[::-1])
             st.session_state[temp_data_key] = None
             st.cache_data.clear()
-            st.success("保存完了しました！ギャラリーにも反映されます。")
+            st.success("保存しました！")
             st.rerun()
 
         if c_del.form_submit_button("🗑️ 削除実行", type="primary", use_container_width=True):
@@ -146,8 +135,4 @@ def render_edit_form(df, idx, conn, url):
                 conn.update(spreadsheet=url, data=save_df.iloc[::-1])
                 st.session_state[temp_data_key] = None
                 st.cache_data.clear()
-                st.warning("削除しました。")
                 st.rerun()
-            else:
-                st.error("チェックボックスを確認してください。")
-
