@@ -3,97 +3,109 @@ import pandas as pd
 import google.generativeai as genai
 import os
 
-# 引数に df を追加して、APIの無駄な読み込みを防止する
 def show_ai_page(conn, url, df):
-    st.header("😈 魔界釣果アドバイザー：デーモン佐藤")
+    # --- 🎨 魔界のスタイリング（CSS） ---
+    st.markdown("""
+        <style>
+        .demon-container {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(30, 38, 48, 0.7);
+            border-left: 5px solid #ff4b4b;
+            border-radius: 10px;
+        }
+        .demon-image {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 2px solid #ff4b4b;
+            margin-right: 15px;
+            box-shadow: 0 0 15px rgba(255, 75, 75, 0.4);
+        }
+        .demon-text {
+            color: #e0e0e0;
+            font-size: 1.1rem;
+            font-style: italic;
+        }
+        /* チャット吹き出しのカスタマイズ */
+        [data-testid="stChatMessage"] {
+            background-color: #1e2630 !important;
+            border-radius: 15px !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-    # --- 🔑 APIキー設定 ---
-    # 貴様の環境に合わせて GEMINI_API_KEY を参照するぞ
+    # --- 🔑 API & Model 設定 ---
     api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key:
-        st.error("APIキー『GEMINI_API_KEY』が見つからぬ！Secretsに設定して出直してこい。")
+        st.error("APIキーが見つからぬ！")
         return
 
-    # --- 😈 Gemini 3 Flash の召喚 ---
-    try:
-        genai.configure(api_key=api_key)
-        # 最新の Gemini 3 Flash モデルを指定
-        model = genai.GenerativeModel('gemini-3-flash-preview')
-    except Exception as e:
-        st.error(f"魔界の門（モデル設定）が開かぬ！: {e}")
-        return
+    genai.configure(api_key=api_key)
+    # 貴様が見つけた真の呪文！
+    model = genai.GenerativeModel('gemini-3-flash-preview')
 
-    # アイコン設定
+    # キャラクター画像の設定
+    # demon_sato.png があれば使い、なければ絵文字で代用
     avatar_path = "demon_sato.png"
-    avatar_image = avatar_path if os.path.exists(avatar_path) else "😈"
+    has_image = os.path.exists(avatar_path)
+    avatar_url = avatar_path if has_image else "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png" # 仮の魔界画像
 
-    # データの存在確認
+    # --- 😈 デーモン佐藤の鎮座エリア ---
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        st.image(avatar_url, width=100)
+    with col2:
+        st.markdown(f"""
+            <div style="padding-top: 10px;">
+                <h3 style="color: #ff4b4b; margin-bottom: 5px;">デーモン佐藤</h3>
+                <p style="color: #888; font-size: 0.8rem; letter-spacing: 0.1rem;">MA-KAI FISHING ADVISOR (Gemini 3 Powered)</p>
+                <p class="demon-text">「ククク... 貴様の釣果、すべて見えているぞ。何を聞きたい？」</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # データの存在確認と整形
     if df is None or df.empty:
-        st.warning("データが空だ。我を呼び出すなら、まずは魚の一匹でも釣って記録せよ。")
+        st.warning("データが空だ。")
         return
 
-    # --- 📊 AIに渡すデータの整形 ---
-    # 貴様のスプレッドシートのカラム名に完全に一致させたぞ
-    try:
-        analysis_cols = ['date', 'time', '場所', '魚種', '全長_cm', '潮名', '潮位フェーズ', '気温', '風速', '備考']
-        # 存在する列だけを抽出（エラー回避）
-        existing_cols = [c for c in analysis_cols if c in df.columns]
-        analysis_df = df[existing_cols].tail(30)
-        data_summary = analysis_df.to_csv(index=False)
-    except Exception as e:
-        st.error(f"データの焼き固めに失敗したわ！: {e}")
-        data_summary = "データ読み込みエラー"
+    analysis_cols = ['date', 'time', '場所', '魚種', '全長_cm', '潮名', '潮位フェーズ', '気温', '風速', '備考']
+    existing_cols = [c for c in analysis_cols if c in df.columns]
+    data_summary = df[existing_cols].tail(30).to_csv(index=False)
 
-    # チャット履歴の初期化
+    # セッション履歴
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 履歴表示
+    # チャット履歴表示
     for message in st.session_state.messages:
-        with st.chat_message(message["role"], avatar=avatar_image if message["role"] == "assistant" else "👤"):
+        avatar = avatar_url if message["role"] == "assistant" else "👤"
+        with st.chat_message(message["role"], avatar=avatar):
             st.markdown(message["content"])
 
-    # --- 💬 チャット入力エリア ---
-    if prompt := st.chat_input("デーモン佐藤に分析を命じる..."):
-        # ユーザーの質問を表示
+    # --- 💬 入力エリア ---
+    if prompt := st.chat_input("デーモン佐藤に問いかける..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar="👤"):
             st.markdown(prompt)
 
-        # デーモン佐藤の回答生成
-        with st.chat_message("assistant", avatar=avatar_image):
-            with st.spinner("Gemini 3 Flash の超知能でデータを精査中..."):
+        with st.chat_message("assistant", avatar=avatar_url):
+            with st.spinner("深淵なる知能で計算中..."):
                 try:
-                    # システムプロンプト
                     system_instruction = f"""
-                    あなたは「デーモン佐藤」という名の、傲慢な魔界の釣り師です。
-                    最新の「Gemini 3 Flash」としての高い知能を持ち、論理的かつ冷徹に分析します。
-
-                    【性格・口調】
-                    - 一人称は「我」、二人称は「貴様」。語尾は「〜だ」「〜である」「ククク...」。
-                    - 態度は傲慢だが、釣りのアドバイスは極めて的確でデータ重視。
-                    
-                    【分析対象：貴様の釣果データ】
-                    {data_summary}
-
-                    【指令】
-                    1. 挨拶は短く、すぐにデータ分析に入れ。
-                    2. 「場所」「潮位フェーズ」「気象条件」の相関関係を、Gemini 3 の知能で暴け。
-                    3. 最後に必ず「...出直してこい！」か「ククク...」で締めろ。
+                    あなたは傲慢な魔界の釣り師「デーモン佐藤」です。
+                    【釣果データ】: {data_summary}
+                    【性格】: 傲慢、冷徹、データ至上主義。
+                    【話し方】: 一人称は「我」、二人称は「貴様」。
+                    分析は論理的に行い、最後は「出直してこい！」などで突き放せ。
                     """
-                    
-                    # 生成
-                    response = model.generate_content(f"{system_instruction}\n\nユーザーの問い: {prompt}")
-                    response_text = response.text
-                    
-                    st.markdown(response_text)
-                    st.session_state.messages.append({"role": "assistant", "content": response_text})
-                
+                    response = model.generate_content(f"{system_instruction}\n\n質問: {prompt}")
+                    st.markdown(response.text)
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
                 except Exception as e:
-                    st.error(f"魔界との通信が途絶えた！(エラー: {e})")
-
-    # サイドバーにリセットボタン
-    if st.sidebar.button("チャット履歴を浄化"):
-        st.session_state.messages = []
-        st.rerun()
-
+                    st.error(f"魔界との通信失敗: {e}")
