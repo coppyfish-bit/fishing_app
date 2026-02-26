@@ -50,13 +50,18 @@ def render_edit_form(df, idx, conn, url):
     
     st.write("💡 **データが正しくない場合はこちら**")
     
+    # セッション状態の初期化（再取得した値を保持するため）
+    recalc_key = f"recalc_data_{idx}"
+    if recalc_key not in st.session_state:
+        st.session_state[recalc_key] = None
+
     # --- 🔄 気象情報の再取得ボタン ---
-    if st.button(f"🔄 気象・潮汐データを再取得する", key=f"recalc_{idx}", use_container_width=True):
+    if st.button(f"🔄 気象・潮汐データを再取得する", key=f"recalc_btn_{idx}", use_container_width=True):
         try:
             with st.spinner("地点に合わせて精密データを再計算中..."):
-                import app  # app.pyがmain化されている前提
+                import app
                 
-                # 日時解析：どんな形式でも「分」までを確実に抜き出す
+                # 日時解析
                 raw_dt = str(df.at[idx, 'datetime']).replace("-", "/").strip()
                 parts = raw_dt.split(":")
                 clean_dt_str = f"{parts[0]}:{parts[1]}" if len(parts) > 2 else raw_dt
@@ -75,24 +80,31 @@ def render_edit_form(df, idx, conn, url):
                 tide_res = app.get_tide_details(station['code'], dt_obj)
                 
                 if temp is not None:
-                    # 取得成功した値をDataFrameに直接セット
-                    df.at[idx, '気温'] = temp
-                    df.at[idx, '風速'] = wind_s
-                    df.at[idx, '風向'] = wind_d
-                    df.at[idx, '降水量'] = rain
-                    
-                    if tide_res:
-                        df.at[idx, '潮位_cm'] = tide_res['cm']
-                        df.at[idx, '潮位フェーズ'] = tide_res.get('phase', "不明")
-                    
-                    st.success(f"取得成功: {temp}℃ / {wind_s}m / {tide_res.get('phase', '不明')}")
-                    # フォームを再描画して値を反映させるために一度だけrerunはせず、
-                    # このまま下のform処理へ進む（dfは既に書き換わっている）
+                    # セッション状態に取得結果を保存（これがフォームの初期値になる）
+                    st.session_state[recalc_key] = {
+                        "temp": temp,
+                        "wind_s": wind_s,
+                        "wind_d": wind_d,
+                        "rain": rain,
+                        "tide_cm": tide_res['cm'] if tide_res else df.at[idx, '潮位_cm'],
+                        "phase": tide_res.get('phase', "不明") if tide_res else df.at[idx, '潮位フェーズ']
+                    }
+                    st.success(f"取得成功！値をフォームにセットしました。")
                 else:
-                    st.error("気象データの取得に失敗しました。座標データを確認してください。")
+                    st.error("気象データの取得に失敗しました。")
 
         except Exception as e:
             st.error(f"再取得エラー: {e}")
+
+    # --- フォームに表示する値の決定 ---
+    # 再取得データがあればそれを使用、なければ既存のレコードデータを使用
+    current_data = st.session_state[recalc_key]
+    
+    def_temp = float(current_data["temp"]) if current_data else float(df.at[idx, '気温'])
+    def_wind = float(current_data["wind_s"]) if current_data else float(df.at[idx, '風速'])
+    def_rain = float(current_data["rain"]) if current_data else (float(df.at[idx, '降水量']) if '降水量' in df.columns else 0.0)
+    def_tide = int(current_data["tide_cm"]) if current_data else int(df.at[idx, '潮位_cm'])
+    def_phase = current_data["phase"] if current_data else (df.at[idx, '潮位フェーズ'] if '潮位フェーズ' in df.columns else "")
 
     # --- 修正フォーム ---
     with st.form(key=f"form_{idx}"):
@@ -103,14 +115,12 @@ def render_edit_form(df, idx, conn, url):
         new_place = col1.text_input("場所", value=df.at[idx, '場所'], key=f"p_{idx}")
         
         st.write("🌤️ **環境データ**")
-        c1, c2, c3, c4 = st.columns(4)
-        # 再取得ボタンで書き換わった df の値を value に指定
-        new_temp = c1.number_input("気温(℃)", value=float(df.at[idx, '気温']), key=f"t_{idx}")
-        new_wind = c2.number_input("風速(m)", value=float(df.at[idx, '風速']), key=f"w_{idx}")
-        new_tide = c3.number_input("潮位(cm)", value=int(df.at[idx, '潮位_cm']), key=f"td_{idx}")
-        
-        current_phase = df.at[idx, '潮位フェーズ'] if '潮位フェーズ' in df.columns and pd.notna(df.at[idx, '潮位フェーズ']) else ""
-        new_phase = c4.text_input("潮位フェーズ", value=current_phase, key=f"ph_{idx}")
+        c1, c2, c3, c4, c5 = st.columns(5)
+        new_temp = c1.number_input("気温(℃)", value=def_temp, key=f"t_{idx}")
+        new_wind = c2.number_input("風速(m)", value=def_wind, key=f"w_{idx}")
+        new_rain = c3.number_input("降水(48h)", value=def_rain, key=f"r_{idx}")
+        new_tide = c4.number_input("潮位(cm)", value=def_tide, key=f"td_{idx}")
+        new_phase = c5.text_input("フェーズ", value=def_phase, key=f"ph_{idx}")
         
         new_memo = st.text_area("備考", value=df.at[idx, '備考'] if pd.notna(df.at[idx, '備考']) else "", key=f"m_{idx}")
 
@@ -121,12 +131,12 @@ def render_edit_form(df, idx, conn, url):
         c_sub, c_del = st.columns(2)
         
         if c_sub.form_submit_button("✅ 更新保存", use_container_width=True):
-            # フォームの値を反映
             df.at[idx, '魚種'] = new_fish
             df.at[idx, '全長_cm'] = new_len
             df.at[idx, '場所'] = new_place
             df.at[idx, '気温'] = new_temp
             df.at[idx, '風速'] = new_wind
+            if '降水量' in df.columns: df.at[idx, '降水量'] = new_rain
             df.at[idx, '潮位_cm'] = new_tide
             df.at[idx, '潮位フェーズ'] = new_phase
             df.at[idx, '備考'] = new_memo
@@ -135,6 +145,8 @@ def render_edit_form(df, idx, conn, url):
             save_df = df.drop(columns=['search_label']) if 'search_label' in df.columns else df
             conn.update(spreadsheet=url, data=save_df.iloc[::-1])
             
+            # 保存後はセッション状態をクリア
+            st.session_state[recalc_key] = None
             st.cache_data.clear()
             st.success("更新完了しました！")
             st.rerun()
@@ -144,8 +156,6 @@ def render_edit_form(df, idx, conn, url):
                 df = df.drop(idx)
                 save_df = df.drop(columns=['search_label']) if 'search_label' in df.columns else df
                 conn.update(spreadsheet=url, data=save_df.iloc[::-1])
+                st.session_state[recalc_key] = None
                 st.cache_data.clear()
-                st.warning("データを削除しました。")
                 st.rerun()
-            else:
-                st.error("削除するにはチェックを入れてください。")
