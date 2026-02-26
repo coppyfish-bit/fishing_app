@@ -82,7 +82,41 @@ def show_ai_page(conn, url, df, md=None):
     if st.button("🔥 記憶を浄化して深淵へ葬る"):
         st.session_state.messages = []
         st.rerun()
+# ↓↓↓ ここから書き換え開始 ↓↓↓
+    # --- 📊 全体統計要約エンジンの真価 ---
+    stats_summary = "【データ不足】"
+    if df is not None and not df.empty:
+        try:
+            # 1. 全体を通した最強の要素（最頻値）
+            top_place = df['場所'].mode()[0] if '場所' in df.columns else "不明"
+            top_lure = df['ルアー'].mode()[0] if 'ルアー' in df.columns else "不明"
+            top_tide_name = df['潮名'].mode()[0] if '潮名' in df.columns else "不明"
+            top_phase = df['潮位フェーズ'].mode()[0] if '潮位フェーズ' in df.columns else "不明"
+            
+            # 2. 全体の数値傾向（平均値）
+            avg_hit_temp = df['気温'].mean() if '気温' in df.columns else 0
+            avg_hit_wind = df['風速'].mean() if '風速' in df.columns else 0
+            avg_hit_tide = df['潮位_cm'].mean() if '潮位_cm' in df.columns else 0
+            
+            # 3. 風向の支配力（どの風で最も釣っているか）
+            top_wdir = df['風向'].mode()[0] if '風向' in df.columns else "不明"
+            
+            # 4. 月齢の傾向
+            avg_moon = df['月齢'].mean() if '月齢' in df.columns else 0
 
+            stats_summary = f"""
+            【全釣行を通した絶対的傾向】
+            ● 主戦場: {top_place}
+            ● 信頼ルアー: {top_lure}
+            ● 黄金の潮回り: {top_tide_name} ({top_phase})
+            ● ヒット時の風向: {top_wdir} が支配的
+            ● 数値的中央値: 気温 {avg_hit_temp:.1f}℃ / 風速 {avg_hit_wind:.1f}m / 潮位 {avg_hit_tide:.1f}cm
+            ● 平均月齢: {avg_moon:.1f}
+            ● 総データ数: {len(df)} 件の経験則に基づく
+            """
+        except Exception as e:
+            stats_summary = f"【統計解析中に魔界のノイズ混入: {{e}}】"
+    # ↑↑↑ ここまで書き換え終了 ↑↑↑
     # --- 💬 トーク履歴 ---
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -118,5 +152,6 @@ def show_ai_page(conn, url, df, md=None):
 
             except Exception as e:
                 st.error(f"魔界通信事故: {e}")
+
 
 
