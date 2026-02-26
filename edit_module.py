@@ -57,7 +57,9 @@ def render_edit_form(df, idx, conn, url):
                 import app
                 
                 # 文字列の日付をdatetimeオブジェクトに変換
-                dt_obj = datetime.strptime(df.at[idx, 'datetime'], '%Y/%m/%d %H:%M')
+                # 日時の形式を柔軟に扱う（最初の16文字：分までを抽出して解析）
+                raw_dt = str(df.at[idx, 'datetime']).replace("-", "/")
+                dt_obj = datetime.strptime(raw_dt[:16], '%Y/%m/%d %H:%M')
                 lat = float(df.at[idx, 'lat'])
                 lon = float(df.at[idx, 'lon'])
                 
@@ -145,4 +147,5 @@ def render_edit_form(df, idx, conn, url):
                 st.rerun()
             else:
                 st.error("削除するには、上のチェックボックスをONにしてください。")error("削除するには、上のチェックボックスをONにしてください。")
+
 
