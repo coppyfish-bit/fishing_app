@@ -8,6 +8,8 @@ def show_edit_page(conn, url):
     if df.empty:
         st.info("データがありません。")
         return
+    
+    # 検索や表示のために一旦降順にする
     df = df.iloc[::-1].copy()
 
     st.markdown("### 📸 最近の記録を修正")
@@ -41,13 +43,16 @@ def render_edit_form(df, idx, conn, url):
                 dt_obj = datetime.strptime(clean_dt_str, '%Y/%m/%d %H:%M')
                 
                 lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
-                # app.pyから風向(wind_d)を含む4つの値を取得
-                temp, wind_s, wind_d, rain = app.get_weather_data_openmeteo(lat, lon, dt_obj)
+                temp, w_s, w_d, rain = app.get_weather_data_openmeteo(lat, lon, dt_obj)
                 station = app.find_nearest_tide_station(lat, lon)
                 tide_res = app.get_tide_details(station['code'], dt_obj)
                 
+                # キー名を統一して保存
                 st.session_state[temp_data_key] = {
-                    "temp": temp, "wind_s": wind_s, "wind_d": wind_d, "rain": rain,
+                    "temp": temp, 
+                    "wind_s": w_s,  # ここを wind_s に統一
+                    "wind_d": w_d, 
+                    "rain": rain,
                     "tide": tide_res['cm'] if tide_res else 0,
                     "phase": tide_res.get('phase', "不明") if tide_res else "不明"
                 }
@@ -76,13 +81,11 @@ def render_edit_form(df, idx, conn, url):
         new_len = col_l.number_input("全長(cm)", value=float(df.at[idx, '全長_cm']), step=0.1)
         new_place = col_p.text_input("場所", value=df.at[idx, '場所'])
         
-        # 気象データ（3カラム構成）
         c1, c2, c3 = st.columns(3)
         new_temp = c1.number_input("気温(℃)", value=val_temp)
         new_wind_s = c2.number_input("風速(m)", value=val_wind_s)
-        new_wind_d = c3.text_input("風向", value=val_wind_d) # ここに風向を追加
+        new_wind_d = c3.text_input("風向", value=val_wind_d)
         
-        # 潮汐・降水データ（3カラム構成）
         c4, c5, c6 = st.columns(3)
         new_rain = c4.number_input("降水(48h)", value=val_rain)
         new_tide = c5.number_input("潮位(cm)", value=val_tide)
@@ -102,7 +105,7 @@ def render_edit_form(df, idx, conn, url):
             df.at[idx, '場所'] = new_place
             df.at[idx, '気温'] = new_temp
             df.at[idx, '風速'] = new_wind_s
-            if '風向' in df.columns: df.at[idx, '風向'] = new_wind_d # 保存
+            if '風向' in df.columns: df.at[idx, '風向'] = new_wind_d
             if '降水量' in df.columns: df.at[idx, '降水量'] = new_rain
             df.at[idx, '潮位_cm'] = new_tide
             df.at[idx, '潮位フェーズ'] = new_phase
@@ -112,7 +115,7 @@ def render_edit_form(df, idx, conn, url):
             conn.update(spreadsheet=url, data=save_df.iloc[::-1])
             st.session_state[temp_data_key] = None
             st.cache_data.clear()
-            st.success("保存しました！")
+            st.success("保存完了しました！")
             st.rerun()
 
         if c_del.form_submit_button("🗑️ このデータを完全に削除する", type="primary", use_container_width=True):
