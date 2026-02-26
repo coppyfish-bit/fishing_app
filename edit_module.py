@@ -48,29 +48,42 @@ def render_edit_form(df, idx, conn, url):
     if 'filename' in df.columns and df.at[idx, 'filename']:
         st.image(df.at[idx, 'filename'], width=400)
     
-    # --- 🔄 気象情報の再取得ボタン ---
+    # --- 🔄 気象情報の再取得ボタン (地点別フル対応版) ---
     st.write("💡 **データが正しくない場合はこちら**")
     if st.button(f"🔄 気象・潮汐データを再取得する", key=f"recalc_{idx}", use_container_width=True):
         try:
-            with st.spinner("最新データを取得中..."):
-                # 循環参照を防ぐため、ボタンが押された時だけappをインポートする
+            with st.spinner("地点に合わせて精密データを再計算中..."):
+                # app.py からロジックをインポート (main化されているのでエラーになりません)
                 import app
                 
+                # 文字列の日付をdatetimeオブジェクトに変換
                 dt_obj = datetime.strptime(df.at[idx, 'datetime'], '%Y/%m/%d %H:%M')
-                lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
+                lat = float(df.at[idx, 'lat'])
+                lon = float(df.at[idx, 'lon'])
                 
-                # app.pyの関数を使用
+                # 1. 地点別の気象データ取得
                 temp, wind_s, wind_d, rain = app.get_weather_data_openmeteo(lat, lon, dt_obj)
+                
+                # 2. 最寄りの潮位観測所を特定
                 station = app.find_nearest_tide_station(lat, lon)
+                
+                # 3. その観測所の潮汐詳細（潮位・フェーズ）を取得
                 tide_res = app.get_tide_details(station['code'], dt_obj)
                 
-                # 反映
-                df.at[idx, '気温'] = temp
-                df.at[idx, '風速'] = wind_s
+                # DataFrameの値を更新（まだ保存はされません）
+                if temp is not None:
+                    df.at[idx, '気温'] = temp
+                    df.at[idx, '風速'] = wind_s
+                    df.at[idx, '風向'] = wind_d
+                    df.at[idx, '降水量'] = rain
+                
                 if tide_res:
                     df.at[idx, '潮位_cm'] = tide_res['cm']
+                    df.at[idx, '潮位フェーズ'] = tide_res.get('phase', "不明")
+                    df.at[idx, '観測所'] = station['name']
                 
-                st.toast("✅ 最新データを取得しました！ 下の「更新」で保存してください。")
+                st.toast(f"✅ {station['name']}のデータを取得しました！")
+                st.info(f"再取得結果: {station['name']} | {tide_res.get('phase', '不明')} | {tide_res['cm']}cm")
         except Exception as e:
             st.error(f"再取得エラー: {e}")
 
@@ -88,7 +101,7 @@ def render_edit_form(df, idx, conn, url):
         new_wind = c2.number_input("風速(m)", value=float(df.at[idx, '風速']), key=f"w_{idx}")
         new_tide = c3.number_input("潮位(cm)", value=int(df.at[idx, '潮位_cm']), key=f"td_{idx}")
         
-        # 潮位フェーズの入力欄
+        # 潮位フェーズの入力（再取得した値がデフォルトで入ります）
         current_phase = df.at[idx, '潮位フェーズ'] if '潮位フェーズ' in df.columns and pd.notna(df.at[idx, '潮位フェーズ']) else ""
         new_phase = c4.text_input("潮位フェーズ", value=current_phase, key=f"ph_{idx}", placeholder="例: 上げ3分")
         
@@ -112,7 +125,7 @@ def render_edit_form(df, idx, conn, url):
             df.at[idx, '潮位フェーズ'] = new_phase
             df.at[idx, '備考'] = new_memo
             
-            # 保存処理
+            # 保存処理 (並び順を元に戻して保存)
             save_df = df.drop(columns=['search_label']) if 'search_label' in df.columns else df
             conn.update(spreadsheet=url, data=save_df.iloc[::-1])
             
@@ -120,7 +133,7 @@ def render_edit_form(df, idx, conn, url):
             st.success("更新完了しました！")
             st.rerun()
 
-        # 削除ボタン（確認チェックボックスがONの時のみ動作）
+        # 削除ボタン
         if c_del.form_submit_button("🗑️ 削除実行", type="primary", use_container_width=True):
             if confirm_delete:
                 df = df.drop(idx)
@@ -131,4 +144,5 @@ def render_edit_form(df, idx, conn, url):
                 st.warning("データを削除しました。")
                 st.rerun()
             else:
-                st.error("削除するには、上のチェックボックスをONにしてください。")
+                st.error("削除するには、上のチェックボックスをONにしてください。")error("削除するには、上のチェックボックスをONにしてください。")
+
