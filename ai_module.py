@@ -4,7 +4,7 @@ import google.generativeai as genai
 import os
 
 def show_ai_page(conn, url):
-    st.header("😈 魔界釣果アドバイザー：デーモン佐藤")
+    st.header("魔界釣果アドバイザー：デーモン佐藤")
 
     # APIキー設定
     api_key = st.secrets.get("GEMINI_API_KEY")
@@ -27,7 +27,7 @@ def show_ai_page(conn, url):
 
     # AIに渡すデータの整形（ここが重要！）
     # 直近30件の重要な列だけを抽出してテキスト化
-    analysis_df = df[['date', '時間', '場所', '魚種', '全長_cm', '潮名', '潮位フェーズ', '気温', '風速', '備考']].tail(30)
+    analysis_df = df[['date', 'time', '場所', '魚種', '全長_cm', '潮名', '潮位フェーズ', '気温', '風速', '備考']].tail(30)
     data_summary = analysis_df.to_csv(index=False)
 
     if "messages" not in st.session_state:
@@ -80,4 +80,5 @@ def show_ai_page(conn, url):
     if st.sidebar.button("チャット履歴を浄化"):
         st.session_state.messages = []
         st.rerun()
+
 
