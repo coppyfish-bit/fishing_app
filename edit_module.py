@@ -56,23 +56,15 @@ def render_edit_form(df, idx, conn, url):
             with st.spinner("地点に合わせて精密データを再計算中..."):
                 import app  # app.pyがmain化されている前提
                 
-# --- 日時解析：どんな形式でも「分」までを確実に抜き出す ---
+                # 日時解析：どんな形式でも「分」までを確実に抜き出す
                 raw_dt = str(df.at[idx, 'datetime']).replace("-", "/").strip()
-                
-                # コロンが2つ以上ある場合（例: 3:46:00）、2つ目のコロン以降を削除
                 parts = raw_dt.split(":")
-                if len(parts) > 2:
-                    clean_dt_str = f"{parts[0]}:{parts[1]}"
-                else:
-                    clean_dt_str = raw_dt
+                clean_dt_str = f"{parts[0]}:{parts[1]}" if len(parts) > 2 else raw_dt
                 
                 try:
                     dt_obj = datetime.strptime(clean_dt_str, '%Y/%m/%d %H:%M')
                 except ValueError:
-                    # それでもダメなら app.py の共通関数を頼る
-                    import app
                     dt_obj = app.safe_strptime(raw_dt)
-                # --------------------------------------------------------
                 
                 lat = float(df.at[idx, 'lat'])
                 lon = float(df.at[idx, 'lon'])
@@ -82,20 +74,25 @@ def render_edit_form(df, idx, conn, url):
                 station = app.find_nearest_tide_station(lat, lon)
                 tide_res = app.get_tide_details(station['code'], dt_obj)
                 
-                # 反映
                 if temp is not None:
+                    # 取得成功した値をDataFrameに直接セット
                     df.at[idx, '気温'] = temp
                     df.at[idx, '風速'] = wind_s
                     df.at[idx, '風向'] = wind_d
                     df.at[idx, '降水量'] = rain
-                
-                if tide_res:
-                    df.at[idx, '潮位_cm'] = tide_res['cm']
-                    df.at[idx, '潮位フェーズ'] = tide_res.get('phase', "不明")
-                
-                st.success(f"気象データを更新しました: {temp}℃ / {wind_s}m")
-        else:
-            st.error("気象データの取得に失敗しました。API制限か、座標データの不備の可能性があります。")
+                    
+                    if tide_res:
+                        df.at[idx, '潮位_cm'] = tide_res['cm']
+                        df.at[idx, '潮位フェーズ'] = tide_res.get('phase', "不明")
+                    
+                    st.success(f"取得成功: {temp}℃ / {wind_s}m / {tide_res.get('phase', '不明')}")
+                    # フォームを再描画して値を反映させるために一度だけrerunはせず、
+                    # このまま下のform処理へ進む（dfは既に書き換わっている）
+                else:
+                    st.error("気象データの取得に失敗しました。座標データを確認してください。")
+
+        except Exception as e:
+            st.error(f"再取得エラー: {e}")
 
     # --- 修正フォーム ---
     with st.form(key=f"form_{idx}"):
@@ -107,6 +104,7 @@ def render_edit_form(df, idx, conn, url):
         
         st.write("🌤️ **環境データ**")
         c1, c2, c3, c4 = st.columns(4)
+        # 再取得ボタンで書き換わった df の値を value に指定
         new_temp = c1.number_input("気温(℃)", value=float(df.at[idx, '気温']), key=f"t_{idx}")
         new_wind = c2.number_input("風速(m)", value=float(df.at[idx, '風速']), key=f"w_{idx}")
         new_tide = c3.number_input("潮位(cm)", value=int(df.at[idx, '潮位_cm']), key=f"td_{idx}")
@@ -123,6 +121,7 @@ def render_edit_form(df, idx, conn, url):
         c_sub, c_del = st.columns(2)
         
         if c_sub.form_submit_button("✅ 更新保存", use_container_width=True):
+            # フォームの値を反映
             df.at[idx, '魚種'] = new_fish
             df.at[idx, '全長_cm'] = new_len
             df.at[idx, '場所'] = new_place
@@ -132,6 +131,7 @@ def render_edit_form(df, idx, conn, url):
             df.at[idx, '潮位フェーズ'] = new_phase
             df.at[idx, '備考'] = new_memo
             
+            # 保存処理
             save_df = df.drop(columns=['search_label']) if 'search_label' in df.columns else df
             conn.update(spreadsheet=url, data=save_df.iloc[::-1])
             
@@ -149,8 +149,3 @@ def render_edit_form(df, idx, conn, url):
                 st.rerun()
             else:
                 st.error("削除するにはチェックを入れてください。")
-
-
-
-
-
