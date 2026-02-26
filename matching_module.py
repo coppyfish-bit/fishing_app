@@ -3,26 +3,19 @@ import pandas as pd
 import requests
 from datetime import datetime, timedelta
 
-# --- データ取得関数 ---
-
 def get_jma_tide_hs():
-    """気象庁HPから本渡の正確な潮汐イベントを取得してフェーズ判定"""
+    """気象庁HPから本渡の正確な潮汐データを取得し、10段階フェーズを算出"""
     now = datetime.now()
     url = f"https://www.data.jma.go.jp/gmd/kaiyou/data/db/tide/suisan/txt/{now.year}/HS.txt"
     try:
         res = requests.get(url, timeout=5)
-        if res.status_code != 200: return 150, "下げ"
+        if res.status_code != 200: return 150, "取得失敗", False
+        
         lines = res.text.splitlines()
         target_y, target_m, target_d = int(now.strftime('%y')), now.month, now.day
+        day_line = next((l for l in lines if len(l) > 100 and int(l[72:74]) == target_y and int(l[74:76]) == target_m and int(l[76:78]) == target_d), None)
         
-        day_line = None
-        for line in lines:
-            if len(line) < 100: continue
-            if int(line[72:74]) == target_y and int(line[74:76]) == target_m and int(line[76:78]) == target_d:
-                day_line = line
-                break
-        
-        if not day_line: return 150, "下げ"
+        if not day_line: return 150, "取得失敗(日付なし)", False
 
         # 現在潮位の計算
         hourly = [int(day_line[i*3 : (i+1)*3].strip() or 0) for i in range(24)]
@@ -30,10 +23,9 @@ def get_jma_tide_hs():
         t1, t2 = hourly[h], hourly[h+1] if h < 23 else hourly[h]
         current_cm = int(t1 + (t2 - t1) * (m / 60.0))
 
-        # --- 潮汐イベント（満潮・干潮）の抽出 ---
+        # --- 10段階フェーズ判定ロジック ---
         events = []
         today_str = now.strftime('%Y%m%d')
-        # 満潮(80列目から)、干潮(108列目から)
         for start, e_type in [(80, "満潮"), (108, "干潮")]:
             for i in range(4):
                 pos = start + (i * 7)
@@ -44,24 +36,67 @@ def get_jma_tide_hs():
         
         events.sort(key=lambda x: x['time'])
 
-        # 現在時刻の直前のイベントを探す
-        prev_event = None
-        for e in reversed(events):
-            if e['time'] <= now:
-                prev_event = e
-                break
+        # 直前と次のイベントを特定
+        prev_e = next((e for e in reversed(events) if e['time'] <= now), None)
+        next_e = next((e for e in events if e['time'] > now), None)
         
-        # フェーズ判定：直前が満潮なら「下げ」、直前が干潮なら「上げ」
-        if prev_event:
-            phase = "下げ" if prev_event['type'] == "満潮" else "上げ"
+        if prev_e and next_e:
+            duration = (next_e['time'] - prev_e['time']).total_seconds()
+            elapsed = (now - prev_e['time']).total_seconds()
+            # 0.0〜1.0の進捗を10段階に変換
+            progress = max(1, min(9, int((elapsed / duration) * 10)))
+            
+            label = "下げ" if prev_e['type'] == "満潮" else "上げ"
+            # 潮止まり付近の処理
+            if elapsed / duration < 0.1: phase_text = prev_e['type']
+            elif elapsed / duration > 0.9: phase_text = next_e['type']
+            else: phase_text = f"{label}{progress}分"
         else:
-            # 本日最初のイベント前なら、最初のイベントの逆（例：最初が満潮なら、今は上げ）
-            phase = "上げ" if events[0]['type'] == "満潮" else "下げ"
+            phase_text = "判定不能"
 
-        return current_cm, phase
-    except:
-        return 150, "下げ"
+        return current_cm, phase_text, True
+    except Exception as e:
+        return 150, f"エラー: {str(e)}", False
 
+# ... get_weather 関数は前回と同じ ...
+
+def show_matching_page(df):
+    st.title("🏹 SeaBass Matcher Pro")
+    
+    # セッション状態の初期設定
+    if 'tide_success' not in st.session_state: st.session_state.tide_success = None
+
+    # --- 1. 入力セクション ---
+    with st.expander("🌍 海況・気象データの設定", expanded=True):
+        if st.button("🔄 リアルタイム情報を取得(本渡瀬戸)"):
+            t_cm, t_ph, success = get_jma_tide_hs()
+            temp_val, wind_spd, wdir_val, p48_val = get_weather()
+            
+            st.session_state.tide = t_cm
+            st.session_state.phase = t_ph
+            st.session_state.tide_success = success # 成功フラグを保存
+            # ... 他のsession_state保存 ...
+            st.rerun()
+
+        # 取得ステータスの表示
+        if st.session_state.tide_success is True:
+            st.success(f"✅ 本渡瀬戸のデータを取得しました（取得時刻: {datetime.now().strftime('%H:%M')}）")
+        elif st.session_state.tide_success is False:
+            st.error("❌ 潮位データの取得に失敗しました。手動で入力してください。")
+
+        # 入力フォーム（フェーズの選択肢を動的に生成）
+        c1, c2, c3 = st.columns(3)
+        month = c1.selectbox("月", list(range(1, 13)), index=st.session_state.get('month', 1)-1)
+        tide_input = c2.number_input("潮位(cm)", 0, 400, value=st.session_state.get('tide', 150))
+        
+        # 選択肢を「下げ1分〜9分」「上げ1分〜9分」「満潮」「干潮」に広げる
+        phase_options = ["満潮"] + [f"下げ{i}分" for i in range(1,10)] + ["干潮"] + [f"上げ{i}分" for i in range(1,10)]
+        curr_p = st.session_state.get('phase', "下げ5分")
+        # リストにない場合（エラー時など）の安全策
+        if curr_p not in phase_options: phase_options.append(curr_p)
+        phase_input = c3.selectbox("潮位フェーズ", phase_options, index=phase_options.index(curr_p))
+
+        # ... (以下、気温・風向などの入力とマッチングロジックは前回と同様) ...
 def get_weather():
     """天草の現在気象を取得（気温・風・48時間降水量）"""
     try:
@@ -174,3 +209,4 @@ def show_matching_page(df):
                 st.divider()
     else:
         st.warning("データ(df)が空です。Excelファイルが正しく読み込まれているか確認してください。")
+
