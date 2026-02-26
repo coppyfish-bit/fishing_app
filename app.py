@@ -273,281 +273,287 @@ def get_weather_data_openmeteo(lat, lon, dt):
         return temp, wind_speed, get_wind_dir(wind_deg), precip_48h
     except Exception as e:
         return None, None, "不明", 0.0
-
-# 1. 接続設定（既存のコード）
-conn = st.connection("gsheets", type=GSheetsConnection)
-url = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_FcoS8gFFyE/edit?gid=0#gid=0"
-
-# --- データの読み込みとキャッシュ (API 429エラー対策) ---
-url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-
-@st.cache_data(ttl=600)
-def get_all_data(_conn, _url):
-    # メインデータと場所マスターを一度に取得
-    d_main = _conn.read(spreadsheet=_url, ttl="10m")
-    d_master = _conn.read(spreadsheet=_url, worksheet="place_master", ttl="1h")
-    return d_main, d_master
-
-conn = st.connection("gsheets", type=GSheetsConnection)
-df, df_master = get_all_data(conn, url)
-
-# --- タブ設定 ---
-tabs = st.tabs(["記録", "編集", "ギャラリー", "分析（時合）", "月別統計", "スズキ戦略分析", "💖 マッチング"])
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = tabs
-with tab1:
-    # --- ロゴとタイトルのデザイン ---
-    st.markdown(f"""
-        <div style="text-align: center; padding: 20px 0;">
-            <img src="{icon_url}" style="width: 120px; filter: drop-shadow(0 0 10px rgba(0, 255, 208, 0.4));">
-            <h1 style="color: #ffffff !important; font-size: 2rem; font-weight: 900; letter-spacing: 0.1rem; margin-top: 10px; border-bottom: none;">
-                Kinetic Tide <span style="color: #00ffd0;">Data</span>
-            </h1>
-            <p style="color: #888; font-size: 0.8rem; text-transform: uppercase;">Advanced Anglers Log System</p>
-        </div>
         
-        <style>
-            /* 文字色のリセットと全体への適用防止 */
-            .stApp {{
-                color: #e0e0e0;
-            }}
-            /* アップロードエリアのカスタマイズ */
-            [data-testid="stFileUploader"] {{
-                border: 2px dashed rgba(0, 255, 208, 0.2) !important;
-                border-radius: 15px !important;
-                padding: 10px !important;
-            }}
-            /* ボタンのデザイン */
-            .stButton>button {{
-                font-weight: 900 !important;
-                letter-spacing: 0.05rem;
-                border-radius: 12px !important;
-                background-color: #1e2630 !important;
-                border: 1px solid rgba(0, 255, 208, 0.3) !important;
-            }}
-            /* ラベルの色（青色にならないように指定） */
-            .stMarkdown p, label, .stSelectbox label, .stTextInput label {{
-                color: #cccccc !important;
-            }}
-        </style>
-    """, unsafe_allow_html=True)
-
-    # --- 念のためここでセッション状態の初期化 ---
-    if "length_val" not in st.session_state:
-        st.session_state.length_val = 0.0
-    if "lat" not in st.session_state: st.session_state.lat = 0.0
-    if "lon" not in st.session_state: st.session_state.lon = 0.0
-    if "detected_place" not in st.session_state: st.session_state.detected_place = "新規地点"
-    if "group_id" not in st.session_state: st.session_state.group_id = "default"
-    if "target_dt" not in st.session_state: st.session_state.target_dt = datetime.now()
-
-    uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"], )
+def main():
+    # 1. 接続設定（既存のコード）
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    url = "https://docs.google.com/spreadsheets/d/12hcg7hagi0oLq3nS-K27OqIjBYmzMYXh_FcoS8gFFyE/edit?gid=0#gid=0"
     
-    if uploaded_file:
-        img_for_upload = Image.open(uploaded_file)
-        exif = img_for_upload._getexif()
-        
-        # 1. 写真解析（一度だけ実行）
-        if exif:
-            # 日時抽出
-            for tag_id, value in exif.items():
-                tag_name = ExifTags.TAGS.get(tag_id, tag_id)
-                if tag_name == 'DateTimeOriginal':
-                    try:
-                        clean_val = str(value).strip()[:16].replace(":", "/", 2)
-                        st.session_state.target_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
-                    except: pass
+    # --- データの読み込みとキャッシュ (API 429エラー対策) ---
+    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    
+    @st.cache_data(ttl=600)
+    def get_all_data(_conn, _url):
+        # メインデータと場所マスターを一度に取得
+        d_main = _conn.read(spreadsheet=_url, ttl="10m")
+        d_master = _conn.read(spreadsheet=_url, worksheet="place_master", ttl="1h")
+        return d_main, d_master
+    
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    df, df_master = get_all_data(conn, url)
+    
+    # --- タブ設定 ---
+    tabs = st.tabs(["記録", "編集", "ギャラリー", "分析（時合）", "月別統計", "スズキ戦略分析", "💖 マッチング"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = tabs
+    with tab1:
+        # --- ロゴとタイトルのデザイン ---
+        st.markdown(f"""
+            <div style="text-align: center; padding: 20px 0;">
+                <img src="{icon_url}" style="width: 120px; filter: drop-shadow(0 0 10px rgba(0, 255, 208, 0.4));">
+                <h1 style="color: #ffffff !important; font-size: 2rem; font-weight: 900; letter-spacing: 0.1rem; margin-top: 10px; border-bottom: none;">
+                    Kinetic Tide <span style="color: #00ffd0;">Data</span>
+                </h1>
+                <p style="color: #888; font-size: 0.8rem; text-transform: uppercase;">Advanced Anglers Log System</p>
+            </div>
             
-            # 座標・場所抽出
-            geo = get_geotagging(exif)
-            if geo:
-                lat = get_decimal_from_dms(geo['GPSLatitude'], geo['GPSLatitudeRef'])
-                lon = get_decimal_from_dms(geo['GPSLongitude'], geo['GPSLongitudeRef'])
-                if lat and lon:
-                    st.session_state.lat, st.session_state.lon = lat, lon
-                    p_name, g_id = find_nearest_place(lat, lon, df_master)
-                    st.session_state.detected_place = p_name
-                    st.session_state.group_id = g_id
-
-        st.success(f"📸 解析完了: {st.session_state.detected_place} ({st.session_state.target_dt.strftime('%Y/%m/%d %H:%M')})")
-
-        # --- ここから入力エリア（一本化） ---
-        with st.expander("📍 位置情報の確認", expanded=False):
-            if st.session_state.lat != 0.0:
-                st.map(pd.DataFrame({'lat': [st.session_state.lat], 'lon': [st.session_state.lon]}), zoom=14)
-
-        st.subheader("📝 釣果の詳細")
-        
-        # 魚種選択
-        fish_options = ["スズキ", "ヒラスズキ", "ボウズ", "バラシ", "カサゴ", "ターポン", "タチウオ", "マダイ", "チヌ", "キビレ", "ブリ", "アジ", "（手入力）"]
-        selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
-        final_fish_name = st.text_input("魚種名を入力") if selected_fish == "（手入力）" else selected_fish
-
-        # --- 【場所選択の強化版ロジック】 ---
-        st.markdown("---")
-        # マスターから場所リストを取得
-        master_places = sorted(df_master['place_name'].unique().tolist())
-        place_options = ["自動判定に従う", "（手入力で新規登録）"] + master_places
-
-        selected_place_option = st.selectbox(
-            "📍 場所を選択・修正", 
-            options=place_options,
-            index=0,
-            help="自動判定が間違っている場合は、リストから正しい場所を選んでください。"
-        )
-
-        if selected_place_option == "自動判定に従う":
-            place_name = st.text_input("場所名を確認/修正", value=st.session_state.detected_place)
-            target_group_id = st.session_state.group_id
-        elif selected_place_option == "（手入力で新規登録）":
-            place_name = st.text_input("新規場所名を入力", value="")
-            target_group_id = "default"
-        else:
-            # リストから選んだ場合
-            place_name = selected_place_option
-            matched = df_master[df_master['place_name'] == selected_place_option]
-            target_group_id = matched['group_id'].iloc[0] if not matched.empty else "default"
-            st.info(f"「{place_name}」として記録します。")
-        # ----------------------------------------
-
-        # 全長入力
-        st.markdown("---")
-        c1, c2, c3 = st.columns([1, 2, 1])
-        if c1.button("➖ 0.5", use_container_width=True):
-            st.session_state.length_val = max(0.0, st.session_state.length_val - 0.5)
-        length_text = c2.text_input("全長(cm)", value=str(st.session_state.length_val) if st.session_state.length_val > 0 else "")
-        st.session_state.length_val = normalize_float(length_text)
-        if c3.button("➕ 0.5", use_container_width=True):
-            st.session_state.length_val += 0.5
-        
-        lure = st.text_input("🪝 ルアー/仕掛け")
-        angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"])
-        memo = st.text_area("🗒️ 備考")
-
-# --- 🚀 記録ボタンを Tab1 かつ uploaded_file がある時だけに限定 ---
-        # インデントを uploaded_file の中に一歩入れます
-        if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
-            try:
-                with st.spinner("📊 データ解析中..."):
-                    target_dt = st.session_state.target_dt   
-                    
-                    # 1. 気象・場所情報
-                    temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(st.session_state.lat, st.session_state.lon, target_dt)
-                    m_age = get_moon_age(target_dt)
-                    t_name = get_tide_name(m_age)
-                    station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
-                    
-                    # 2. 潮汐データの取得（前後1日分を統合）
-                    all_events = []
-                    tide_cm = 0
-                    for delta in [-1, 0, 1]:
-                        d_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
-                        if d_data:
-                            if 'events' in d_data: 
-                                all_events.extend(d_data['events'])
-                            if delta == 0: 
-                                tide_cm = d_data['cm']
-
-                    # 重要：時間順に並べ、重複を排除
-                    all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
-
-                    # --- 3. 潮位フェーズ判定ロジック ---
-                    search_dt = target_dt + timedelta(minutes=5)
-                    past_lows = [e for e in all_events if e['time'] <= search_dt and '干' in e['type']]
-                    prev_l = past_lows[-1]['time'] if past_lows else None
-                    past_highs = [e for e in all_events if e['time'] <= search_dt and '満' in e['type']]
-                    prev_h = past_highs[-1]['time'] if past_highs else None
-
-                    next_l = next((e['time'] for e in all_events if e['time'] > search_dt and '干' in e['type']), None)
-                    next_h = next((e['time'] for e in all_events if e['time'] > search_dt and '満' in e['type']), None)
-
-                    prev_ev = next((e for e in reversed(all_events) if e['time'] <= search_dt), None)
-                    next_ev = next((e for e in all_events if e['time'] > search_dt), None)
-                    
-                    tide_phase = "不明"
-                    if prev_ev and next_ev:
-                        duration = (next_ev['time'] - prev_ev['time']).total_seconds()
-                        elapsed = (target_dt - prev_ev['time']).total_seconds()
-                        if duration > 0:
-                            elapsed = max(0, elapsed)
-                            p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
-                            step = max(1, min(9, int((elapsed / duration) * 10)))
-                            tide_phase = f"{p_type}{step}分"
-
-                    val_next_high = int((next_h - target_dt).total_seconds() / 60) if next_h else ""
-                    val_next_low = int((next_l - target_dt).total_seconds() / 60) if next_l else ""
-
-                    # 4. 画像処理
-                    img_final = Image.open(uploaded_file)
-                    try:
-                        exif_orient = img_final._getexif()
-                        if exif_orient:
-                            orient = next((k for k, v in ExifTags.TAGS.items() if v == 'Orientation'), None)
-                            if orient in exif_orient:
-                                if exif_orient[orient] == 3: img_final = img_final.rotate(180, expand=True)
-                                elif exif_orient[orient] == 6: img_final = img_final.rotate(270, expand=True)
-                                elif exif_orient[orient] == 8: img_final = img_final.rotate(90, expand=True)
-                    except: pass
-
-                    img_final.thumbnail((800, 800), Image.Resampling.LANCZOS)
-                    img_bytes = io.BytesIO()
-                    img_final.convert('RGB').save(img_bytes, format='JPEG', quality=70, optimize=True)
-                    img_bytes.seek(0)
-
-                    # 5. 保存実行
-                    res = cloudinary.uploader.upload(img_bytes, folder="fishing_app")
-                    
-                    save_data = {
-                        "filename": res.get("secure_url"), 
-                        "datetime": target_dt.strftime("%Y/%m/%d %H:%M"),
-                        "date": target_dt.strftime("%Y/%m/%d"), 
-                        "time": target_dt.strftime("%H:%M"),
-                        "lat": float(st.session_state.lat), "lon": float(st.session_state.lon),
-                        "気温": temp, "風速": wind_s, "風向": wind_d, "降水量": rain_48, 
-                        "潮位_cm": tide_cm, "月齢": m_age, "潮名": t_name,
-                        "次の満潮まで_分": val_next_high, "次の干潮まで_分": val_next_low,
-                        "直前の満潮_時刻": prev_h.strftime('%Y/%m/%d %H:%M') if prev_h else "",
-                        "直前の干潮_時刻": prev_l.strftime('%Y/%m/%d %H:%M') if prev_l else "",
-                        "潮位フェーズ": tide_phase, "場所": place_name, "魚種": final_fish_name,
-                        "全長_cm": float(st.session_state.length_val), "ルアー": lure, "備考": memo,
-                        "group_id": target_group_id, "観測所": station_info['name'], "釣り人": angler
-                    }
-
-                    df_main = conn.read(spreadsheet=url)
-                    new_row = pd.DataFrame([save_data])
-                    updated_df = pd.concat([df_main, new_row], ignore_index=True)
-                    conn.update(spreadsheet=url, data=updated_df)
-                    
-                    st.cache_data.clear() 
-                    st.success("✅ 記録完了しました！")
-                    st.balloons()
-                    time.sleep(1)
-                    st.rerun()
-
-            except Exception as e:
-                st.error(f"❌ 保存失敗: {e}")
-# ↓ ここから下の「with tab...」が、すべて同じ左端の高さにあるか確認してください
-with tab2:
-    show_edit_page(conn, url)
-
-with tab3:
-    # 保存時にキャッシュをクリアする設定にしていれば、ここは ttl="10m" のままでも
-    # 保存直後は最新が表示されます。念を入れるなら今のまま ttl="0s" でもOKです。
-    df_for_gallery = conn.read(spreadsheet=url, ttl="0s")
-    show_gallery_page(df_for_gallery)
-
-with tab4:
-    show_analysis_page(df)
-
-with tab5:
-    # 統計ページの表示
-    show_monthly_stats(df)
+            <style>
+                /* 文字色のリセットと全体への適用防止 */
+                .stApp {{
+                    color: #e0e0e0;
+                }}
+                /* アップロードエリアのカスタマイズ */
+                [data-testid="stFileUploader"] {{
+                    border: 2px dashed rgba(0, 255, 208, 0.2) !important;
+                    border-radius: 15px !important;
+                    padding: 10px !important;
+                }}
+                /* ボタンのデザイン */
+                .stButton>button {{
+                    font-weight: 900 !important;
+                    letter-spacing: 0.05rem;
+                    border-radius: 12px !important;
+                    background-color: #1e2630 !important;
+                    border: 1px solid rgba(0, 255, 208, 0.3) !important;
+                }}
+                /* ラベルの色（青色にならないように指定） */
+                .stMarkdown p, label, .stSelectbox label, .stTextInput label {{
+                    color: #cccccc !important;
+                }}
+            </style>
+        """, unsafe_allow_html=True)
     
-with tab6:
-    from strategy_analysis import show_strategy_analysis
-    show_strategy_analysis(df)
+        # --- 念のためここでセッション状態の初期化 ---
+        if "length_val" not in st.session_state:
+            st.session_state.length_val = 0.0
+        if "lat" not in st.session_state: st.session_state.lat = 0.0
+        if "lon" not in st.session_state: st.session_state.lon = 0.0
+        if "detected_place" not in st.session_state: st.session_state.detected_place = "新規地点"
+        if "group_id" not in st.session_state: st.session_state.group_id = "default"
+        if "target_dt" not in st.session_state: st.session_state.target_dt = datetime.now()
+    
+        uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"], )
+        
+        if uploaded_file:
+            img_for_upload = Image.open(uploaded_file)
+            exif = img_for_upload._getexif()
+            
+            # 1. 写真解析（一度だけ実行）
+            if exif:
+                # 日時抽出
+                for tag_id, value in exif.items():
+                    tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+                    if tag_name == 'DateTimeOriginal':
+                        try:
+                            clean_val = str(value).strip()[:16].replace(":", "/", 2)
+                            st.session_state.target_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
+                        except: pass
+                
+                # 座標・場所抽出
+                geo = get_geotagging(exif)
+                if geo:
+                    lat = get_decimal_from_dms(geo['GPSLatitude'], geo['GPSLatitudeRef'])
+                    lon = get_decimal_from_dms(geo['GPSLongitude'], geo['GPSLongitudeRef'])
+                    if lat and lon:
+                        st.session_state.lat, st.session_state.lon = lat, lon
+                        p_name, g_id = find_nearest_place(lat, lon, df_master)
+                        st.session_state.detected_place = p_name
+                        st.session_state.group_id = g_id
+    
+            st.success(f"📸 解析完了: {st.session_state.detected_place} ({st.session_state.target_dt.strftime('%Y/%m/%d %H:%M')})")
+    
+            # --- ここから入力エリア（一本化） ---
+            with st.expander("📍 位置情報の確認", expanded=False):
+                if st.session_state.lat != 0.0:
+                    st.map(pd.DataFrame({'lat': [st.session_state.lat], 'lon': [st.session_state.lon]}), zoom=14)
+    
+            st.subheader("📝 釣果の詳細")
+            
+            # 魚種選択
+            fish_options = ["スズキ", "ヒラスズキ", "ボウズ", "バラシ", "カサゴ", "ターポン", "タチウオ", "マダイ", "チヌ", "キビレ", "ブリ", "アジ", "（手入力）"]
+            selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
+            final_fish_name = st.text_input("魚種名を入力") if selected_fish == "（手入力）" else selected_fish
+    
+            # --- 【場所選択の強化版ロジック】 ---
+            st.markdown("---")
+            # マスターから場所リストを取得
+            master_places = sorted(df_master['place_name'].unique().tolist())
+            place_options = ["自動判定に従う", "（手入力で新規登録）"] + master_places
+    
+            selected_place_option = st.selectbox(
+                "📍 場所を選択・修正", 
+                options=place_options,
+                index=0,
+                help="自動判定が間違っている場合は、リストから正しい場所を選んでください。"
+            )
+    
+            if selected_place_option == "自動判定に従う":
+                place_name = st.text_input("場所名を確認/修正", value=st.session_state.detected_place)
+                target_group_id = st.session_state.group_id
+            elif selected_place_option == "（手入力で新規登録）":
+                place_name = st.text_input("新規場所名を入力", value="")
+                target_group_id = "default"
+            else:
+                # リストから選んだ場合
+                place_name = selected_place_option
+                matched = df_master[df_master['place_name'] == selected_place_option]
+                target_group_id = matched['group_id'].iloc[0] if not matched.empty else "default"
+                st.info(f"「{place_name}」として記録します。")
+            # ----------------------------------------
+    
+            # 全長入力
+            st.markdown("---")
+            c1, c2, c3 = st.columns([1, 2, 1])
+            if c1.button("➖ 0.5", use_container_width=True):
+                st.session_state.length_val = max(0.0, st.session_state.length_val - 0.5)
+            length_text = c2.text_input("全長(cm)", value=str(st.session_state.length_val) if st.session_state.length_val > 0 else "")
+            st.session_state.length_val = normalize_float(length_text)
+            if c3.button("➕ 0.5", use_container_width=True):
+                st.session_state.length_val += 0.5
+            
+            lure = st.text_input("🪝 ルアー/仕掛け")
+            angler = st.selectbox("👤 釣り人", ["長元", "川口", "山川"])
+            memo = st.text_area("🗒️ 備考")
+    
+    # --- 🚀 記録ボタンを Tab1 かつ uploaded_file がある時だけに限定 ---
+            # インデントを uploaded_file の中に一歩入れます
+            if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
+                try:
+                    with st.spinner("📊 データ解析中..."):
+                        target_dt = st.session_state.target_dt   
+                        
+                        # 1. 気象・場所情報
+                        temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(st.session_state.lat, st.session_state.lon, target_dt)
+                        m_age = get_moon_age(target_dt)
+                        t_name = get_tide_name(m_age)
+                        station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
+                        
+                        # 2. 潮汐データの取得（前後1日分を統合）
+                        all_events = []
+                        tide_cm = 0
+                        for delta in [-1, 0, 1]:
+                            d_data = get_tide_details(station_info['code'], target_dt + timedelta(days=delta))
+                            if d_data:
+                                if 'events' in d_data: 
+                                    all_events.extend(d_data['events'])
+                                if delta == 0: 
+                                    tide_cm = d_data['cm']
+    
+                        # 重要：時間順に並べ、重複を排除
+                        all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
+    
+                        # --- 3. 潮位フェーズ判定ロジック ---
+                        search_dt = target_dt + timedelta(minutes=5)
+                        past_lows = [e for e in all_events if e['time'] <= search_dt and '干' in e['type']]
+                        prev_l = past_lows[-1]['time'] if past_lows else None
+                        past_highs = [e for e in all_events if e['time'] <= search_dt and '満' in e['type']]
+                        prev_h = past_highs[-1]['time'] if past_highs else None
+    
+                        next_l = next((e['time'] for e in all_events if e['time'] > search_dt and '干' in e['type']), None)
+                        next_h = next((e['time'] for e in all_events if e['time'] > search_dt and '満' in e['type']), None)
+    
+                        prev_ev = next((e for e in reversed(all_events) if e['time'] <= search_dt), None)
+                        next_ev = next((e for e in all_events if e['time'] > search_dt), None)
+                        
+                        tide_phase = "不明"
+                        if prev_ev and next_ev:
+                            duration = (next_ev['time'] - prev_ev['time']).total_seconds()
+                            elapsed = (target_dt - prev_ev['time']).total_seconds()
+                            if duration > 0:
+                                elapsed = max(0, elapsed)
+                                p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
+                                step = max(1, min(9, int((elapsed / duration) * 10)))
+                                tide_phase = f"{p_type}{step}分"
+    
+                        val_next_high = int((next_h - target_dt).total_seconds() / 60) if next_h else ""
+                        val_next_low = int((next_l - target_dt).total_seconds() / 60) if next_l else ""
+    
+                        # 4. 画像処理
+                        img_final = Image.open(uploaded_file)
+                        try:
+                            exif_orient = img_final._getexif()
+                            if exif_orient:
+                                orient = next((k for k, v in ExifTags.TAGS.items() if v == 'Orientation'), None)
+                                if orient in exif_orient:
+                                    if exif_orient[orient] == 3: img_final = img_final.rotate(180, expand=True)
+                                    elif exif_orient[orient] == 6: img_final = img_final.rotate(270, expand=True)
+                                    elif exif_orient[orient] == 8: img_final = img_final.rotate(90, expand=True)
+                        except: pass
+    
+                        img_final.thumbnail((800, 800), Image.Resampling.LANCZOS)
+                        img_bytes = io.BytesIO()
+                        img_final.convert('RGB').save(img_bytes, format='JPEG', quality=70, optimize=True)
+                        img_bytes.seek(0)
+    
+                        # 5. 保存実行
+                        res = cloudinary.uploader.upload(img_bytes, folder="fishing_app")
+                        
+                        save_data = {
+                            "filename": res.get("secure_url"), 
+                            "datetime": target_dt.strftime("%Y/%m/%d %H:%M"),
+                            "date": target_dt.strftime("%Y/%m/%d"), 
+                            "time": target_dt.strftime("%H:%M"),
+                            "lat": float(st.session_state.lat), "lon": float(st.session_state.lon),
+                            "気温": temp, "風速": wind_s, "風向": wind_d, "降水量": rain_48, 
+                            "潮位_cm": tide_cm, "月齢": m_age, "潮名": t_name,
+                            "次の満潮まで_分": val_next_high, "次の干潮まで_分": val_next_low,
+                            "直前の満潮_時刻": prev_h.strftime('%Y/%m/%d %H:%M') if prev_h else "",
+                            "直前の干潮_時刻": prev_l.strftime('%Y/%m/%d %H:%M') if prev_l else "",
+                            "潮位フェーズ": tide_phase, "場所": place_name, "魚種": final_fish_name,
+                            "全長_cm": float(st.session_state.length_val), "ルアー": lure, "備考": memo,
+                            "group_id": target_group_id, "観測所": station_info['name'], "釣り人": angler
+                        }
+    
+                        df_main = conn.read(spreadsheet=url)
+                        new_row = pd.DataFrame([save_data])
+                        updated_df = pd.concat([df_main, new_row], ignore_index=True)
+                        conn.update(spreadsheet=url, data=updated_df)
+                        
+                        st.cache_data.clear() 
+                        st.success("✅ 記録完了しました！")
+                        st.balloons()
+                        time.sleep(1)
+                        st.rerun()
+    
+                except Exception as e:
+                    st.error(f"❌ 保存失敗: {e}")
+    # ↓ ここから下の「with tab...」が、すべて同じ左端の高さにあるか確認してください
+    with tab2:
+        show_edit_page(conn, url)
+    
+    with tab3:
+        # 保存時にキャッシュをクリアする設定にしていれば、ここは ttl="10m" のままでも
+        # 保存直後は最新が表示されます。念を入れるなら今のまま ttl="0s" でもOKです。
+        df_for_gallery = conn.read(spreadsheet=url, ttl="0s")
+        show_gallery_page(df_for_gallery)
+    
+    with tab4:
+        show_analysis_page(df)
+    
+    with tab5:
+        # 統計ページの表示
+        show_monthly_stats(df)
+        
+    with tab6:
+        from strategy_analysis import show_strategy_analysis
+        show_strategy_analysis(df)
+    
+    with tab7:
+        show_matching_page(df)
 
-with tab7:
-    show_matching_page(df)
+# --- ファイルの最後（一番下）にこれを追記 ---
+if __name__ == "__main__":
+    main()
+
 
 
 
