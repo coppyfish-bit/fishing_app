@@ -93,9 +93,9 @@ def render_edit_form(df, idx, conn, url):
                     df.at[idx, '潮位_cm'] = tide_res['cm']
                     df.at[idx, '潮位フェーズ'] = tide_res.get('phase', "不明")
                 
-                st.toast(f"✅ {station['name']}のデータを取得しました！")
-        except Exception as e:
-            st.error(f"再取得エラー: {e}")
+                st.success(f"気象データを更新しました: {temp}℃ / {wind_s}m")
+        else:
+            st.error("気象データの取得に失敗しました。API制限か、座標データの不備の可能性があります。")
 
     # --- 修正フォーム ---
     with st.form(key=f"form_{idx}"):
@@ -149,6 +149,7 @@ def render_edit_form(df, idx, conn, url):
                 st.rerun()
             else:
                 st.error("削除するにはチェックを入れてください。")
+
 
 
 
