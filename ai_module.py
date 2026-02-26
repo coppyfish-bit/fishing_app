@@ -63,7 +63,8 @@ def show_ai_page(conn, url, df):
             <div style="padding-top: 10px;">
                 <h3 style="color: #ff4b4b; margin-bottom: 5px;">デーモン佐藤</h3>
                 <p style="color: #888; font-size: 0.8rem; letter-spacing: 0.1rem;">MA-KAI FISHING ADVISOR (Gemini 3 Powered)</p>
-                <p class="demon-text">「ククク... 貴様の釣果、すべて見えているぞ。何を聞きたい？」</p>
+                <p style="color: #666; font-size: 0.75rem;">※この対話データは学習に使用されず、外部に漏れることはない。安心せよ。</p>
+                <p class="demon-text">「ククク... 貴様の秘密（データ）は我と貴様だけのものだ。何を聞きたい？」</p>
             </div>
         """, unsafe_allow_html=True)
 
@@ -109,3 +110,4 @@ def show_ai_page(conn, url, df):
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
                 except Exception as e:
                     st.error(f"魔界との通信失敗: {e}")
+
