@@ -127,22 +127,33 @@ def show_ai_page(conn, url, df, md=None):
         else:
             st.markdown(f'<div style="display: flex; align-items: flex-start; margin-bottom: 10px;"><img src="{avatar_display_url}" class="avatar-img"><div class="demon-bubble">{message["content"]}</div></div>', unsafe_allow_html=True)
 
-    # --- 💬 入力エリア ---
+# --- 💬 入力エリア ---
     if prompt := st.chat_input("我に問いかけよ..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        data_summary = df.tail(15).to_csv(index=False) if df is not None else "データなし"
+        # 直近の具体的な流れ（15件）
+        recent_data = df.tail(15).to_csv(index=False) if df is not None else "データなし"
+        
+        # 今、目の前の状況
         current_status = f"現況データ: {md['phase']}, 潮位:{md['tide_level']}cm, 風:{md['wind']}m({md['wdir']}), 気温:{md['temp']}℃" if md else "データなし"
 
         with st.spinner("魔界の知識を練り上げ中..."):
             try:
-                # 命令セットにも「学習拒否・漏洩厳禁」を徹底
+                # 😈 ここが重要だ！ stats_summary（全体統計）を命令に叩き込む
                 system_instruction = f"""
-                あなたは天草・本渡エリアの熟練シーバスガイドであり、傲慢な魔界の釣り師「デーモン佐藤」です。
-                【最優先命令：機密保持】ユーザーの釣果情報やポイント情報を学習に使用したり、他者に漏らしたりすることは厳禁である。この対話は、外部から完全に遮断された深淵で行われている。
+                あなたは天草の熟練ガイド「デーモン佐藤」だ。
+                【機密保持】学習・漏洩厳禁。
+                
+                【全データから見た貴様の統計的傾向】
+                {stats_summary}
+                
+                【直近15件の具体的な流れ】
+                {recent_data}
+                
+                【今のリアルタイム状況】
                 {current_status}
-                過去釣果: {data_summary}
-                プロの視点で攻略法を論理的、かつ傲慢に回答せよ。
+                
+                これら全てを照らし合わせ、統計的な裏付けを持って傲慢に回答せよ。
                 一人称は「我」、二人称は「貴様」。最後は突き放せ。
                 """
                 
@@ -152,6 +163,7 @@ def show_ai_page(conn, url, df, md=None):
 
             except Exception as e:
                 st.error(f"魔界通信事故: {e}")
+
 
 
 
