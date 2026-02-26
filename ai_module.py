@@ -16,7 +16,6 @@ def show_ai_page(conn, url):
     model = genai.GenerativeModel('gemini-1.5-flash')
 
     # データ読み込み（最新の状態を反映）
-    df = conn.read(spreadsheet=url, ttl="0s")
     
     avatar_path = "demon_sato.png"
     avatar_image = avatar_path if os.path.exists(avatar_path) else "😈"
@@ -80,5 +79,6 @@ def show_ai_page(conn, url):
     if st.sidebar.button("チャット履歴を浄化"):
         st.session_state.messages = []
         st.rerun()
+
 
 
