@@ -553,14 +553,15 @@ def main():
     with tab7:
         show_matching_page(df)
 
-# --- 修正後 ---
-    with tab8:  # 's'を消して 'tab8' に修正
+with tab8:  # 8番目のタブ
         import ai_module
-        # SPREADSHEET_URL ではなく、上で定義した url を渡す
-        ai_module.show_ai_page(conn, url)
+        # 第3引数に「df」を追加するのだ！
+        ai_module.show_ai_page(conn, url, df)
+        
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
