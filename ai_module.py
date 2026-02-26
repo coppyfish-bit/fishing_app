@@ -73,7 +73,7 @@ def show_ai_page(conn, url, df, md=None):
         <div class="header-container">
             <img src="{avatar_display_url}" class="header-img">
             <div>
-                <h2 style="color: #ff4b4b; margin: 0;">魔界トーク：天草攻略ガイド</h2>
+                <h2 style="color: #ff4b4b; margin: 0;">魔界通信</h2>
                 <p style="color: #00ff00; font-size: 0.8rem; margin: 5px 0;">● 安定接続：知能特化モード</p>
             </div>
         </div>
@@ -94,7 +94,7 @@ def show_ai_page(conn, url, df, md=None):
             st.markdown(f'<div style="display: flex; align-items: flex-start; margin-bottom: 10px;"><img src="{avatar_display_url}" class="avatar-img"><div class="demon-bubble">{message["content"]}</div></div>', unsafe_allow_html=True)
 
     # --- 💬 入力エリア ---
-    if prompt := st.chat_input("天草のシーバスについて問いかけよ..."):
+    if prompt := st.chat_input("我に問いかけよ..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         data_summary = df.tail(15).to_csv(index=False) if df is not None else "データなし"
@@ -118,3 +118,4 @@ def show_ai_page(conn, url, df, md=None):
 
             except Exception as e:
                 st.error(f"魔界通信事故: {e}")
+
