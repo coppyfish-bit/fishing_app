@@ -553,14 +553,14 @@ def main():
     with tab7:
         show_matching_page(df)
 
-with tab8:  # 8番目のタブ
+    with tab8:  # ここが tabs8 になっていたりしませんか？
         import ai_module
-        # 第3引数に「df」を追加するのだ！
-        ai_module.show_ai_page(conn, url, df)
+        ai_module.show_ai_page(conn, url, df) # 前回の修正で df を追加した形
         
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
