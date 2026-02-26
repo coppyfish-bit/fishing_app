@@ -1,46 +1,88 @@
-# --- デバッグ表示セクション ---
-if st.checkbox("🔍 潮位データの取得プロセスを確認する"):
-    st.write("### 🛠️ Debug Information")
-    
-    # 生データの再取得（確認用）
-    now = datetime.now()
-    url = f"https://www.data.jma.go.jp/gmd/kaiyou/data/db/tide/suisan/txt/{now.year}/HS.txt"
-    
-    with st.status("気象庁サーバーから生データを検証中..."):
-        res = requests.get(url, timeout=5)
-        st.write(f"HTTPステータス: `{res.status_code}`")
-        
+import streamlit as st
+import requests
+import pandas as pd
+from datetime import datetime
+
+st.title("🌊 潮位データ取得デバッグ（本渡瀬戸）")
+
+# 1. 取得設定
+now = datetime.now()
+st.info(f"現在時刻 (システム): {now.strftime('%Y-%m-%d %H:%M:%S')}")
+
+# 気象庁の本渡(HS)データURL
+url = f"https://www.data.jma.go.jp/gmd/kaiyou/data/db/tide/suisan/txt/{now.year}/HS.txt"
+
+if st.button("🔍 データを取得して解析実行"):
+    try:
+        # --- ステップ1: 生データのダウンロード ---
+        res = requests.get(url, timeout=10)
+        if res.status_code == 200:
+            st.success("✅ 気象庁サーバーへの接続に成功しました。")
+        else:
+            st.error(f"❌ 接続失敗 (Status Code: {res.status_code})")
+            st.stop()
+
+        # --- ステップ2: 今日のデータ行を抽出 ---
         lines = res.text.splitlines()
+        # 気象庁フォーマット: 72-74年, 74-76月, 76-78日, 78-80地点コード
         target_y, target_m, target_d = int(now.strftime('%y')), now.month, now.day
-        day_line = next((l for l in lines if len(l) > 100 and int(l[72:74]) == target_y and int(l[74:76]) == target_m and int(l[76:78]) == target_d), None)
         
+        day_line = None
+        for line in lines:
+            if len(line) < 100: continue
+            try:
+                line_y = int(line[72:74])
+                line_m = int(line[74:76])
+                line_d = int(line[76:78])
+                line_code = line[78:80]
+                
+                if line_y == target_y and line_m == target_m and line_d == target_d and line_code == "HS":
+                    day_line = line
+                    break
+            except: continue
+
         if day_line:
-            st.success(f"本日（{target_m}/{target_d}）のデータ行を特定しました。")
+            st.write("### 📄 解析結果")
+            st.markdown("**抽出された生データ行:**")
             st.code(day_line, language="text")
-            
-            # 1時間ごとの潮位リスト
+
+            # --- ステップ3: 1時間ごとの潮位をテーブル化 ---
             hourly_tides = [int(day_line[i*3 : (i+1)*3].strip() or 0) for i in range(24)]
-            st.write("🕒 **1時間ごとの潮位（0時〜23時）**")
-            st.table(pd.DataFrame([hourly_tides], columns=[f"{i}時" for i in range(24)]))
-            
-            # 判定ロジックの可視化
+            df_tides = pd.DataFrame([hourly_tides], columns=[f"{i}時" for i in range(24)])
+            st.write("**📊 1時間ごとの潮位 (cm):**")
+            st.table(df_tides)
+
+            # --- ステップ4: 「最も近い」潮位の判定ロジック ---
             current_hour = now.hour
-            target_hour = current_hour + 1 if now.minute >= 30 and current_hour < 23 else current_hour
-            st.info(f"現在時刻: `{now.strftime('%H:%M')}` → 近い方のデータ参照枠: `{target_hour}時` (値: `{hourly_tides[target_hour]}cm`)")
+            current_min = now.minute
             
-            # 満干潮イベントの抽出状況
+            if current_min >= 30 and current_hour < 23:
+                target_hour = current_hour + 1
+                reason = "30分を過ぎているため、次の正時を採用"
+            else:
+                target_hour = current_hour
+                reason = "30分未満のため、現在の正時を採用"
+            
+            selected_tide = hourly_tides[target_hour]
+            
+            st.metric(label=f"判定された現在の潮位 ({target_hour}時のデータ)", 
+                      value=f"{selected_tide} cm", 
+                      delta=reason, delta_color="off")
+
+            # --- ステップ5: 満干潮イベントのデバッグ ---
+            st.write("**🌊 満干潮イベントの解析:**")
             events = []
-            today_str = now.strftime('%Y%m%d')
+            # 満潮(80〜107列), 干潮(108〜135列)
             for start, e_type in [(80, "満潮"), (108, "干潮")]:
                 for i in range(4):
                     pos = start + (i * 7)
                     t_str = day_line[pos : pos+4].strip()
                     if t_str and t_str != "9999":
-                        ev_time = datetime.strptime(today_str + t_str.zfill(4), '%Y%m%d%H%M')
-                        events.append({"時刻": ev_time.strftime('%H:%M'), "タイプ": e_type})
-            st.write("🌊 **本日の満干潮イベント**")
+                        events.append({"時刻": f"{t_str[:2]}:{t_str[2:]}", "タイプ": e_type})
             st.json(events)
+
         else:
-            st.error("本日のデータ行が見つかりません。URLまたは日付指定に問題がある可能性があります。")
-st.divider()
-# --- デバッグセクション終了 ---
+            st.warning(f"指定された日付 ({target_y}/{target_m}/{target_d}) の地点 'HS' が見つかりませんでした。")
+
+    except Exception as e:
+        st.error(f"プログラム実行中にエラーが発生しました: {e}")
