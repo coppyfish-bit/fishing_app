@@ -4,22 +4,48 @@ from datetime import datetime, timedelta
 
 def show_edit_page(conn, url):
     st.subheader("🔄 登録情報の修正・削除")
-    df = conn.read(spreadsheet=url, ttl="0s")
-    if df.empty:
+    # 最新データの読み込み
+    df_raw = conn.read(spreadsheet=url, ttl="0s")
+    if df_raw.empty:
         st.info("データがありません。")
         return
     
-    df = df.iloc[::-1].copy()
+    # 全体を最新順に並び替え
+    df = df_raw.iloc[::-1].copy()
 
-    st.markdown("### 📸 最近の記録を修正")
+    # --- 1. 直近5件の表示（展開状態） ---
+    st.markdown("### 📸 直近5件の記録")
     df_recent = df.head(5)
     for idx in df_recent.index:
         label = f"✨ 最新: {df.at[idx, 'datetime']} | {df.at[idx, '場所']} | {df.at[idx, '魚種']}"
-        with st.expander(label, expanded=False):
+        # expanded=True で常に展開
+        with st.expander(label, expanded=True):
             render_edit_form(df, idx, conn, url)
 
+    st.markdown("---")
+
+    # --- 2. 過去データの選択編集（リストから選択） ---
+    st.markdown("### 🔍 過去のデータをリストから選んで編集")
+    
+    # 選択肢用のラベル作成
+    df['select_label'] = df['datetime'].astype(str) + " | " + df['場所'].astype(str) + " | " + df['魚種'].astype(str)
+    
+    selected_label = st.selectbox(
+        "編集したいデータを選択してください",
+        options=df['select_label'].tolist(),
+        index=None,
+        placeholder="ここをクリックして検索・選択..."
+    )
+
+    if selected_label:
+        selected_idx = df[df['select_label'] == selected_label].index[0]
+        st.info(f"選択中: {selected_label}")
+        render_edit_form(df, selected_idx, conn, url)
+
+# --- フォーム表示と再計算の共通関数 ---
 def render_edit_form(df, idx, conn, url):
-    if 'filename' in df.columns and df.at[idx, 'filename']:
+    # 写真の表示（あれば）
+    if 'filename' in df.columns and pd.notna(df.at[idx, 'filename']):
         st.image(df.at[idx, 'filename'], width=400)
     
     temp_data_key = f"temp_recalc_{idx}"
@@ -28,24 +54,20 @@ def render_edit_form(df, idx, conn, url):
     if form_version_key not in st.session_state:
         st.session_state[form_version_key] = 0
 
+    # 🔄 再取得ボタン
     if st.button(f"🔄 気象・潮汐データを再取得する", key=f"btn_{idx}", use_container_width=True):
         try:
             with st.spinner("最新データを計算中..."):
                 import app
-                # --- 🔥 エラー解決の核心部 🔥 ---
                 raw_val = str(df.at[idx, 'datetime']).replace("-", "/").strip()
-                # 最初の16文字を取得し、もし最後が「:」ならそれを捨てる
                 clean_dt_str = raw_val[:16]
                 if clean_dt_str.endswith(":"):
                     clean_dt_str = clean_dt_str[:-1]
                 
-                # フォーマットを柔軟に試行
                 try:
                     dt_obj = datetime.strptime(clean_dt_str, '%Y/%m/%d %H:%M')
                 except:
-                    # 分が1桁の場合などの予備
                     dt_obj = pd.to_datetime(clean_dt_str)
-                # ------------------------------
                 
                 lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
                 temp, w_s, w_d, rain = app.get_weather_data_openmeteo(lat, lon, dt_obj)
@@ -85,6 +107,7 @@ def render_edit_form(df, idx, conn, url):
         except Exception as e:
             st.error(f"再取得エラー: {e}")
 
+    # 表示値の決定（再取得データがあれば優先）
     has_temp_data = temp_data_key in st.session_state and st.session_state[temp_data_key] is not None
     t_data = st.session_state.get(temp_data_key, {})
     
@@ -96,8 +119,10 @@ def render_edit_form(df, idx, conn, url):
     val_tide_name = t_data["tide_name"] if has_temp_data else (str(df.at[idx, '潮名']) if '潮名' in df.columns else "不明")
     val_phase = t_data["phase"] if has_temp_data else (str(df.at[idx, '潮位フェーズ']) if '潮位フェーズ' in df.columns else "不明")
 
-    with st.form(key=f"form_{idx}_v{st.session_state[form_version_key]}"):
-        st.write("📝 **釣果・環境データの修正**")
+    # 修正フォーム
+    ver = st.session_state[form_version_key]
+    with st.form(key=f"form_{idx}_v{ver}"):
+        st.write("📝 **データの修正**")
         col_f, col_l, col_p = st.columns([2, 1, 2])
         new_fish = col_f.text_input("魚種", value=df.at[idx, '魚種'])
         new_len = col_l.number_input("全長(cm)", value=float(df.at[idx, '全長_cm']), step=0.1)
@@ -122,30 +147,30 @@ def render_edit_form(df, idx, conn, url):
         c_save, c_del = st.columns(2)
         
         if c_save.form_submit_button("✅ 更新内容を保存する", use_container_width=True):
-            df.at[idx, '魚種'] = new_fish
-            df.at[idx, '全長_cm'] = new_len
-            df.at[idx, '場所'] = new_place
-            df.at[idx, '気温'] = new_temp
-            df.at[idx, '風速'] = new_wind_s
-            if '風向' in df.columns: df.at[idx, '風向'] = new_wind_d
-            if '降水量' in df.columns: df.at[idx, '降水量'] = new_rain
-            df.at[idx, '潮位_cm'] = new_tide_cm
-            if '潮名' in df.columns: df.at[idx, '潮名'] = new_tide_name
-            if '潮位フェーズ' in df.columns: df.at[idx, '潮位フェーズ'] = new_phase
-            df.at[idx, '備考'] = new_memo
+            df_to_save = conn.read(spreadsheet=url, ttl="0s")
+            df_to_save.at[idx, '魚種'] = new_fish
+            df_to_save.at[idx, '全長_cm'] = new_len
+            df_to_save.at[idx, '場所'] = new_place
+            df_to_save.at[idx, '気温'] = new_temp
+            df_to_save.at[idx, '風速'] = new_wind_s
+            if '風向' in df_to_save.columns: df_to_save.at[idx, '風向'] = new_wind_d
+            if '降水量' in df_to_save.columns: df_to_save.at[idx, '降水量'] = new_rain
+            df_to_save.at[idx, '潮位_cm'] = new_tide_cm
+            if '潮名' in df_to_save.columns: df_to_save.at[idx, '潮名'] = new_tide_name
+            if '潮位フェーズ' in df_to_save.columns: df_to_save.at[idx, '潮位フェーズ'] = new_phase
+            df_to_save.at[idx, '備考'] = new_memo
             
-            save_df = df.drop(columns=['search_label']) if 'search_label' in df.columns else df
-            conn.update(spreadsheet=url, data=save_df.iloc[::-1])
+            conn.update(spreadsheet=url, data=df_to_save)
             st.session_state[temp_data_key] = None
             st.cache_data.clear()
-            st.success("保存しました！")
+            st.success("修正を保存しました！")
             st.rerun()
 
         if c_del.form_submit_button("🗑️ 削除実行", type="primary", use_container_width=True):
             if confirm_delete:
-                df = df.drop(idx)
-                save_df = df.drop(columns=['search_label']) if 'search_label' in df.columns else df
-                conn.update(spreadsheet=url, data=save_df.iloc[::-1])
+                df_to_save = conn.read(spreadsheet=url, ttl="0s")
+                df_to_save = df_to_save.drop(idx)
+                conn.update(spreadsheet=url, data=df_to_save)
                 st.session_state[temp_data_key] = None
                 st.cache_data.clear()
                 st.rerun()
