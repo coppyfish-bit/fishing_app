@@ -18,7 +18,7 @@ def show_ai_page(conn, url, df):
     try:
         genai.configure(api_key=api_key)
         # 最新の Gemini 3 Flash モデルを指定
-        model = genai.GenerativeModel('gemini-3-flash')
+        model = genai.GenerativeModel('gemini-3-flash-preview')
     except Exception as e:
         st.error(f"魔界の門（モデル設定）が開かぬ！: {e}")
         return
@@ -96,3 +96,4 @@ def show_ai_page(conn, url, df):
     if st.sidebar.button("チャット履歴を浄化"):
         st.session_state.messages = []
         st.rerun()
+
