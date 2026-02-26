@@ -549,9 +549,14 @@ def main():
     with tab7:
         show_matching_page(df)
 
+    with tabs8:  # 8番目のタブ
+    import ai_module
+    ai_module.show_ai_page(conn, SPREADSHEET_URL)
+
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
