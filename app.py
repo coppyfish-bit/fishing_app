@@ -292,8 +292,8 @@ def main():
     df, df_master = get_all_data(conn, url)
     
     # --- タブ設定 ---
-    tabs = st.tabs(["記録", "編集", "ギャラリー", "分析（時合）", "月別統計", "スズキ戦略分析", "💖 マッチング"])
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = tabs
+    tabs = st.tabs(["記録", "編集", "ギャラリー", "分析（時合）", "月別統計", "スズキ戦略分析", "💖 マッチング", "デーモン佐藤"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = tabs
     with tab1:
         # --- ロゴとタイトルのデザイン ---
         st.markdown(f"""
@@ -552,6 +552,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
