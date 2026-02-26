@@ -4,8 +4,9 @@ import requests
 from datetime import datetime, timedelta
 
 # --- データ取得関数 ---
+
 def get_jma_tide_hs():
-    """気象庁HPから本渡の現在の潮位を取得"""
+    """気象庁HPから本渡の正確な潮汐イベントを取得してフェーズ判定"""
     now = datetime.now()
     url = f"https://www.data.jma.go.jp/gmd/kaiyou/data/db/tide/suisan/txt/{now.year}/HS.txt"
     try:
@@ -13,22 +14,57 @@ def get_jma_tide_hs():
         if res.status_code != 200: return 150, "下げ"
         lines = res.text.splitlines()
         target_y, target_m, target_d = int(now.strftime('%y')), now.month, now.day
+        
+        day_line = None
         for line in lines:
             if len(line) < 100: continue
             if int(line[72:74]) == target_y and int(line[74:76]) == target_m and int(line[76:78]) == target_d:
-                hourly = [int(line[i*3 : (i+1)*3].strip() or 0) for i in range(24)]
-                h, m = now.hour, now.minute
-                t1, t2 = hourly[h], hourly[h+1] if h < 23 else hourly[h]
-                current_cm = int(t1 + (t2 - t1) * (m / 60.0))
-                phase = "上げ" if t2 >= t1 else "下げ"
-                return current_cm, phase
-    except: pass
-    return 150, "下げ"
+                day_line = line
+                break
+        
+        if not day_line: return 150, "下げ"
+
+        # 現在潮位の計算
+        hourly = [int(day_line[i*3 : (i+1)*3].strip() or 0) for i in range(24)]
+        h, m = now.hour, now.minute
+        t1, t2 = hourly[h], hourly[h+1] if h < 23 else hourly[h]
+        current_cm = int(t1 + (t2 - t1) * (m / 60.0))
+
+        # --- 潮汐イベント（満潮・干潮）の抽出 ---
+        events = []
+        today_str = now.strftime('%Y%m%d')
+        # 満潮(80列目から)、干潮(108列目から)
+        for start, e_type in [(80, "満潮"), (108, "干潮")]:
+            for i in range(4):
+                pos = start + (i * 7)
+                t_str = day_line[pos : pos+4].strip()
+                if t_str and t_str != "9999":
+                    ev_time = datetime.strptime(today_str + t_str.zfill(4), '%Y%m%d%H%M')
+                    events.append({"time": ev_time, "type": e_type})
+        
+        events.sort(key=lambda x: x['time'])
+
+        # 現在時刻の直前のイベントを探す
+        prev_event = None
+        for e in reversed(events):
+            if e['time'] <= now:
+                prev_event = e
+                break
+        
+        # フェーズ判定：直前が満潮なら「下げ」、直前が干潮なら「上げ」
+        if prev_event:
+            phase = "下げ" if prev_event['type'] == "満潮" else "上げ"
+        else:
+            # 本日最初のイベント前なら、最初のイベントの逆（例：最初が満潮なら、今は上げ）
+            phase = "上げ" if events[0]['type'] == "満潮" else "下げ"
+
+        return current_cm, phase
+    except:
+        return 150, "下げ"
 
 def get_weather():
     """天草の現在気象を取得（気温・風・48時間降水量）"""
     try:
-        # 過去2日間を含めて降水データを取得
         end_date = datetime.now().date()
         start_date = end_date - timedelta(days=2)
         
@@ -42,12 +78,9 @@ def get_weather():
         }, timeout=5).json()
         
         cw = res['current_weather']
-        
-        # 48時間降水量の合計を計算（直近48個のデータを合算）
         precip_48h = 0.0
         if 'hourly' in res and 'precipitation' in res['hourly']:
             precip_list = res['hourly']['precipitation']
-            # リストの最後（現在）から遡って48時間分を合計
             precip_48h = sum(precip_list[-48:])
         
         dirs = ["北", "北東", "東", "南東", "南", "南西", "西", "北西"]
@@ -58,9 +91,10 @@ def get_weather():
         return 20.0, 2.0, "北", 0.0
 
 # --- メイン表示関数 ---
+
 def show_matching_page(df):
     st.title("🏹 SeaBass Matcher Pro")
-    st.caption("月・潮位・気象条件（48h降水量含む）から過去データを検索")
+    st.caption("天草・本渡瀬戸の海況に基づいたポイントマッチング")
 
     # セッション状態の初期化
     if 'tide' not in st.session_state: st.session_state.tide = 150
@@ -73,7 +107,7 @@ def show_matching_page(df):
 
     # --- 1. 入力セクション ---
     with st.expander("🌍 海況・気象データの設定", expanded=True):
-        if st.button("🔄 リアルタイム情報を取得"):
+        if st.button("🔄 リアルタイム情報を取得(本渡瀬戸)"):
             t_cm, t_ph = get_jma_tide_hs()
             temp_val, wind_spd, wdir_val, p48_val = get_weather()
             st.session_state.tide = t_cm
@@ -83,6 +117,7 @@ def show_matching_page(df):
             st.session_state.wdir = wdir_val
             st.session_state.precip_48h = p48_val
             st.session_state.month = datetime.now().month
+            st.success("本渡瀬戸の最新潮汐・気象データを同期しました。")
             st.rerun()
 
         c1, c2, c3 = st.columns(3)
@@ -94,7 +129,6 @@ def show_matching_page(df):
         
         c4, c5, c6, c7 = st.columns(4)
         temp_input = c4.number_input("気温(℃)", -10.0, 45.0, value=st.session_state.temp)
-        # 降水量を48時間降水量に変更
         precip_input = c5.number_input("48h降水量(mm)", 0.0, 300.0, value=st.session_state.precip_48h)
         wind_input = c6.number_input("風速(m)", 0.0, 20.0, value=st.session_state.wind)
         wdir_options = ["北", "北東", "東", "南東", "南", "南西", "西", "北西"]
@@ -106,35 +140,27 @@ def show_matching_page(df):
     
     def calculate_score(row):
         score = 0
-        # 月 (30点)
         try:
+            # 月 (30点)
             if pd.to_datetime(row['date']).month == month: score += 30
-        except: pass
-        # 潮位 ±20cm (20点)
-        try:
+            # 潮位 ±20cm (20点)
             if abs(row['潮位_cm'] - tide_input) <= 20: score += 20
-        except: pass
-        # フェーズ (15点)
-        if str(row.get('潮位フェーズ')) == phase_input: score += 15
-        # 風向 (15点)
-        if str(row.get('風向')) == wdir_input: score += 15
-        # 気温 ±3度 (10点)
-        try:
+            # フェーズ (15点)
+            if str(row.get('潮位フェーズ')) == phase_input: score += 15
+            # 風向 (15点)
+            if str(row.get('風向')) == wdir_input: score += 15
+            # 気温 ±3度 (10点)
             if abs(row['気温'] - temp_input) <= 3: score += 10
-        except: pass
-        # 48h降水量判定 (10点) - エクセル側のカラム名は「降水量」を想定
-        try:
-            # 過去48時間の合計値同士を比較（±5mm以内なら加点）
+            # 48h降水量 ±5mm (10点)
             if abs(row['降水量'] - precip_input) <= 5: score += 10
         except: pass
-        
         return score
 
     if not df.empty:
         df['マッチ度'] = df.apply(calculate_score, axis=1)
         ranking = df.sort_values('マッチ度', ascending=False).drop_duplicates(subset=['場所']).head(5)
 
-        st.subheader("📍 おすすめポイント（48h降水量などを考慮）")
+        st.subheader("📍 おすすめポイント（過去の実績から分析）")
         
         for i, row in ranking.iterrows():
             with st.container():
@@ -142,9 +168,9 @@ def show_matching_page(df):
                 cols[0].metric("マッチ度", f"{row['マッチ度']}%")
                 with cols[1]:
                     st.markdown(f"### {row['場所']}")
-                    st.write(f"📏 **過去実績:** {row['魚種']} {row['全長_cm']}cm")
-                    st.caption(f"🌡️ 気温: {row['気温']}℃ | ☔ 48h降水: {row['降水量']}mm | 💨 風: {row.get('風向')} {row.get('風速')}m")
+                    st.write(f"📏 **過去の釣果:** {row['魚種']} {row['全長_cm']}cm")
+                    st.caption(f"🌡️ {row['気温']}℃ | ☔ 48h降水: {row['降水量']}mm | 💨 {row.get('風向')} {row.get('風速')}m")
                     st.write(f"🎣 **使用ルアー:** {row['ルアー']}")
                 st.divider()
     else:
-        st.warning("データファイルが読み込まれていません。")
+        st.warning("データ(df)が空です。Excelファイルが正しく読み込まれているか確認してください。")
