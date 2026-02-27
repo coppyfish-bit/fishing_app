@@ -50,7 +50,7 @@ def show_ai_page(conn, url, df, md=None):
         </div>
     """, unsafe_allow_html=True)
 
-    if st.button("🔥 記憶を浄化"):
+    if st.button("🔥 記憶を浄化し深淵に葬る"):
         st.session_state.messages = []
         st.rerun()
 
@@ -101,3 +101,4 @@ def show_ai_page(conn, url, df, md=None):
                 st.rerun()
             except Exception as e:
                 st.error(f"魔界通信事故: {e}")
+
