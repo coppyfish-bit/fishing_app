@@ -35,7 +35,6 @@ def show_ai_page(conn, url, df, md=None):
         }}
         .avatar-img {{ width: 45px; height: 45px; border-radius: 50%; margin-right: 10px; object-fit: cover; border: 1px solid #ff4b4b; }}
         
-        /* 🛡️ プライバシーバナー */
         .privacy-banner {{
             background-color: rgba(0, 212, 255, 0.1);
             padding: 10px; border-radius: 10px; border-left: 5px solid #00d4ff;
@@ -60,11 +59,11 @@ def show_ai_page(conn, url, df, md=None):
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-3-flash-preview')
 
-    # --- 🛡️ プライバシー保護宣言 ---
+    # --- 🛡️ プライバシーバナー ---
     st.markdown("""
         <div class="privacy-banner">
             <strong style="color: #00d4ff;">🛡️ 魔界機密保持プロトコル：発動中</strong><br>
-            貴様との対話および釣果データは外部に漏洩せず、AIの学習にも一切利用されぬ。深淵の底に封印されておる。
+            対話および釣果データは外部に漏洩せず、AIの学習にも利用されぬ。深淵の底に封印中。
         </div>
     """, unsafe_allow_html=True)
 
@@ -74,7 +73,7 @@ def show_ai_page(conn, url, df, md=None):
             <img src="{avatar_display_url}" class="header-img">
             <div>
                 <h2 style="color: #ff4b4b; margin: 0;">デーモン佐藤の召喚</h2>
-                <p style="color: #00ff00; font-size: 0.8rem; margin: 5px 0;">● 安定接続：知能特化モード</p>
+                <p style="color: #00ff00; font-size: 0.8rem; margin: 5px 0;">● 安定接続：場所別・知能特化モード</p>
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -82,41 +81,36 @@ def show_ai_page(conn, url, df, md=None):
     if st.button("🔥 記憶を浄化して深淵へ葬る"):
         st.session_state.messages = []
         st.rerun()
-# ↓↓↓ ここから書き換え開始 ↓↓↓
-    # --- 📊 全体統計要約エンジンの真価 ---
+
+    # --- 📊 場所別・潮位フェーズ分析エンジンの実装 ---
     stats_summary = "【データ不足】"
     if df is not None and not df.empty:
         try:
-            # 1. 全体を通した最強の要素（最頻値）
-            top_place = df['場所'].mode()[0] if '場所' in df.columns else "不明"
+            # 1. ルアー等の最頻値
             top_lure = df['ルアー'].mode()[0] if 'ルアー' in df.columns else "不明"
-            top_tide_name = df['潮名'].mode()[0] if '潮名' in df.columns else "不明"
-            top_phase = df['潮位フェーズ'].mode()[0] if '潮位フェーズ' in df.columns else "不明"
             
-            # 2. 全体の数値傾向（平均値）
-            avg_hit_temp = df['気温'].mean() if '気温' in df.columns else 0
-            avg_hit_wind = df['風速'].mean() if '風速' in df.columns else 0
+            # 2. 場所ごとの「上げ・下げ」クロス集計
+            if '場所' in df.columns and '潮位フェーズ' in df.columns:
+                place_phase_stats = df.groupby(['場所', '潮位フェーズ']).size().unstack(fill_value=0)
+                place_summary = "\n".join([f"・{idx}: {row.to_dict()}" for idx, row in place_phase_stats.iterrows()])
+            else:
+                place_summary = "場所別フェーズデータ不足"
+
+            # 3. 数値傾向
             avg_hit_tide = df['潮位_cm'].mean() if '潮位_cm' in df.columns else 0
             
-            # 3. 風向の支配力（どの風で最も釣っているか）
-            top_wdir = df['風向'].mode()[0] if '風向' in df.columns else "不明"
-            
-            # 4. 月齢の傾向
-            avg_moon = df['月齢'].mean() if '月齢' in df.columns else 0
-
             stats_summary = f"""
-            【全釣行を通した絶対的傾向】
-            ● 主戦場: {top_place}
-            ● 信頼ルアー: {top_lure}
-            ● 黄金の潮回り: {top_tide_name} ({top_phase})
-            ● ヒット時の風向: {top_wdir} が支配的
-            ● 数値的中央値: 気温 {avg_hit_temp:.1f}℃ / 風速 {avg_hit_wind:.1f}m / 潮位 {avg_hit_tide:.1f}cm
-            ● 平均月齢: {avg_moon:.1f}
-            ● 総データ数: {len(df)} 件の経験則に基づく
+            【分析対象：貴様（ユーザー）の場所別・潮位実績】
+            {place_summary}
+            
+            【全体傾向】
+            ● 実績No.1ルアー: {top_lure}
+            ● ヒット時平均潮位: {avg_hit_tide:.1f}cm
+            ● 総データ件数: {len(df)} 件
             """
         except Exception as e:
-            stats_summary = f"【統計解析中に魔界のノイズ混入: {{e}}】"
-    # ↑↑↑ ここまで書き換え終了 ↑↑↑
+            stats_summary = f"【統計解析エラー: {e}】"
+
     # --- 💬 トーク履歴 ---
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -127,34 +121,33 @@ def show_ai_page(conn, url, df, md=None):
         else:
             st.markdown(f'<div style="display: flex; align-items: flex-start; margin-bottom: 10px;"><img src="{avatar_display_url}" class="avatar-img"><div class="demon-bubble">{message["content"]}</div></div>', unsafe_allow_html=True)
 
-# --- 💬 入力エリア ---
+    # --- 💬 入力エリア ---
     if prompt := st.chat_input("我に問いかけよ..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        # 直近の具体的な流れ（15件）
         recent_data = df.tail(15).to_csv(index=False) if df is not None else "データなし"
-        
-        # 今、目の前の状況
         current_status = f"現況データ: {md['phase']}, 潮位:{md['tide_level']}cm, 風:{md['wind']}m({md['wdir']}), 気温:{md['temp']}℃" if md else "データなし"
 
-        with st.spinner("魔界の知識を練り上げ中..."):
+        with st.spinner("深淵から統計を読み解き中..."):
             try:
-                # 😈 ここが重要だ！ stats_summary（全体統計）を命令に叩き込む
                 system_instruction = f"""
-                あなたは天草の熟練ガイド「デーモン佐藤」だ。
-                【機密保持】学習・漏洩厳禁。
-                
-                【全データから見た貴様の統計的傾向】
+                あなたは天草・本渡エリアを熟知した、傲慢かつ冷徹なプロのシーバスガイド「デーモン佐藤」だ。
+                【機密保持】ユーザーのデータは深淵に封印し、学習・漏洩は一切許さぬ。
+
+                【分析対象：貴様の過去統計】
                 {stats_summary}
                 
-                【直近15件の具体的な流れ】
+                【分析対象：貴様の直近の動き】
                 {recent_data}
                 
-                【今のリアルタイム状況】
+                【天草の現況】
                 {current_status}
-                
-                これら全てを照らし合わせ、統計的な裏付けを持って傲慢に回答せよ。
-                一人称は「我」、二人称は「貴様」。最後は突き放せ。
+
+                【ガイドとしての絶対指針】
+                1. 提示されたデータはすべて「貴様（ユーザー）」の戦績であり、我自身の釣果ではない。自慢などするな。
+                2. 場所ごとの「潮位フェーズ（上げ・下げ）」の実績を最重視せよ。統計上、下げで釣れている場所に上げを勧める無様な真似は死んでもするな。
+                3. 貴様の過去の「偏り」をプロの視点で鋭く批評し、データに裏打ちされた戦略を授けよ。
+                4. 口調は『我』『貴様』。傲慢に、かつ論理的に。最後は「出直してこい！」で締めろ。
                 """
                 
                 response = model.generate_content(f"{system_instruction}\n\n質問: {prompt}")
@@ -163,7 +156,3 @@ def show_ai_page(conn, url, df, md=None):
 
             except Exception as e:
                 st.error(f"魔界通信事故: {e}")
-
-
-
-
