@@ -110,7 +110,7 @@ def show_ai_page(conn, url, df):
         tactics_btn = st.button("🔮 タクティクス")
         
     with col3:
-        weather_btn = st.button("🌦️ 海況同期")
+        weather_btn = st.button("🌦️ デーモンに海況を捧げる")
 
     # --- 🛡️ リアルタイム天気同期ロジック ---
     if "current_md" not in st.session_state: 
@@ -120,7 +120,7 @@ def show_ai_page(conn, url, df):
         with st.spinner("深淵の空と海を同期中..."):
             st.session_state.current_md = get_realtime_weather()
             if st.session_state.current_md:
-                st.success("海況データ同期完了")
+                st.success("海況データをお伝えしました")
             else:
                 st.error("天候同期失敗")
     
@@ -232,3 +232,4 @@ def show_ai_page(conn, url, df):
                     st.error(f"託宣失敗：{e}")
         else:
             st.warning("海況データが同期されておらぬ。まずは『海況同期』を押せ！")
+
