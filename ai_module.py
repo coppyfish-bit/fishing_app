@@ -106,7 +106,7 @@ def show_ai_page(conn, url, df, md=None):
         st.markdown(content, unsafe_allow_html=True)
 
     # --- 💬 入力エリア ---
-    if prompt := st.chat_input("全記録を背負い、問いかけよ..."):
+    if prompt := st.chat_input("深淵に問いかけよ..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         curr = f"気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 潮:{md['phase']}" if md else "不明"
 
@@ -140,4 +140,5 @@ def show_ai_page(conn, url, df, md=None):
 
             st.session_state.messages.append({"role": "assistant", "content": answer})
             st.rerun()
+
 
