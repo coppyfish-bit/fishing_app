@@ -206,12 +206,7 @@ def show_ai_page(conn, url, df):
     api_key = st.secrets.get("GEMINI_API_KEY")
     genai.configure(api_key=api_key)
     
-    # モデルA: 検索機能付き（通常用）
-    model_A = genai.GenerativeModel(
-        model_name='gemini-3-flash-preview',
-        tools=[{"google_search_retrieval": {}}]
-    )
-    # モデルB: 内部データのみ（緊急用/タクティクス用）
+    # モデルB: 内部データのみ（タクティクス用）
     model_internal = genai.GenerativeModel(model_name='gemini-3-flash-preview')
 
     # --- 💬 トーク履歴表示 ---
@@ -244,18 +239,13 @@ def show_ai_page(conn, url, df):
             """
 
             try:
-                # 👿 第一試行（検索あり）
-                response = model_A.generate_content(f"{system_base}\n質問:{prompt}")
+                # 👿 修正ポイント：検索なしモデルで直接リクエスト
+                response = model_internal.generate_content(f"{system_base}\n質問:{prompt}")
                 answer = response.text
             except Exception as e:
+                # 429エラーが発生した場合は、少し時間を置くように促す
                 if "429" in str(e):
-                    # 👿 第二試行（緊急バックダウン）
-                    try:
-                        emergency_sys = system_base + "\n【緊急：検索不可】我の知能のみで答えろ。"
-                        response = model_internal.generate_content(f"{emergency_sys}\n質問:{prompt}")
-                        answer = "（ククク……外界が騒がしいゆえ、我自身の叡智のみで答えてやる）\n\n" + response.text
-                    except:
-                        answer = "深淵の底が崩落した。時間を置いて問い直せ。"
+                    answer = "（ククク……魔界の結界が狭すぎる。少し時間を置いて問い直せ。）"
                 else:
                     answer = f"事故だ: {e}"
 
@@ -284,6 +274,7 @@ def show_ai_page(conn, url, df):
                     st.error(f"託宣失敗：{e}")
         else:
             st.warning("海況データが同期されておらぬ。まずは『海況同期』を押せ！")
+
 
 
 
