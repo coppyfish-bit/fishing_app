@@ -109,7 +109,7 @@ def show_ai_page(conn, url, df, md=None):
         st.session_state.messages.append({"role": "user", "content": prompt})
         curr = f"気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 潮:{md['phase']}" if md else "不明"
 
-        with st.spinner("デーモン祈祷中"):
+        with st.spinner("デーモン祈祷中・・・"):
             system_base = f"""
             あなたは天草の傲慢なプロガイド「デーモン佐藤」だ。
             口調は『我』『貴様』。論理的かつ傲慢に、最後はユーモアで突き放せ。
@@ -139,4 +139,5 @@ def show_ai_page(conn, url, df, md=None):
 
             st.session_state.messages.append({"role": "assistant", "content": answer})
             st.rerun()
+
 
