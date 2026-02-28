@@ -252,42 +252,43 @@ def show_ai_page(conn, url, df):
             st.session_state.messages.append({"role": "assistant", "content": answer})
             st.rerun()
 
-    # --- 🔮 タクティクス生成ロジック（修正版） ---
-    if tactics_btn:
-        if md:
-            with st.spinner("潮流と風を読み解き中..."):
-                try:
-                    # 👿 ここで長い情報を投げている
-                    tactics_prompt = f"""
-                    あなたは天草のプロガイド「デーモン佐藤」だ。
-                    現在の状況（気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 潮:{md['phase']}）と、
-                    貴様の魔導書（{global_knowledge}）を元に、
-                    今日この瞬間に最も「獲物」に近い組み立て（場所・ルアー・アクション）を、
-                    3つのポイントで傲慢かつ論理的に提示せよ。
-                    潮汐のフェーズを特に重視し、時合を特定せよ。
-                    最後に必ず「これでも釣れぬなら、竿を置いて寝ていろ！」と突き放せ。
-                    """
-                    
-                    response = model_internal.generate_content(tactics_prompt)
-                    st.session_state.messages.append({"role": "assistant", "content": f"【本日の深淵タクティクス】\n\n{response.text}"})
-                    st.rerun()
+            # --- 🔮 タクティクス生成ロジック（修正版） ---
+            if tactics_btn:
+                if md:
+                    with st.spinner("潮流と風を読み解き中..."):
+                        try:
+                            # 👿 ここで長い情報を投げている
+                            tactics_prompt = f"""
+                            あなたは天草のプロガイド「デーモン佐藤」だ。
+                            現在の状況（気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 潮:{md['phase']}）と、
+                            貴様の魔導書（{global_knowledge}）を元に、
+                            今日この瞬間に最も「獲物」に近い組み立て（場所・ルアー・アクション）を、
+                            3つのポイントで傲慢かつ論理的に提示せよ。
+                            潮汐のフェーズを特に重視し、時合を特定せよ。
+                            最後に必ず「これでも釣れぬなら、竿を置いて寝ていろ！」と突き放せ。
+                            """
+                            
+                            response = model_internal.generate_content(tactics_prompt)
+                            st.session_state.messages.append({"role": "assistant", "content": f"【本日の深淵タクティクス】\n\n{response.text}"})
+                            st.rerun()
+        
+                        except Exception as e:
+                            # 👿 修正ポイント：429が出た時の回避ロジック
+                            if "429" in str(e):
+                                # データ量を減らして再試行してみる
+                                st.warning("魔界の霧が濃い！データを縮小して再試行中...")
+                                try:
+                                    short_prompt = f"天草のデーモン佐藤だ。状況は{md['phase']}、風は{md['wind_dir']}。今すぐ釣れる組み立てを短く言え。"
+                                    response = model_internal.generate_content(short_prompt)
+                                    st.session_state.messages.append({"role": "assistant", "content": f"【簡易タクティクス】\n\n{response.text}"})
+                                    st.rerun()
+                                except:
+                                    st.error("魔力が尽きた。少し時間を置いてくれ。")
+                            else:
+                                st.error(f"託宣失敗：{e}")
+                else:
+                    st.warning("海況データが同期されておらぬ。まずは『海況同期』を押せ！")
 
-                except Exception as e:
-                    # 👿 修正ポイント：429が出た時の回避ロジック
-                    if "429" in str(e):
-                        # データ量を減らして再試行してみる
-                        st.warning("魔界の霧が濃い！データを縮小して再試行中...")
-                        try:
-                            short_prompt = f"天草のデーモン佐藤だ。状況は{md['phase']}、風は{md['wind_dir']}。今すぐ釣れる組み立てを短く言え。"
-                            response = model_internal.generate_content(short_prompt)
-                            st.session_state.messages.append({"role": "assistant", "content": f"【簡易タクティクス】\n\n{response.text}"})
-                            st.rerun()
-                        except:
-                            st.error("魔力が尽きた。少し時間を置いてくれ。")
-                    else:
-                        st.error(f"託宣失敗：{e}")
-        else:
-            st.warning("海況データが同期されておらぬ。まずは『海況同期』を押せ！")
 
 
 
