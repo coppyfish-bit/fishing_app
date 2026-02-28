@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 
 # --- 🖼️ 画像をBase64に変換（アイコン用） ---
 def get_image_as_base64(file_path):
-    # ファイルがない場合の予備画像URL
     fallback_url = "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
     
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -28,7 +27,7 @@ def get_image_as_base64(file_path):
 LAT, LON = 32.45, 130.19
 DIRS_16 = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
 
-# 👿 貴様の要望：潮汐も解析するAPI統合ロジック
+# 👿 修正ポイント：キャッシュ機能を追加（10分間有効）
 @st.cache_data(ttl=600)
 def get_realtime_weather_and_tide():
     jst = timezone(timedelta(hours=9))
@@ -62,7 +61,6 @@ def get_realtime_weather_and_tide():
         weather_data = {"temp": 0, "wind": 0, "wind_dir": "不明", "precip": 0}
 
     # 2. 潮汐データ解析 (気象庁データを簡易解析)
-    # ❗❗ ここが重要：インデントを直した！ ❗❗
     tide_phase = "解析不能"
     try:
         # 本渡瀬戸の気象庁データURL (HS.txt)
@@ -150,8 +148,8 @@ def show_ai_page(conn, url, df):
         </div>
     """, unsafe_allow_html=True)
 
-    # --- 👿 操作パネル（横並び） ---
-    col1, col2, col3 = st.columns([1, 1, 1.2])
+    # --- 👿 操作パネル（修正：位置を入れ替え） ---
+    col1, col2, col3 = st.columns([1, 1.2, 1])
     
     with col1:
         if st.button("🔥 記憶を浄化"):
@@ -159,9 +157,12 @@ def show_ai_page(conn, url, df):
             st.rerun()
             
     with col2:
-        weather_btn = st.button("🌦️ 海況を捧げる")
-    with col3:
+        # 位置を中央へ移動
         tactics_btn = st.button("🔮 タクティクス")
+        
+    with col3:
+        # 位置を右端へ移動
+        weather_btn = st.button("🌦️ 海況を捧げる")
 
     # --- 🛡️ リアルタイム天気＆潮汐同期ロジック ---
     if "current_md" not in st.session_state: 
@@ -202,11 +203,18 @@ def show_ai_page(conn, url, df):
         except Exception as e:
             global_knowledge = f"魔導解析エラー: {e}"
 
-    # --- 🔑 モデル設定 ---
+    # --- 🔑 モデル設定（修正） ---
     api_key = st.secrets.get("GEMINI_API_KEY")
     genai.configure(api_key=api_key)
     
-    # モデルB: 内部データのみ（タクティクス用）
+    # 👿 修正ポイント：model_A（検索機能付き）をコメントアウトし、
+    # 内部モデルのみを使用する
+    # model_A = genai.GenerativeModel(
+    #     model_name='gemini-3-flash-preview',
+    #     tools=[{"google_search_retrieval": {}}]
+    # )
+    
+    # 内部モデルのみ（軽量・高速）
     model_internal = genai.GenerativeModel(model_name='gemini-3-flash-preview')
 
     # --- 💬 トーク履歴表示 ---
@@ -218,7 +226,7 @@ def show_ai_page(conn, url, df):
         content += f'<div class="{role_class}">{m["content"]}</div></div>'
         st.markdown(content, unsafe_allow_html=True)
 
-    # --- 💬 入力エリア ---
+    # --- 💬 入力エリア（修正） ---
     if prompt := st.chat_input("深淵へ問いかけよ..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         
@@ -234,7 +242,7 @@ def show_ai_page(conn, url, df):
             【現在の状況】
             {curr}
             【掟】
-            1. 外部検索は魔導書にない情報の補完のみに使い、429エラーを回避せよ。
+            1. 内部データのみで回答せよ。
             2. 潮汐情報を極めて重要視せよ。
             """
 
@@ -252,47 +260,37 @@ def show_ai_page(conn, url, df):
             st.session_state.messages.append({"role": "assistant", "content": answer})
             st.rerun()
 
-            # --- 🔮 タクティクス生成ロジック（修正版） ---
-            if tactics_btn:
-                if md:
-                    with st.spinner("潮流と風を読み解き中..."):
-                        try:
-                            # 👿 ここで長い情報を投げている
-                            tactics_prompt = f"""
-                            あなたは天草のプロガイド「デーモン佐藤」だ。
-                            現在の状況（気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 潮:{md['phase']}）と、
-                            貴様の魔導書（{global_knowledge}）を元に、
-                            今日この瞬間に最も「獲物」に近い組み立て（場所・ルアー・アクション）を、
-                            3つのポイントで傲慢かつ論理的に提示せよ。
-                            潮汐のフェーズを特に重視し、時合を特定せよ。
-                            最後に必ず「これでも釣れぬなら、竿を置いて寝ていろ！」と突き放せ。
-                            """
-                            
-                            response = model_internal.generate_content(tactics_prompt)
-                            st.session_state.messages.append({"role": "assistant", "content": f"【本日の深淵タクティクス】\n\n{response.text}"})
-                            st.rerun()
-        
-                        except Exception as e:
-                            # 👿 修正ポイント：429が出た時の回避ロジック
-                            if "429" in str(e):
-                                # データ量を減らして再試行してみる
-                                st.warning("魔界の霧が濃い！データを縮小して再試行中...")
-                                try:
-                                    short_prompt = f"天草のデーモン佐藤だ。状況は{md['phase']}、風は{md['wind_dir']}。今すぐ釣れる組み立てを短く言え。"
-                                    response = model_internal.generate_content(short_prompt)
-                                    st.session_state.messages.append({"role": "assistant", "content": f"【簡易タクティクス】\n\n{response.text}"})
-                                    st.rerun()
-                                except:
-                                    st.error("魔力が尽きた。少し時間を置いてくれ。")
-                            else:
-                                st.error(f"託宣失敗：{e}")
-                else:
-                    st.warning("海況データが同期されておらぬ。まずは『海況同期』を押せ！")
-
-
-
-
-
-
-
-
+    # --- 🔮 タクティクス生成ロジック（修正版） ---
+    if tactics_btn:
+        if md:
+            with st.spinner("潮流と風を読み解き中..."):
+                try:
+                    tactics_prompt = f"""
+                    あなたは天草のプロガイド「デーモン佐藤」だ。
+                    現在の状況（気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 潮:{md['phase']}）と、
+                    貴様の魔導書（{global_knowledge}）を元に、
+                    今日この瞬間に最も「獲物」に近い組み立て（場所・ルアー・アクション）を、
+                    3つのポイントで傲慢かつ論理的に提示せよ。
+                    潮汐のフェーズを特に重視し、時合を特定せよ。
+                    最後に必ず「これでも釣れぬなら、竿を置いて寝ていろ！」と突き放せ。
+                    """
+                    
+                    response = model_internal.generate_content(tactics_prompt)
+                    st.session_state.messages.append({"role": "assistant", "content": f"【本日の深淵タクティクス】\n\n{response.text}"})
+                    st.rerun()
+                except Exception as e:
+                    # 👿 修正ポイント：429が出た時の回避ロジック
+                    if "429" in str(e):
+                        # データ量を減らして再試行してみる
+                        st.warning("魔界の霧が濃い！データを縮小して再試行中...")
+                        try:
+                            short_prompt = f"天草のデーモン佐藤だ。状況は{md['phase']}、風は{md['wind_dir']}。今すぐ釣れる組み立てを短く言え。"
+                            response = model_internal.generate_content(short_prompt)
+                            st.session_state.messages.append({"role": "assistant", "content": f"【簡易タクティクス】\n\n{response.text}"})
+                            st.rerun()
+                        except:
+                            st.error("魔力が尽きた。少し時間を置いてくれ。")
+                    else:
+                        st.error(f"託宣失敗：{e}")
+        else:
+            st.warning("海況データが同期されておらぬ。まずは『海況同期』を押せ！")
