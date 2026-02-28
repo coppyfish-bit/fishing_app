@@ -29,11 +29,10 @@ LAT, LON = 32.45, 130.19
 DIRS_16 = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
 
 # 👿 貴様の要望：潮汐も解析するAPI統合ロジック
+@st.cache_data(ttl=600)
 def get_realtime_weather_and_tide():
-    @st.cache_data(ttl=600)
     jst = timezone(timedelta(hours=9))
     now = datetime.now(jst).replace(tzinfo=None)
-    # 👿 修正ポイント：キャッシュ機能を追加（10分間有効）
     weather_data = None
     try:
         url = "https://archive-api.open-meteo.com/v1/archive"
@@ -285,6 +284,7 @@ def show_ai_page(conn, url, df):
                     st.error(f"託宣失敗：{e}")
         else:
             st.warning("海況データが同期されておらぬ。まずは『海況同期』を押せ！")
+
 
 
 
