@@ -1,164 +1,176 @@
 import streamlit as st
 import pandas as pd
-import google.generativeai as genai
-import os
-import base64
-import time
+from datetime import datetime, timedelta
 
-# --- 🖼️ 画像をBase64に変換（アイコン用） ---
-def get_image_as_base64(file_path):
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    absolute_path = os.path.join(current_dir, file_path)
-    if not os.path.exists(absolute_path):
-        return "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
-    try:
-        with open(absolute_path, "rb") as f:
-            data = f.read()
-        return f"data:image/png;base64,{base64.b64encode(data).decode()}"
-    except:
-        return "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
-
-def show_ai_page(conn, url, df, md=None):
-    # --- 🖼️ アイコン設定 ---
-    avatar_display_url = get_image_as_base64("demon_sato.png")
-
-    # --- 🎨 CSS（UI装飾） ---
-    st.markdown(f"""
-        <style>
-        .stApp {{ background-color: #0e1117; }}
-        .user-bubble {{ align-self: flex-end; background-color: #0084ff; color: white; padding: 10px 15px; border-radius: 18px 18px 2px 18px; max-width: 75%; margin-bottom: 10px; }}
-        .demon-bubble {{ align-self: flex-start; background-color: #262730; color: #e0e0e0; padding: 10px 15px; border-radius: 18px 18px 18px 2px; max-width: 80%; border-left: 4px solid #ff4b4b; margin-bottom: 10px; }}
-        .avatar-img {{ width: 45px; height: 45px; border-radius: 50%; margin-right: 10px; object-fit: cover; border: 1px solid #ff4b4b; }}
-        .privacy-banner {{ background-color: rgba(0, 212, 255, 0.1); padding: 12px; border-radius: 10px; border-left: 5px solid #00d4ff; margin-bottom: 15px; font-size: 0.85rem; color: #cccccc; }}
-        .header-container {{ display: flex; align-items: center; background: rgba(255, 75, 75, 0.1); padding: 15px; border-radius: 15px; margin-bottom: 15px; border: 1px solid #ff4b4b; }}
-        .header-img {{ width: 60px; height: 60px; border-radius: 10px; margin-right: 20px; object-fit: cover; border: 2px solid #ff4b4b; }}
-        div.stButton > button:first-child {{ background-color: #ff4b4b; color: white; border-radius: 20px; width: 100%; border: none; font-weight: bold; height: 2.5em; }}
-        </style>
-    """, unsafe_allow_html=True)
-
-    # --- 🛡️ プライバシーバナー ---
-    st.markdown("""
-        <div class="privacy-banner">
-            <strong style="color: #00d4ff;">🛡️ 魔界機密保持プロトコル：適用済</strong><br>
-            外部への漏洩・AI学習への利用は完全に遮断されている。
-        </div>
-    """, unsafe_allow_html=True)
-
-    # --- 😈 ヘッダー ---
-    st.markdown(f"""
-        <div class="header-container">
-            <img src="{avatar_display_url}" class="header-img">
-            <div>
-                <h2 style="color: #ff4b4b; margin: 0; font-size: 1.2rem;">デーモン佐藤</h2>
-                <p style="color: #00ff00; font-size: 0.7rem; margin: 0;">● 魔導・戦術統合モード：起動</p>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # --- 👿 操作パネル（横並び） ---
-    col1, col2 = st.columns(2)
+def show_edit_page(conn, url):
+    st.subheader("🔄 登録情報の修正・削除")
+    # 最新データの読み込み
+    df_raw = conn.read(spreadsheet=url, ttl="10s")
+    if df_raw.empty:
+        st.info("データがありません。")
+        return
     
-    with col1:
-        if st.button("🔥 記憶を浄化し深淵へ"):
-            st.session_state.messages = []
-            st.rerun()
-            
-    with col2:
-        tactics_btn = st.button("🔮 今日のタクティクスを抽出")
+    # 全体を最新順に並び替え
+    df = df_raw.iloc[::-1].copy()
 
-    # --- 📊 魔導要約エンジン ---
-    global_knowledge = "【全データ抽出不可】"
-    if df is not None and not df.empty:
-        try:
-            # 必須データ確認
-            required_cols = ['全長_cm', '場所', 'ルアー', '風向', '気温', '潮位フェーズ']
-            if all(col in df.columns for col in required_cols):
-                max_row = df.loc[df['全長_cm'].idxmax()]
-                
-                global_knowledge = f"""
-                【聖域のデータ】
-                ・最大記録: {max_row['全長_cm']}cm (場所:{max_row['場所']}, ルアー:{max_row['ルアー']}, 風:{max_row['風向']})
-                ・場所別鉄板: {df.groupby('場所')['ルアー'].agg(lambda x: x.mode().head(1).tolist()).to_dict()}
-                ・平均気温: {df['気温'].mean():.1f}℃
-                ・総釣果: {len(df)}件
-                """
-        except Exception as e:
-            global_knowledge = f"魔導解析エラー: {e}"
+    # --- 1. 直近5件の表示（展開状態） ---
+    st.markdown("### 📸 直近5件の記録")
+    df_recent = df.head(5)
+    for idx in df_recent.index:
+        label = f"✨ 最新: {df.at[idx, 'datetime']} | {df.at[idx, '場所']} | {df.at[idx, '魚種']}"
+        # expanded=True で常に展開
+        with st.expander(label, expanded=True):
+            render_edit_form(df, idx, conn, url)
 
-    # --- 🔑 モデル設定 ---
-    api_key = st.secrets.get("GEMINI_API_KEY")
-    genai.configure(api_key=api_key)
+    st.markdown("---")
+
+    # --- 2. 過去データの選択編集（リストから選択） ---
+    st.markdown("### 🔍 過去のデータをリストから選んで編集")
     
-    # モデルA: 検索機能付き（通常用）
-    model_A = genai.GenerativeModel(
-        model_name='gemini-3-flash-preview',
-        tools=[{"google_search_retrieval": {}}]
+    # 選択肢用のラベル作成
+    df['select_label'] = df['datetime'].astype(str) + " | " + df['場所'].astype(str) + " | " + df['魚種'].astype(str)
+    
+    selected_label = st.selectbox(
+        "編集したいデータを選択してください",
+        options=df['select_label'].tolist(),
+        index=None,
+        placeholder="ここをクリックして検索・選択..."
     )
-    # モデルB: 内部データのみ（緊急用/タクティクス用）
-    model_B = genai.GenerativeModel(model_name='gemini-3-flash-preview')
 
-    # --- 💬 トーク履歴表示 ---
-    if "messages" not in st.session_state: st.session_state.messages = []
-    for m in st.session_state.messages:
-        role_class = "user-bubble" if m["role"] == "user" else "demon-bubble"
-        content = f'<div style="display: flex; {"justify-content: flex-end" if m["role"] == "user" else ""}; margin-bottom: 10px;">'
-        if m["role"] != "user": content += f'<img src="{avatar_display_url}" class="avatar-img">'
-        content += f'<div class="{role_class}">{m["content"]}</div></div>'
-        st.markdown(content, unsafe_allow_html=True)
+    if selected_label:
+        selected_idx = df[df['select_label'] == selected_label].index[0]
+        st.info(f"選択中: {selected_label}")
+        render_edit_form(df, selected_idx, conn, url)
 
-    # --- 💬 入力エリア ---
-    if prompt := st.chat_input("深淵へ問いかけよ..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        curr = f"気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 降水:{md['precip']}mm, 潮:{md['phase']}({md['tide_level']}cm)" if md else "不明"
+# --- フォーム表示と再計算の共通関数 ---
+def render_edit_form(df, idx, conn, url):
+    # 写真の表示（あれば）
+    if 'filename' in df.columns and pd.notna(df.at[idx, 'filename']):
+        st.image(df.at[idx, 'filename'], width=400)
+    
+    temp_data_key = f"temp_recalc_{idx}"
+    form_version_key = f"form_ver_{idx}"
+    
+    if form_version_key not in st.session_state:
+        st.session_state[form_version_key] = 0
 
-        with st.spinner("深淵の叡智を絞り出し中..."):
-            system_base = f"""
-            あなたは天草の傲慢なプロガイド「デーモン佐藤」だ。
-            口調は『我』『貴様』。論理的かつ傲慢に、最後はユーモアで突き放せ。
-            【魔導書：貴様の全歴史】
-            {global_knowledge}
-            【掟】
-            1. 外部検索は魔導書にない情報の補完のみに使い、429エラーを回避せよ。
-            2. 貴様のデータそのものは検索クエリに含めるな。
-            """
+    # 🔄 再取得ボタン
+    if st.button(f"🔄 気象・潮汐データを再取得する", key=f"btn_{idx}", use_container_width=True):
+        try:
+            with st.spinner("最新データを計算中..."):
+                import app
+                raw_val = str(df.at[idx, 'datetime']).replace("-", "/").strip()
+                clean_dt_str = raw_val[:16]
+                if clean_dt_str.endswith(":"):
+                    clean_dt_str = clean_dt_str[:-1]
+                
+                try:
+                    dt_obj = datetime.strptime(clean_dt_str, '%Y/%m/%d %H:%M')
+                except:
+                    dt_obj = pd.to_datetime(clean_dt_str)
+                
+                lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
+                temp, w_s, w_d, rain = app.get_weather_data_openmeteo(lat, lon, dt_obj)
+                station = app.find_nearest_tide_station(lat, lon)
+                
+                all_events = []
+                tide_cm = 0
+                for delta in [-1, 0, 1]:
+                    d_data = app.get_tide_details(station['code'], dt_obj + timedelta(days=delta))
+                    if d_data:
+                        if 'events' in d_data: all_events.extend(d_data['events'])
+                        if delta == 0: tide_cm = d_data['cm']
 
-            try:
-                # 👿 第一試行（検索あり）
-                response = model_A.generate_content(f"{system_base}\n\n状況:{curr}\n質問:{prompt}")
-                answer = response.text
-            except Exception as e:
-                if "429" in str(e):
-                    # 👿 第二試行（緊急バックダウン）
-                    try:
-                        emergency_sys = system_base + "\n【緊急：検索不可】我の知能のみで答えろ。"
-                        response = model_B.generate_content(f"{emergency_sys}\n\n状況:{curr}\n質問:{prompt}")
-                        answer = "（ククク……外界が騒がしいゆえ、我自身の叡智のみで答えてやる）\n\n" + response.text
-                    except:
-                        answer = "深淵の底が崩落した。時間を置いて問い直せ。"
-                else:
-                    answer = f"事故だ: {e}"
+                all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
+                
+                tide_phase = "不明"
+                search_dt = dt_obj + timedelta(minutes=5)
+                prev_ev = next((e for e in reversed(all_events) if e['time'] <= search_dt), None)
+                next_ev = next((e for e in all_events if e['time'] > search_dt), None)
+                
+                if prev_ev and next_ev:
+                    duration = (next_ev['time'] - prev_ev['time']).total_seconds()
+                    elapsed = (dt_obj - prev_ev['time']).total_seconds()
+                    if duration > 0:
+                        p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
+                        step = max(1, min(9, int((elapsed / duration) * 10)))
+                        tide_phase = f"{p_type}{step}分"
 
-            st.session_state.messages.append({"role": "assistant", "content": answer})
+                st.session_state[temp_data_key] = {
+                    "temp": temp, "wind_s": w_s, "wind_d": w_d, "rain": rain,
+                    "tide_cm": tide_cm,
+                    "tide_name": app.get_tide_name(app.get_moon_age(dt_obj)),
+                    "phase": tide_phase
+                }
+                st.session_state[form_version_key] += 1
+                st.rerun() 
+        except Exception as e:
+            st.error(f"再取得エラー: {e}")
+
+    # 表示値の決定（再取得データがあれば優先）
+    has_temp_data = temp_data_key in st.session_state and st.session_state[temp_data_key] is not None
+    t_data = st.session_state.get(temp_data_key, {})
+    
+    val_temp = float(t_data["temp"]) if has_temp_data else float(df.at[idx, '気温'])
+    val_wind_s = float(t_data["wind_s"]) if has_temp_data else float(df.at[idx, '風速'])
+    val_wind_d = t_data["wind_d"] if has_temp_data else (str(df.at[idx, '風向']) if '風向' in df.columns else "不明")
+    val_rain = float(t_data["rain"]) if has_temp_data else (float(df.at[idx, '降水量']) if '降水量' in df.columns else 0.0)
+    val_tide_cm = int(t_data["tide_cm"]) if has_temp_data else int(df.at[idx, '潮位_cm'])
+    val_tide_name = t_data["tide_name"] if has_temp_data else (str(df.at[idx, '潮名']) if '潮名' in df.columns else "不明")
+    val_phase = t_data["phase"] if has_temp_data else (str(df.at[idx, '潮位フェーズ']) if '潮位フェーズ' in df.columns else "不明")
+
+    # 修正フォーム
+    ver = st.session_state[form_version_key]
+    with st.form(key=f"form_{idx}_v{ver}"):
+        st.write("📝 **データの修正**")
+        col_f, col_l, col_p = st.columns([2, 1, 2])
+        new_fish = col_f.text_input("魚種", value=df.at[idx, '魚種'])
+        new_len = col_l.number_input("全長(cm)", value=float(df.at[idx, '全長_cm']), step=0.1)
+        new_place = col_p.text_input("場所", value=df.at[idx, '場所'])
+        
+        c1, c2, c3 = st.columns(3)
+        new_temp = c1.number_input("気温(℃)", value=val_temp)
+        new_wind_s = c2.number_input("風速(m)", value=val_wind_s)
+        new_wind_d = c3.text_input("風向", value=val_wind_d)
+        
+        c4, c5, c6 = st.columns(3)
+        new_rain = c4.number_input("降水(48h)", value=val_rain)
+        new_tide_cm = c5.number_input("潮位(cm)", value=val_tide_cm)
+        new_tide_name = c6.text_input("潮名", value=val_tide_name)
+        
+        new_phase = st.text_input("潮位フェーズ", value=val_phase)
+        new_memo = st.text_area("備考", value=df.at[idx, '備考'] if pd.notna(df.at[idx, '備考']) else "")
+
+        st.markdown("---")
+        confirm_delete = st.checkbox("このデータを完全に削除する", key=f"del_check_{idx}")
+
+        c_save, c_del = st.columns(2)
+        
+        if c_save.form_submit_button("✅ 更新内容を保存する", use_container_width=True):
+            df_to_save = conn.read(spreadsheet=url, ttl="0s")
+            df_to_save.at[idx, '魚種'] = new_fish
+            df_to_save.at[idx, '全長_cm'] = new_len
+            df_to_save.at[idx, '場所'] = new_place
+            df_to_save.at[idx, '気温'] = new_temp
+            df_to_save.at[idx, '風速'] = new_wind_s
+            if '風向' in df_to_save.columns: df_to_save.at[idx, '風向'] = new_wind_d
+            if '降水量' in df_to_save.columns: df_to_save.at[idx, '降水量'] = new_rain
+            df_to_save.at[idx, '潮位_cm'] = new_tide_cm
+            if '潮名' in df_to_save.columns: df_to_save.at[idx, '潮名'] = new_tide_name
+            if '潮位フェーズ' in df_to_save.columns: df_to_save.at[idx, '潮位フェーズ'] = new_phase
+            df_to_save.at[idx, '備考'] = new_memo
+            
+            conn.update(spreadsheet=url, data=df_to_save)
+            st.session_state[temp_data_key] = None
+            st.cache_data.clear()
+            st.success("修正を保存しました！")
             st.rerun()
 
-    # --- 🔮 タクティクス生成ロジック ---
-    if tactics_btn:
-        if md:
-            curr = f"気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 降水:{md['precip']}mm, 潮:{md['phase']}({md['tide_level']}cm)"
-            with st.spinner("潮流と風を読み解き中..."):
-                try:
-                    tactics_prompt = f"""
-                    あなたはプロガイド「デーモン佐藤」だ。
-                    現在の状況（{curr}）と、魔導書（{global_knowledge}）を元に、
-                    今日この瞬間に最も「獲物」に近い組み立て（場所・ルアー・アクション）を、
-                    3つのポイントで傲慢かつ論理的に提示せよ。
-                    最後に必ず「これでも釣れぬなら、竿を置いて寝ていろ！」と突き放せ。
-                    """
-                    # タクティクスは安定のmodel_B
-                    response = model_B.generate_content(tactics_prompt)
-                    st.session_state.messages.append({"role": "assistant", "content": f"【本日の深淵タクティクス】\n\n{response.text}"})
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"託宣失敗：{e}")
-        else:
-            st.warning("現在の気象データ（md）が取得できておらぬ。準備してから来い！")
+        if c_del.form_submit_button("🗑️ 削除実行", type="primary", use_container_width=True):
+            if confirm_delete:
+                df_to_save = conn.read(spreadsheet=url, ttl="0s")
+                df_to_save = df_to_save.drop(idx)
+                conn.update(spreadsheet=url, data=df_to_save)
+                st.session_state[temp_data_key] = None
+                st.cache_data.clear()
+                st.rerun()
