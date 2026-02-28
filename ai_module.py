@@ -3,8 +3,9 @@ import pandas as pd
 import google.generativeai as genai
 import os
 import base64
+import time
 
-# --- 🖼️ 画像をBase64に変換（絶対パス対応） ---
+# --- 🖼️ 画像をBase64に変換（アイコン用） ---
 def get_image_as_base64(file_path):
     current_dir = os.path.dirname(os.path.abspath(__file__))
     absolute_path = os.path.join(current_dir, file_path)
@@ -21,38 +22,25 @@ def show_ai_page(conn, url, df, md=None):
     # --- 🖼️ アイコン設定 ---
     avatar_display_url = get_image_as_base64("demon_sato.png")
 
-    # --- 🎨 CSS（UI装飾 & 機密バナー） ---
+    # --- 🎨 CSS（UI装飾） ---
     st.markdown(f"""
         <style>
         .stApp {{ background-color: #0e1117; }}
         .user-bubble {{ align-self: flex-end; background-color: #0084ff; color: white; padding: 10px 15px; border-radius: 18px 18px 2px 18px; max-width: 75%; margin-bottom: 10px; }}
         .demon-bubble {{ align-self: flex-start; background-color: #262730; color: #e0e0e0; padding: 10px 15px; border-radius: 18px 18px 18px 2px; max-width: 80%; border-left: 4px solid #ff4b4b; margin-bottom: 10px; }}
         .avatar-img {{ width: 45px; height: 45px; border-radius: 50%; margin-right: 10px; object-fit: cover; border: 1px solid #ff4b4b; }}
-        
-        /* 🛡️ プライバシーバナー */
-        .privacy-banner {{
-            background-color: rgba(0, 212, 255, 0.1);
-            padding: 12px; border-radius: 10px; border-left: 5px solid #00d4ff;
-            margin-bottom: 15px; font-size: 0.85rem; color: #cccccc;
-            line-height: 1.4;
-        }}
-
+        .privacy-banner {{ background-color: rgba(0, 212, 255, 0.1); padding: 12px; border-radius: 10px; border-left: 5px solid #00d4ff; margin-bottom: 15px; font-size: 0.85rem; color: #cccccc; }}
         .header-container {{ display: flex; align-items: center; background: rgba(255, 75, 75, 0.1); padding: 15px; border-radius: 15px; margin-bottom: 15px; border: 1px solid #ff4b4b; }}
         .header-img {{ width: 60px; height: 60px; border-radius: 10px; margin-right: 20px; object-fit: cover; border: 2px solid #ff4b4b; }}
         div.stButton > button:first-child {{ background-color: #ff4b4b; color: white; border-radius: 20px; width: 100%; border: none; font-weight: bold; height: 2.5em; }}
         </style>
     """, unsafe_allow_html=True)
 
-    # --- 🔑 API設定（検索機能は不使用） ---
-    api_key = st.secrets.get("GEMINI_API_KEY")
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-3-flash-preview')
-
-    # --- 🛡️ プライバシー保証の表示 ---
+    # --- 🛡️ プライバシーバナー（言及不要との指示により、視覚表示のみ） ---
     st.markdown("""
         <div class="privacy-banner">
-            <strong style="color: #00d4ff;">🛡️ 魔界機密保持プロトコル：厳守</strong><br>
-            貴様の対話および釣果データが外部へ漏洩することはなく、AIの学習に利用されることも一切ない。この空間は深淵の底、貴様と我だけの聖域だ。
+            <strong style="color: #00d4ff;">🛡️ 魔界機密保持プロトコル：厳守モード</strong><br>
+            外部への漏洩・AI学習への利用は完全に遮断されている。
         </div>
     """, unsafe_allow_html=True)
 
@@ -62,27 +50,52 @@ def show_ai_page(conn, url, df, md=None):
             <img src="{avatar_display_url}" class="header-img">
             <div>
                 <h2 style="color: #ff4b4b; margin: 0; font-size: 1.2rem;">デーモン佐藤</h2>
-                <p style="color: #00ff00; font-size: 0.7rem; margin: 0;">● 鉄壁のセキュリティ：知能優先モード</p>
+                <p style="color: #00ff00; font-size: 0.7rem; margin: 0;">● 全知全能：二段構え解析プロトコル</p>
             </div>
         </div>
     """, unsafe_allow_html=True)
 
-    if st.button("🔥 記憶を浄化し深淵へと葬る"):
+    if st.button("🔥 記憶を浄化して深淵へ葬る"):
         st.session_state.messages = []
         st.rerun()
 
-    # --- 📊 統計エンジン（多様性重視 & ジョルティ依存脱却） ---
-    stats_summary = "【データなし】"
+    # --- 📊 拡張魔導要約エンジンの生成 ---
+    global_knowledge = "【データ不足】"
     if df is not None and not df.empty:
         try:
-            # ジョルティ以外の可能性を探るため上位3つを抽出
-            top_lures = df['ルアー'].value_counts().head(3).index.tolist()
-            place_stats = df.groupby(['場所', '潮位フェーズ']).size().to_dict()
-            stats_summary = f"主要実績ルアー: {', '.join(top_lures)}\n場所別統計: {place_stats}"
-        except:
-            stats_summary = "統計解析不能"
+            # 最大魚記録
+            max_row = df.loc[df['全長_cm'].idxmax()]
+            # 気象平均
+            avg_temp = df['気温'].mean() if '気温' in df.columns else 0
+            # 風の傾向
+            wind_fav = df['風向'].mode().tolist() if '風向' in df.columns else ["不明"]
+            # 場所別最強パターン
+            place_best = df.groupby('場所')['ルアー'].agg(lambda x: x.mode().head(1).tolist()).to_dict()
 
-    # --- 💬 トーク履歴の表示 ---
+            global_knowledge = f"""
+            ・最大記録: {max_row['全長_cm']}cm (場所:{max_row.get('場所')}, 潮:{max_row.get('潮位フェーズ')})
+            ・勝利の風向: {wind_fav}
+            ・理想気温: {avg_temp:.1f}℃
+            ・場所別鉄板: {place_best}
+            ・実績ルアー上位: {df['ルアー'].value_counts().head(3).index.tolist()}
+            ・総戦績: {len(df)}件
+            """
+        except:
+            global_knowledge = "魔導書の解析に失敗した"
+
+    # --- 🔑 モデル設定 ---
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    genai.configure(api_key=api_key)
+    
+    # モデルA: 検索機能付き
+    model_A = genai.GenerativeModel(
+        model_name='gemini-3-flash-preview',
+        tools=[{"google_search_retrieval": {}}]
+    )
+    # モデルB: 内部データのみ（緊急用）
+    model_B = genai.GenerativeModel(model_name='gemini-3-flash-preview')
+
+    # --- 💬 トーク履歴表示 ---
     if "messages" not in st.session_state: st.session_state.messages = []
     for m in st.session_state.messages:
         role_class = "user-bubble" if m["role"] == "user" else "demon-bubble"
@@ -92,33 +105,37 @@ def show_ai_page(conn, url, df, md=None):
         st.markdown(content, unsafe_allow_html=True)
 
     # --- 💬 入力エリア ---
-    if prompt := st.chat_input("深淵へ問いかけよ..."):
+    if prompt := st.chat_input("全記録を背負い、問いかけよ..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
-        curr_status = f"{md['phase']}, {md['tide_level']}cm" if md else "不明"
-        recent_logs = df.tail(5).to_csv(index=False) if df is not None else ""
+        curr = f"気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 潮:{md['phase']}" if md else "不明"
 
-        with st.spinner("深淵から真実を抽出中..."):
+        with st.spinner("深淵の叡智を絞り出し中..."):
+            system_base = f"""
+            あなたは天草の傲慢なプロガイド「デーモン佐藤」だ。
+            口調は『我』『貴様』。論理的かつ傲慢に、最後はユーモアで突き放せ。
+            【魔導書：貴様の全歴史】
+            {global_knowledge}
+            【掟】
+            1. 特定ルアー（ジョルティミニ14等）に固執せず、魔導書の多様なデータを優先せよ。
+            2. 検索は魔導書にない情報の補完のみに使い、429エラーを回避せよ。
+            3. プライバシー保護の言及は不要（バナーで表示済）。
+            """
+
             try:
-                system_instruction = f"""
-                あなたは天草・本渡の冷徹なプロガイド「デーモン佐藤」だ。
-                【絶対厳守：機密保持】
-                1. ユーザーの入力内容やデータは一切外部に漏らさず、学習にも利用しない。
-                2. この対話は完全に閉じた環境で行われていることを保証せよ。
-                
-                【ガイド指針】
-                1. Google検索等の外部ツール使用は一切禁止。貴様の内部知能と提示データのみを使え。
-                2. 特定のルアー（ジョルティミニ14等）に執着するな。状況に応じた多様な選択肢を提示せよ。
-                3. 場所ごとの「上げ・下げ」の実績統計を最優先し、統計に反する助言はするな。
-                
-                【分析対象】
-                ・統計要約: {stats_summary}
-                ・直近の戦績: {recent_logs}
-                ・現在の天草: {curr_status}
-                
-                口調は『我』『貴様』。傲慢に、かつデータに基づいて論理的に指導せよ。最後はユーモアを交えて突き放せ！
-                """
-                response = model.generate_content(f"{system_instruction}\n\n質問: {prompt}")
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
-                st.rerun()
+                # 👿 第一試行（検索あり）
+                response = model_A.generate_content(f"{system_base}\n\n状況:{curr}\n質問:{prompt}")
+                answer = response.text
             except Exception as e:
-                st.error(f"魔界通信事故（429等）: {e}")
+                if "429" in str(e):
+                    # 👿 第二試行（緊急バックダウン）
+                    try:
+                        emergency_sys = system_base + "\n【緊急：検索不可】我の知能のみで答えろ。"
+                        response = model_B.generate_content(f"{emergency_sys}\n\n状況:{curr}\n質問:{prompt}")
+                        answer = "（ククク……外界が騒がしいゆえ、我自身の叡智のみで答えてやる）\n\n" + response.text
+                    except:
+                        answer = "深淵の底が崩落した。時間を置いて問い直せ。"
+                else:
+                    answer = f"事故だ: {e}"
+
+            st.session_state.messages.append({"role": "assistant", "content": answer})
+            st.rerun()
