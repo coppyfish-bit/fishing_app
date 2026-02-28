@@ -160,7 +160,7 @@ def show_ai_page(conn, url, df):
             st.rerun()
             
     with col2:
-        weather_btn = st.button("🌦️ デーモンに海況を捧げる")
+        weather_btn = st.button("🌦️ 海況を捧げる")
     with col3:
         tactics_btn = st.button("🔮 タクティクス")
 
@@ -285,4 +285,5 @@ def show_ai_page(conn, url, df):
                     st.error(f"託宣失敗：{e}")
         else:
             st.warning("海況データが同期されておらぬ。まずは『海況同期』を押せ！")
+
 
