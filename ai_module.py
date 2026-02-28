@@ -63,7 +63,8 @@ def get_realtime_weather_and_tide():
         weather_data = {"temp": 0, "wind": 0, "wind_dir": "不明", "precip": 0}
 
     # 2. 潮汐データ解析 (気象庁データを簡易解析)
-tide_phase = "解析不能"
+    # ❗❗ ここが重要：インデントを直した！ ❗❗
+    tide_phase = "解析不能"
     try:
         # 本渡瀬戸の気象庁データURL (HS.txt)
         url = f"https://www.data.jma.go.jp/gmd/kaiyou/data/db/tide/suisan/txt/{now.year}/HS.txt"
@@ -75,7 +76,7 @@ tide_phase = "解析不能"
         for d_off in [-1, 0, 1]:
             t_d = now + timedelta(days=d_off)
             d_str = t_d.strftime('%Y%m%d')
-            # 本渡(HS)のデータ行を探す (ロジックは貴様のコードをベースに調整)
+            # 本渡(HS)のデータ行を探す
             d_line = next((l for l in lines if len(l) > 100 and l[76:78] == f"{t_d.day:02}" and l[78:80].strip() == "HS"), None)
             
             if d_line:
@@ -108,8 +109,8 @@ tide_phase = "解析不能"
             elif ratio < 0.80: tide_phase = f"{direction}7分"
             else: tide_phase = f"{direction}9分"
         # ----------------------------------
-    except:
-        tide_phase = "解析エラー"
+    except Exception as e:
+        tide_phase = f"解析エラー: {e}"
 
     return {**weather_data, "phase": tide_phase}
 
@@ -285,4 +286,3 @@ def show_ai_page(conn, url, df):
                     st.error(f"託宣失敗：{e}")
         else:
             st.warning("海況データが同期されておらぬ。まずは『海況同期』を押せ！")
-
