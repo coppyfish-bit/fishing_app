@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 def show_edit_page(conn, url):
     st.subheader("🔄 登録情報の修正・削除")
     # 最新データの読み込み
-    df_raw = conn.read(spreadsheet=url, ttl="0s")
+    df_raw = conn.read(spreadsheet=url, ttl="10s")
     if df_raw.empty:
         st.info("データがありません。")
         return
@@ -174,3 +174,4 @@ def render_edit_form(df, idx, conn, url):
                 st.session_state[temp_data_key] = None
                 st.cache_data.clear()
                 st.rerun()
+
