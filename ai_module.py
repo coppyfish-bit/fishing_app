@@ -285,3 +285,4 @@ def show_ai_page(conn, url, df):
                     st.error(f"託宣失敗：{e}")
         else:
             st.warning("海況データが同期されておらぬ。まずは『海況同期』を押せ！")
+
