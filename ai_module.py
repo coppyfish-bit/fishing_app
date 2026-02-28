@@ -28,10 +28,13 @@ def get_image_as_base64(file_path):
 LAT, LON = 32.45, 130.19
 DIRS_16 = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
 
-# 👿 貴様のコードから流用：APIで気象データをリアルタイム取得
-def get_realtime_weather():
+# 👿 貴様の要望：潮汐も解析するAPI統合ロジック
+def get_realtime_weather_and_tide():
     jst = timezone(timedelta(hours=9))
     now = datetime.now(jst).replace(tzinfo=None)
+    
+    # 1. 天候データ取得
+    weather_data = None
     try:
         url = "https://archive-api.open-meteo.com/v1/archive"
         params = {
@@ -52,14 +55,63 @@ def get_realtime_weather():
         def get_wind_dir(deg):
             return DIRS_16[int((deg + 11.25) / 22.5) % 16]
         
-        # 潮汐データも解析したいところだが、まずは天気のみ同期
-        return {
+        weather_data = {
             "temp": temp, "wind": wind_speed, 
-            "wind_dir": get_wind_dir(wind_deg), "precip": precip_48h,
-            "phase": "（要API解析）"
+            "wind_dir": get_wind_dir(wind_deg), "precip": precip_48h
         }
     except:
-        return None
+        weather_data = {"temp": 0, "wind": 0, "wind_dir": "不明", "precip": 0}
+
+    # 2. 潮汐データ解析 (気象庁データを簡易解析)
+tide_phase = "解析不能"
+    try:
+        # 本渡瀬戸の気象庁データURL (HS.txt)
+        url = f"https://www.data.jma.go.jp/gmd/kaiyou/data/db/tide/suisan/txt/{now.year}/HS.txt"
+        res = requests.get(url, timeout=10)
+        lines = res.text.splitlines()
+        
+        events = []
+        # --- 👿 貴様の計算ロジックを移植 ---
+        for d_off in [-1, 0, 1]:
+            t_d = now + timedelta(days=d_off)
+            d_str = t_d.strftime('%Y%m%d')
+            # 本渡(HS)のデータ行を探す (ロジックは貴様のコードをベースに調整)
+            d_line = next((l for l in lines if len(l) > 100 and l[76:78] == f"{t_d.day:02}" and l[78:80].strip() == "HS"), None)
+            
+            if d_line:
+                for start, e_type in [(80, "満潮"), (108, "干潮")]:
+                    for i in range(4):
+                        pos = start + (i * 7)
+                        t_raw = d_line[pos : pos+4].strip()
+                        v_raw = d_line[pos+4 : pos+7].strip()
+                        if t_raw and t_raw != "9999" and t_raw.isdigit():
+                            events.append({
+                                "time": datetime.strptime(d_str + t_raw, '%Y%m%d%H%M'),
+                                "type": e_type, "value": int(v_raw)
+                            })
+        
+        events.sort(key=lambda x: x['time'])
+        prev_e = next((e for e in reversed(events) if e['time'] <= now), None)
+        next_e = next((e for e in events if e['time'] > now), None)
+
+        if prev_e and next_e:
+            time_diff_total = (next_e['time'] - prev_e['time']).total_seconds()
+            time_diff_now = (now - prev_e['time']).total_seconds()
+            ratio = time_diff_now / time_diff_total
+            direction = "下げ" if prev_e['type'] == "満潮" else "上げ"
+
+            if ratio < 0.05: tide_phase = prev_e['type']
+            elif ratio > 0.95: tide_phase = next_e['type']
+            elif ratio < 0.20: tide_phase = f"{direction}1分"
+            elif ratio < 0.40: tide_phase = f"{direction}3分"
+            elif ratio < 0.60: tide_phase = f"{direction}5分"
+            elif ratio < 0.80: tide_phase = f"{direction}7分"
+            else: tide_phase = f"{direction}9分"
+        # ----------------------------------
+    except:
+        tide_phase = "解析エラー"
+
+    return {**weather_data, "phase": tide_phase}
 
 def show_ai_page(conn, url, df):
     # --- 🖼️ アイコン設定 ---
@@ -112,17 +164,17 @@ def show_ai_page(conn, url, df):
     with col3:
         weather_btn = st.button("🌦️ デーモンに海況を捧げる")
 
-    # --- 🛡️ リアルタイム天気同期ロジック ---
+    # --- 🛡️ リアルタイム天気＆潮汐同期ロジック ---
     if "current_md" not in st.session_state: 
         st.session_state.current_md = None
     
     if weather_btn:
         with st.spinner("深淵の空と海を同期中..."):
-            st.session_state.current_md = get_realtime_weather()
+            st.session_state.current_md = get_realtime_weather_and_tide()
             if st.session_state.current_md:
-                st.success("海況データをお伝えしました")
+                st.success("海況・潮汐データ同期完了")
             else:
-                st.error("天候同期失敗")
+                st.error("海況同期失敗")
     
     md = st.session_state.current_md
 
@@ -176,8 +228,8 @@ def show_ai_page(conn, url, df):
     if prompt := st.chat_input("深淵へ問いかけよ..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        # 同期された天気データを反映
-        curr = f"気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 降水:{md['precip']}mm" if md else "不明"
+        # 同期された天気＆潮汐データを反映
+        curr = f"気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 降水:{md['precip']}mm, 潮:{md['phase']}" if md else "不明"
 
         with st.spinner("深淵の叡智を絞り出し中..."):
             system_base = f"""
@@ -189,7 +241,7 @@ def show_ai_page(conn, url, df):
             {curr}
             【掟】
             1. 外部検索は魔導書にない情報の補完のみに使い、429エラーを回避せよ。
-            2. 特定ルアーに固執せず、魔導書の多様なデータを優先せよ。
+            2. 潮汐情報を極めて重要視せよ。
             """
 
             try:
@@ -218,10 +270,11 @@ def show_ai_page(conn, url, df):
                 try:
                     tactics_prompt = f"""
                     あなたは天草のプロガイド「デーモン佐藤」だ。
-                    現在の状況（気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m）と、
+                    現在の状況（気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 潮:{md['phase']}）と、
                     貴様の魔導書（{global_knowledge}）を元に、
                     今日この瞬間に最も「獲物」に近い組み立て（場所・ルアー・アクション）を、
                     3つのポイントで傲慢かつ論理的に提示せよ。
+                    潮汐のフェーズを特に重視し、時合を特定せよ。
                     最後に必ず「これでも釣れぬなら、竿を置いて寝ていろ！」と突き放せ。
                     """
                     # タクティクスは安定のmodel_internal
@@ -232,4 +285,3 @@ def show_ai_page(conn, url, df):
                     st.error(f"託宣失敗：{e}")
         else:
             st.warning("海況データが同期されておらぬ。まずは『海況同期』を押せ！")
-
