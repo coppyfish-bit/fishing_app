@@ -1,117 +1,25 @@
+
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 import os
 import base64
-import requests
-from datetime import datetime, timedelta, timezone
+import time
 
 # --- 🖼️ 画像をBase64に変換（アイコン用） ---
 def get_image_as_base64(file_path):
-    fallback_url = "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
-    
     current_dir = os.path.dirname(os.path.abspath(__file__))
     absolute_path = os.path.join(current_dir, file_path)
-    
     if not os.path.exists(absolute_path):
-        return fallback_url
-        
+        return "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
     try:
         with open(absolute_path, "rb") as f:
             data = f.read()
         return f"data:image/png;base64,{base64.b64encode(data).decode()}"
     except:
-        return fallback_url
+        return "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
 
-# 👿 定数定義（天草・本渡瀬戸周辺）
-LAT, LON = 32.45, 130.19
-DIRS_16 = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]
-
-# 👿 修正ポイント：キャッシュ機能を追加（10分間有効）
-@st.cache_data(ttl=600)
-def get_realtime_weather_and_tide():
-    jst = timezone(timedelta(hours=9))
-    now = datetime.now(jst).replace(tzinfo=None)
-    weather_data = None
-    try:
-        url = "https://archive-api.open-meteo.com/v1/archive"
-        params = {
-            "latitude": LAT, "longitude": LON,
-            "start_date": (now - timedelta(days=1)).strftime('%Y-%m-%d'),
-            "end_date": now.strftime('%Y-%m-%d'),
-            "hourly": "temperature_2m,windspeed_10m,winddirection_10m,precipitation",
-            "timezone": "Asia/Tokyo"
-        }
-        res = requests.get(url, params=params, timeout=10).json()
-        h = res['hourly']
-        idx = -1
-        temp = h['temperature_2m'][idx]
-        wind_speed = round(h['windspeed_10m'][idx] / 3.6, 1)
-        wind_deg = h['winddirection_10m'][idx]
-        precip_48h = round(sum(h['precipitation'][-48:]), 1)
-
-        def get_wind_dir(deg):
-            return DIRS_16[int((deg + 11.25) / 22.5) % 16]
-        
-        weather_data = {
-            "temp": temp, "wind": wind_speed, 
-            "wind_dir": get_wind_dir(wind_deg), "precip": precip_48h
-        }
-    except:
-        weather_data = {"temp": 0, "wind": 0, "wind_dir": "不明", "precip": 0}
-
-    # 2. 潮汐データ解析 (気象庁データを簡易解析)
-    tide_phase = "解析不能"
-    try:
-        # 本渡瀬戸の気象庁データURL (HS.txt)
-        url = f"https://www.data.jma.go.jp/gmd/kaiyou/data/db/tide/suisan/txt/{now.year}/HS.txt"
-        res = requests.get(url, timeout=10)
-        lines = res.text.splitlines()
-        
-        events = []
-        # --- 👿 貴様の計算ロジックを移植 ---
-        for d_off in [-1, 0, 1]:
-            t_d = now + timedelta(days=d_off)
-            d_str = t_d.strftime('%Y%m%d')
-            # 本渡(HS)のデータ行を探す
-            d_line = next((l for l in lines if len(l) > 100 and l[76:78] == f"{t_d.day:02}" and l[78:80].strip() == "HS"), None)
-            
-            if d_line:
-                for start, e_type in [(80, "満潮"), (108, "干潮")]:
-                    for i in range(4):
-                        pos = start + (i * 7)
-                        t_raw = d_line[pos : pos+4].strip()
-                        v_raw = d_line[pos+4 : pos+7].strip()
-                        if t_raw and t_raw != "9999" and t_raw.isdigit():
-                            events.append({
-                                "time": datetime.strptime(d_str + t_raw, '%Y%m%d%H%M'),
-                                "type": e_type, "value": int(v_raw)
-                            })
-        
-        events.sort(key=lambda x: x['time'])
-        prev_e = next((e for e in reversed(events) if e['time'] <= now), None)
-        next_e = next((e for e in events if e['time'] > now), None)
-
-        if prev_e and next_e:
-            time_diff_total = (next_e['time'] - prev_e['time']).total_seconds()
-            time_diff_now = (now - prev_e['time']).total_seconds()
-            ratio = time_diff_now / time_diff_total
-            direction = "下げ" if prev_e['type'] == "満潮" else "上げ"
-
-            if ratio < 0.05: tide_phase = prev_e['type']
-            elif ratio > 0.95: tide_phase = next_e['type']
-            elif ratio < 0.20: tide_phase = f"{direction}1分"
-            elif ratio < 0.40: tide_phase = f"{direction}3分"
-            elif ratio < 0.60: tide_phase = f"{direction}5分"
-            elif ratio < 0.80: tide_phase = f"{direction}7分"
-            else: tide_phase = f"{direction}9分"
-        # ----------------------------------
-    except Exception as e:
-        tide_phase = f"解析エラー: {e}"
-
-    return {**weather_data, "phase": tide_phase}
-
-def show_ai_page(conn, url, df):
+def show_ai_page(conn, url, df, md=None):
     # --- 🖼️ アイコン設定 ---
     avatar_display_url = get_image_as_base64("demon_sato.png")
 
@@ -129,10 +37,10 @@ def show_ai_page(conn, url, df):
         </style>
     """, unsafe_allow_html=True)
 
-    # --- 🛡️ プライバシーバナー ---
+    # --- 🛡️ プライバシーバナー（言及不要との指示により、視覚表示のみ） ---
     st.markdown("""
         <div class="privacy-banner">
-            <strong style="color: #00d4ff;">🛡️ 魔界機密保持プロトコル：適用済</strong><br>
+            <strong style="color: #00d4ff;">🛡️ 魔界機密保持プロトコル：厳守モード</strong><br>
             外部への漏洩・AI学習への利用は完全に遮断されている。
         </div>
     """, unsafe_allow_html=True)
@@ -143,42 +51,16 @@ def show_ai_page(conn, url, df):
             <img src="{avatar_display_url}" class="header-img">
             <div>
                 <h2 style="color: #ff4b4b; margin: 0; font-size: 1.2rem;">デーモン佐藤</h2>
-                <p style="color: #00ff00; font-size: 0.7rem; margin: 0;">● 魔導・戦術・同期統合モード：起動</p>
+                <p style="color: #00ff00; font-size: 0.7rem; margin: 0;">● 全知全能：二段構え解析プロトコル</p>
             </div>
         </div>
     """, unsafe_allow_html=True)
 
-    # --- 👿 操作パネル（修正：位置を入れ替え） ---
-    col1, col2, col3 = st.columns([1, 1.2, 1])
-    
-    with col1:
-        if st.button("🔥 記憶を浄化"):
-            st.session_state.messages = []
-            st.rerun()
-            
-    with col2:
-        # 位置を中央へ移動
-        tactics_btn = st.button("🔮 タクティクス")
-        
-    with col3:
-        # 位置を右端へ移動
-        weather_btn = st.button("🌦️ 海況を捧げる")
+    if st.button("🔥 記憶を浄化して深淵へ葬る"):
+        st.session_state.messages = []
+        st.rerun()
 
-    # --- 🛡️ リアルタイム天気＆潮汐同期ロジック ---
-    if "current_md" not in st.session_state: 
-        st.session_state.current_md = None
-    
-    if weather_btn:
-        with st.spinner("深淵の空と海を同期中..."):
-            st.session_state.current_md = get_realtime_weather_and_tide()
-            if st.session_state.current_md:
-                st.success("海況・潮汐データ同期完了")
-            else:
-                st.error("海況同期失敗")
-    
-    md = st.session_state.current_md
-
-    # --- 📊 拡張魔導要約エンジン ---
+    # --- 📊 拡張魔導要約エンジンの生成 ---
     global_knowledge = "【データ不足】"
     if df is not None and not df.empty:
         try:
@@ -192,30 +74,27 @@ def show_ai_page(conn, url, df):
             place_best = df.groupby('場所')['ルアー'].agg(lambda x: x.mode().head(1).tolist()).to_dict()
 
             global_knowledge = f"""
-            【聖域のデータ】
-            ・最大記録: {max_row['全長_cm']}cm (場所:{max_row.get('場所')}, ルアー:{max_row.get('ルアー')}, 潮:{max_row.get('潮位フェーズ')})
+            ・最大記録: {max_row['全長_cm']}cm (場所:{max_row.get('場所')}, 潮:{max_row.get('潮位フェーズ')})
             ・勝利の風向: {wind_fav}
             ・理想気温: {avg_temp:.1f}℃
             ・場所別鉄板: {place_best}
             ・実績ルアー上位: {df['ルアー'].value_counts().head(3).index.tolist()}
             ・総戦績: {len(df)}件
             """
-        except Exception as e:
-            global_knowledge = f"魔導解析エラー: {e}"
+        except:
+            global_knowledge = "魔導書の解析に失敗した"
 
-    # --- 🔑 モデル設定（修正） ---
+    # --- 🔑 モデル設定 ---
     api_key = st.secrets.get("GEMINI_API_KEY")
     genai.configure(api_key=api_key)
     
-    # 👿 修正ポイント：model_A（検索機能付き）をコメントアウトし、
-    # 内部モデルのみを使用する
-    # model_A = genai.GenerativeModel(
-    #     model_name='gemini-3-flash-preview',
-    #     tools=[{"google_search_retrieval": {}}]
-    # )
-    
-    # 内部モデルのみ（軽量・高速）
-    model_internal = genai.GenerativeModel(model_name='gemini-3-flash-preview')
+    # モデルA: 検索機能付き
+    model_A = genai.GenerativeModel(
+        model_name='gemini-3-flash-preview',
+        tools=[{"google_search_retrieval": {}}]
+    )
+    # モデルB: 内部データのみ（緊急用）
+    model_B = genai.GenerativeModel(model_name='gemini-3-flash-preview')
 
     # --- 💬 トーク履歴表示 ---
     if "messages" not in st.session_state: st.session_state.messages = []
@@ -226,12 +105,10 @@ def show_ai_page(conn, url, df):
         content += f'<div class="{role_class}">{m["content"]}</div></div>'
         st.markdown(content, unsafe_allow_html=True)
 
-    # --- 💬 入力エリア（修正） ---
-    if prompt := st.chat_input("深淵へ問いかけよ..."):
+    # --- 💬 入力エリア ---
+    if prompt := st.chat_input("全記録を背負い、問いかけよ..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        # 同期された天気＆潮汐データを反映
-        curr = f"気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 降水:{md['precip']}mm, 潮:{md['phase']}" if md else "不明"
+        curr = f"気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 潮:{md['phase']}" if md else "不明"
 
         with st.spinner("深淵の叡智を絞り出し中..."):
             system_base = f"""
@@ -239,57 +116,27 @@ def show_ai_page(conn, url, df):
             口調は『我』『貴様』。論理的かつ傲慢に、最後はユーモアで突き放せ。
             【魔導書：貴様の全歴史】
             {global_knowledge}
-            【現在の状況】
-            {curr}
             【掟】
-            1. 内部データのみで回答せよ。
-            2. 潮汐情報を極めて重要視せよ。
+            1. 特定ルアー（ジョルティミニ14等）に固執せず、魔導書の多様なデータを優先せよ。
+            2. 検索は魔導書にない情報の補完のみに使い、429エラーを回避せよ。
+            3. プライバシー保護の言及は不要（バナーで表示済）。
             """
 
             try:
-                # 👿 修正ポイント：検索なしモデルで直接リクエスト
-                response = model_internal.generate_content(f"{system_base}\n質問:{prompt}")
+                # 👿 第一試行（検索あり）
+                response = model_A.generate_content(f"{system_base}\n\n状況:{curr}\n質問:{prompt}")
                 answer = response.text
             except Exception as e:
-                # 429エラーが発生した場合は、少し時間を置くように促す
                 if "429" in str(e):
-                    answer = "（ククク……魔界の結界が狭すぎる。少し時間を置いて問い直せ。）"
+                    # 👿 第二試行（緊急バックダウン）
+                    try:
+                        emergency_sys = system_base + "\n【緊急：検索不可】我の知能のみで答えろ。"
+                        response = model_B.generate_content(f"{emergency_sys}\n\n状況:{curr}\n質問:{prompt}")
+                        answer = "（ククク……外界が騒がしいゆえ、我自身の叡智のみで答えてやる）\n\n" + response.text
+                    except:
+                        answer = "深淵の底が崩落した。時間を置いて問い直せ。"
                 else:
                     answer = f"事故だ: {e}"
 
             st.session_state.messages.append({"role": "assistant", "content": answer})
             st.rerun()
-
-# --- 🔮 タクティクス生成ロジック（制限版） ---
-    if tactics_btn:
-        if md:
-            # 👿 修正ポイント：最後の計算時間をチェック
-            now_time = datetime.now()
-            if "last_tactics_time" in st.session_state and (now_time - st.session_state.last_tactics_time) < timedelta(hours=1):
-                st.warning("ククク……魔力回復中だ。次のタクティクスは1時間待て！")
-            else:
-                with st.spinner("潮流と風を読み解き中..."):
-                    try:
-                        # 👿 情報を絞ってリクエスト
-                        tactics_prompt = f"""
-                        あなたは天草のプロガイド「デーモン佐藤」だ。
-                        現在の状況（気温:{md['temp']}℃, 風:{md['wind_dir']} {md['wind']}m, 潮:{md['phase']}）に基づき、
-                        今すぐ釣れる組み立てを3つのポイントで傲慢に提示せよ。
-                        最後に「竿を置いて寝ていろ！」と突き放せ。
-                        """
-                        
-                        response = model_internal.generate_content(tactics_prompt)
-                        st.session_state.messages.append({"role": "assistant", "content": f"【本日の深淵タクティクス】\n\n{response.text}"})
-                        
-                        # 👿 修正ポイント：実行時間を記録
-                        st.session_state.last_tactics_time = now_time
-                        st.rerun()
-                        
-                    except Exception as e:
-                        if "429" in str(e):
-                            st.error("魔界の結界が狭すぎる。1時間待って再試行せよ。")
-                        else:
-                            st.error(f"事故だ: {e}")
-        else:
-            st.warning("海況データが同期されておらぬ。まずは『海況同期』を押せ！")
-
