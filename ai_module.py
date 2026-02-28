@@ -128,6 +128,9 @@ def show_ai_page(conn, url, df, md=None):
                 answer = response.text
             except Exception as e:
                 if "429" in str(e):
+                # 👿 修正ポイント：エラーが出たら物理的に3秒待つ
+                    st.warning("魔界の結界が狭い！少し時間を置いている...")
+                    time.sleep(3) # これを有効化せよ！
                     # 👿 第二試行（緊急バックダウン）
                     try:
                         emergency_sys = system_base + "\n【緊急：検索不可】我の知能のみで答えろ。"
@@ -140,5 +143,6 @@ def show_ai_page(conn, url, df, md=None):
 
             st.session_state.messages.append({"role": "assistant", "content": answer})
             st.rerun()
+
 
 
