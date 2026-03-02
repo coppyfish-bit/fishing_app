@@ -12,8 +12,6 @@ import numpy as np
 import ephem
 import requests
 from PIL import Image, ExifTags
-# app.py の冒頭に追加
-from edit_module import show_edit_page
 from gallery_module import show_gallery_page
 from analysis_module import show_analysis_page # この名前であることを確認
 from monthly_stats import show_monthly_stats  # 追加
@@ -529,8 +527,9 @@ def main():
                     st.error(f"❌ 保存失敗: {e}")
 
                     
-    # ↓ ここから下の「with tab...」が、すべて同じ左端の高さにあるか確認してください
+    # ★ここからtab2の中身（関数内）でimportする！
     with tab2:
+        from edit_module import show_edit_page # <-- ★ここに移す！
         show_edit_page(
             conn, 
             url,
@@ -568,6 +567,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
