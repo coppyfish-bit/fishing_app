@@ -168,7 +168,7 @@ def get_tide_details(station_code, dt):
         # 仕様に合わせた年月日文字列の作成 (73-78カラム用)
         target_ymd = base_dt.strftime('%y') + f"{base_dt.month:2d}" + f"{base_dt.day:2d}"
         
-        url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{dt.year}/{station_code}.txt"
+        url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{year_to_fetch}/{station_code}.txt"
         res = requests.get(url, timeout=10)
         if res.status_code != 200: return None
         
@@ -560,5 +560,6 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
