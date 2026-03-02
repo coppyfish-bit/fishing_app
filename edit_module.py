@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
+import app # 外部関数の呼び出し用
 
 def show_edit_page(conn, url):
     st.subheader("🔄 登録情報の修正・削除")
@@ -17,8 +18,11 @@ def show_edit_page(conn, url):
     st.markdown("### 📸 直近5件の記録")
     df_recent = df.head(5)
     for idx in df_recent.index:
-        label = f"✨ 最新: {df.at[idx, 'datetime']} | {df.at[idx, '場所']} | {df.at[idx, '魚種']}"
-        # expanded=True で常に展開
+        # datetimeが文字列の場合とTimestampの場合で処理を分ける
+        dt_val = df.at[idx, 'datetime']
+        dt_str = dt_val.strftime('%Y/%m/%d %H:%M') if isinstance(dt_val, pd.Timestamp) else str(dt_val)
+        
+        label = f"✨ 最新: {dt_str} | {df.at[idx, '場所']} | {df.at[idx, '魚種']}"
         with st.expander(label, expanded=True):
             render_edit_form(df, idx, conn, url)
 
@@ -58,7 +62,7 @@ def render_edit_form(df, idx, conn, url):
     if st.button(f"🔄 気象・潮汐データを再取得する", key=f"btn_{idx}", use_container_width=True):
         try:
             with st.spinner("最新データを計算中..."):
-                import app
+                # データ型を統一して日時解析
                 raw_val = str(df.at[idx, 'datetime']).replace("-", "/").strip()
                 clean_dt_str = raw_val[:16]
                 if clean_dt_str.endswith(":"):
@@ -70,19 +74,29 @@ def render_edit_form(df, idx, conn, url):
                     dt_obj = pd.to_datetime(clean_dt_str)
                 
                 lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
+                
+                # 気象データ取得
                 temp, w_s, w_d, rain = app.get_weather_data_openmeteo(lat, lon, dt_obj)
+                
+                # 最寄りの観測所
                 station = app.find_nearest_tide_station(lat, lon)
+                
+                # ★修正ポイント：過去データの場合のURL生成に対応した関数を呼び出す
+                # ※ app.py 側の get_tide_details が修正されている前提
                 
                 all_events = []
                 tide_cm = 0
                 for delta in [-1, 0, 1]:
+                    # ここで渡す dt_obj が過去のものであっても、app.pyでURLを生成する
                     d_data = app.get_tide_details(station['code'], dt_obj + timedelta(days=delta))
                     if d_data:
                         if 'events' in d_data: all_events.extend(d_data['events'])
                         if delta == 0: tide_cm = d_data['cm']
 
+                # 重複を排除してソート
                 all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
                 
+                # フェーズ計算
                 tide_phase = "不明"
                 search_dt = dt_obj + timedelta(minutes=5)
                 prev_ev = next((e for e in reversed(all_events) if e['time'] <= search_dt), None)
@@ -96,6 +110,7 @@ def render_edit_form(df, idx, conn, url):
                         step = max(1, min(9, int((elapsed / duration) * 10)))
                         tide_phase = f"{p_type}{step}分"
 
+                # セッションステートに一時保存
                 st.session_state[temp_data_key] = {
                     "temp": temp, "wind_s": w_s, "wind_d": w_d, "rain": rain,
                     "tide_cm": tide_cm,
@@ -111,13 +126,18 @@ def render_edit_form(df, idx, conn, url):
     has_temp_data = temp_data_key in st.session_state and st.session_state[temp_data_key] is not None
     t_data = st.session_state.get(temp_data_key, {})
     
-    val_temp = float(t_data["temp"]) if has_temp_data else float(df.at[idx, '気温'])
-    val_wind_s = float(t_data["wind_s"]) if has_temp_data else float(df.at[idx, '風速'])
-    val_wind_d = t_data["wind_d"] if has_temp_data else (str(df.at[idx, '風向']) if '風向' in df.columns else "不明")
-    val_rain = float(t_data["rain"]) if has_temp_data else (float(df.at[idx, '降水量']) if '降水量' in df.columns else 0.0)
-    val_tide_cm = int(t_data["tide_cm"]) if has_temp_data else int(df.at[idx, '潮位_cm'])
-    val_tide_name = t_data["tide_name"] if has_temp_data else (str(df.at[idx, '潮名']) if '潮名' in df.columns else "不明")
-    val_phase = t_data["phase"] if has_temp_data else (str(df.at[idx, '潮位フェーズ']) if '潮位フェーズ' in df.columns else "不明")
+    # データベースから取得した値をセット
+    try:
+        val_temp = float(t_data["temp"]) if has_temp_data else float(df.at[idx, '気温'])
+        val_wind_s = float(t_data["wind_s"]) if has_temp_data else float(df.at[idx, '風速'])
+        val_wind_d = t_data["wind_d"] if has_temp_data else (str(df.at[idx, '風向']) if '風向' in df.columns else "不明")
+        val_rain = float(t_data["rain"]) if has_temp_data else (float(df.at[idx, '降水量']) if '降水量' in df.columns else 0.0)
+        val_tide_cm = int(t_data["tide_cm"]) if has_temp_data else int(df.at[idx, '潮位_cm'])
+        val_tide_name = t_data["tide_name"] if has_temp_data else (str(df.at[idx, '潮名']) if '潮名' in df.columns else "不明")
+        val_phase = t_data["phase"] if has_temp_data else (str(df.at[idx, '潮位フェーズ']) if '潮位フェーズ' in df.columns else "不明")
+    except:
+        # 万が一型変換に失敗した場合のデフォルト値
+        val_temp, val_wind_s, val_wind_d, val_rain, val_tide_cm, val_tide_name, val_phase = 0, 0, "不明", 0, 0, "不明", "不明"
 
     # 修正フォーム
     ver = st.session_state[form_version_key]
@@ -174,4 +194,3 @@ def render_edit_form(df, idx, conn, url):
                 st.session_state[temp_data_key] = None
                 st.cache_data.clear()
                 st.rerun()
-
