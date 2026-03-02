@@ -331,7 +331,7 @@ def main():
             </style>
         """, unsafe_allow_html=True)
     
-uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"])
+        uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"])
         
         # --- 👿 修正ポイント1: セッション状態の初期化を先に行う ---
         if "lat" not in st.session_state: st.session_state.lat = 0.0
@@ -594,6 +594,7 @@ uploaded_file = st.file_uploader("魚の写真を選択してください", type
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
