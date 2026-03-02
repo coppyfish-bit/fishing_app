@@ -331,28 +331,35 @@ def main():
             </style>
         """, unsafe_allow_html=True)
     
-        uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"])
         
-        # 👿 修正ポイント：セッション状態の初期化を先に行う
+        # --- 👿 修正ポイント1: セッション状態の初期化を先に行う ---
         if "lat" not in st.session_state: st.session_state.lat = 0.0
         if "lon" not in st.session_state: st.session_state.lon = 0.0
         if "detected_place" not in st.session_state: st.session_state.detected_place = "新規地点"
         if "group_id" not in st.session_state: st.session_state.group_id = "default"
         if "target_dt" not in st.session_state: st.session_state.target_dt = datetime.now()
 
+        # --- 解析結果を保持する一時変数を定義 ---
+        parsed_dt = st.session_state.target_dt
+        parsed_lat = st.session_state.lat
+        parsed_lon = st.session_state.lon
+        parsed_place = st.session_state.detected_place
+        parsed_group = st.session_state.group_id
+
         if uploaded_file:
-            # 内部の進行状況をユーザーに見せる（これでCONNECTINGの表示時間を減らす）
-            with st.status("📊 過去の記憶を解析中...", expanded=False) as status:
+            # 👿 修正ポイント2: st.status を使用し、CONNECTING表示を回避しつつ解析進行を見せる
+            with st.status("📊 過去の記憶を解析中...", expanded=True) as status:
                 try:
                     uploaded_file.seek(0)
                     img_for_upload = Image.open(uploaded_file)
                     
-                    # 👿 1. EXIF抽出（ここがボトルネックになりやすい）
+                    # 1. EXIF抽出（ここがボトルネックになりやすい）
                     exif = None
                     try:
                         exif = img_for_upload._getexif()
                     except Exception:
-                        st.warning("メタデータが複雑すぎるため、一部の解析をスキップしたぞ。")
+                        st.warning("メタデータが複雑すぎるため、解析をスキップしたぞ。")
 
                     if exif:
                         # 日時抽出
@@ -361,7 +368,7 @@ def main():
                             if tag_name == 'DateTimeOriginal':
                                 try:
                                     clean_val = str(value).strip().replace("-", "/").replace(":", "/", 2)[:16]
-                                    st.session_state.target_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
+                                    parsed_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
                                 except: pass
                         
                         # 座標抽出
@@ -371,11 +378,11 @@ def main():
                                 lat = get_decimal_from_dms(geo['GPSLatitude'], geo['GPSLatitudeRef'])
                                 lon = get_decimal_from_dms(geo['GPSLongitude'], geo['GPSLongitudeRef'])
                                 if lat and lon:
-                                    st.session_state.lat, st.session_state.lon = lat, lon
-                                    # 👿 2. 場所判定（ここも軽量化）
+                                    parsed_lat, parsed_lon = lat, lon
+                                    # 2. 場所判定
                                     p_name, g_id = find_nearest_place(lat, lon, df_master)
-                                    st.session_state.detected_place = p_name
-                                    st.session_state.group_id = g_id
+                                    parsed_place = p_name
+                                    parsed_group = g_id
                         except Exception as e:
                             st.info("位置情報の特定には至らなかった。手動で入力せよ。")
 
@@ -384,15 +391,26 @@ def main():
                     st.error(f"画像読み込みエラー: {e}")
                     status.update(label="❌ 解析失敗", state="error", expanded=False)
 
+            # --- 解析結果をセッションに反映 ---
+            st.session_state.target_dt = parsed_dt
+            st.session_state.lat = parsed_lat
+            st.session_state.lon = parsed_lon
+            st.session_state.detected_place = parsed_place
+            st.session_state.group_id = parsed_group
+            
             st.success(f"📸 解析完了: {st.session_state.detected_place} ({st.session_state.target_dt.strftime('%Y/%m/%d %H:%M')})")
-    
-            # --- ここから入力エリア（一本化） ---
+            
+            # --- 👿 修正ポイント3: ここからフォーム全体を描画 ---
             with st.expander("📍 位置情報の確認", expanded=False):
                 if st.session_state.lat != 0.0:
                     st.map(pd.DataFrame({'lat': [st.session_state.lat], 'lon': [st.session_state.lon]}), zoom=14)
-    
+                else:
+                    st.warning("位置情報が画像から取得できなかった。")
+
             st.subheader("📝 釣果の詳細")
             
+            # (以下、魚種選択以降のフォームコードを配置)
+            # ...
             # 魚種選択
             fish_options = ["スズキ", "ヒラスズキ", "ボウズ", "バラシ", "カサゴ", "ターポン", "タチウオ", "マダイ", "チヌ", "キビレ", "ブリ", "アジ", "（手入力）"]
             selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
@@ -576,6 +594,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
