@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date
+import time
 
 def show_gallery_page(df):
     # --- 1. スタイル設定（CSS） ---
@@ -183,6 +184,7 @@ def show_gallery_page(df):
                 </a>
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
+
 
 
 
