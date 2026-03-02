@@ -331,31 +331,22 @@ def main():
             </style>
         """, unsafe_allow_html=True)
     
-        # --- 念のためここでセッション状態の初期化 ---
-        if "length_val" not in st.session_state:
-            st.session_state.length_val = 0.0
+        uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"])
+        
+        # 👿 修正ポイント：セッション状態の初期化を先に行う
         if "lat" not in st.session_state: st.session_state.lat = 0.0
         if "lon" not in st.session_state: st.session_state.lon = 0.0
         if "detected_place" not in st.session_state: st.session_state.detected_place = "新規地点"
         if "group_id" not in st.session_state: st.session_state.group_id = "default"
         if "target_dt" not in st.session_state: st.session_state.target_dt = datetime.now()
-    
-        uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"], )   
-        
+
         if uploaded_file:
-            # 内部の進行状況をユーザーに見せる（これでフリーズを防ぐ）
+            # 内部の進行状況をユーザーに見せる（これでCONNECTINGの表示時間を減らす）
             with st.status("📊 過去の記憶を解析中...", expanded=False) as status:
                 try:
                     uploaded_file.seek(0)
                     img_for_upload = Image.open(uploaded_file)
                     
-                    # セッション初期化（解析前にリセット）
-                    st.session_state.lat = 0.0
-                    st.session_state.lon = 0.0
-                    st.session_state.detected_place = "新規地点"
-                    st.session_state.group_id = "default"
-                    st.session_state.target_dt = datetime.now()
-
                     # 👿 1. EXIF抽出（ここがボトルネックになりやすい）
                     exif = None
                     try:
@@ -369,7 +360,6 @@ def main():
                             tag_name = ExifTags.TAGS.get(tag_id, tag_id)
                             if tag_name == 'DateTimeOriginal':
                                 try:
-                                    # Androidの特殊な書式にも対応できるようクレンジング
                                     clean_val = str(value).strip().replace("-", "/").replace(":", "/", 2)[:16]
                                     st.session_state.target_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
                                 except: pass
@@ -392,7 +382,7 @@ def main():
                     status.update(label="✅ 解析完了", state="complete", expanded=False)
                 except Exception as e:
                     st.error(f"画像読み込みエラー: {e}")
-                    st.session_state.target_dt = datetime.now()
+                    status.update(label="❌ 解析失敗", state="error", expanded=False)
 
             st.success(f"📸 解析完了: {st.session_state.detected_place} ({st.session_state.target_dt.strftime('%Y/%m/%d %H:%M')})")
     
@@ -586,6 +576,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
