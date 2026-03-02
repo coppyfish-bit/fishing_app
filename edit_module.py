@@ -1,9 +1,8 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-import app # 外部関数の呼び出し用
 
-def show_edit_page(conn, url):
+def show_edit_page(conn, url, weather_func, station_func, tide_func, moon_func, tide_name_func):                
     st.subheader("🔄 登録情報の修正・削除")
     # 最新データの読み込み
     df_raw = conn.read(spreadsheet=url, ttl="10s")
@@ -24,7 +23,7 @@ def show_edit_page(conn, url):
         
         label = f"✨ 最新: {dt_str} | {df.at[idx, '場所']} | {df.at[idx, '魚種']}"
         with st.expander(label, expanded=True):
-            render_edit_form(df, idx, conn, url)
+            render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, moon_func, tide_name_func)
 
     st.markdown("---")
 
@@ -47,7 +46,7 @@ def show_edit_page(conn, url):
         render_edit_form(df, selected_idx, conn, url)
 
 # --- フォーム表示と再計算の共通関数 ---
-def render_edit_form(df, idx, conn, url):
+def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, moon_func, tide_name_func):
     # 写真の表示（あれば）
     if 'filename' in df.columns and pd.notna(df.at[idx, 'filename']):
         st.image(df.at[idx, 'filename'], width=400)
@@ -79,7 +78,7 @@ def render_edit_form(df, idx, conn, url):
                 temp, w_s, w_d, rain = app.get_weather_data_openmeteo(lat, lon, dt_obj)
                 
                 # 最寄りの観測所
-                station = app.find_nearest_tide_station(lat, lon)
+                station = station_func(lat, lon)
                 
                 # ★修正ポイント：過去データの場合のURL生成に対応した関数を呼び出す
                 # ※ app.py 側の get_tide_details が修正されている前提
@@ -88,7 +87,7 @@ def render_edit_form(df, idx, conn, url):
                 tide_cm = 0
                 for delta in [-1, 0, 1]:
                     # ここで渡す dt_obj が過去のものであっても、app.pyでURLを生成する
-                    d_data = app.get_tide_details(station['code'], dt_obj + timedelta(days=delta))
+                    d_data = tide_func(station['code'], dt_obj + timedelta(days=delta))
                     if d_data:
                         if 'events' in d_data: all_events.extend(d_data['events'])
                         if delta == 0: tide_cm = d_data['cm']
@@ -114,7 +113,7 @@ def render_edit_form(df, idx, conn, url):
                 st.session_state[temp_data_key] = {
                     "temp": temp, "wind_s": w_s, "wind_d": w_d, "rain": rain,
                     "tide_cm": tide_cm,
-                    "tide_name": app.get_tide_name(app.get_moon_age(dt_obj)),
+                    "tide_name": tide_name_func(moon_func(dt_obj)),
                     "phase": tide_phase
                 }
                 st.session_state[form_version_key] += 1
@@ -194,3 +193,4 @@ def render_edit_form(df, idx, conn, url):
                 st.session_state[temp_data_key] = None
                 st.cache_data.clear()
                 st.rerun()
+
