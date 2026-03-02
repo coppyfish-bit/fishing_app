@@ -12,3 +12,4 @@ google-auth
 cloudinary
 pyephem
 google-generativeai
+pillow-heif
