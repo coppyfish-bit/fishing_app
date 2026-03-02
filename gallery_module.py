@@ -80,6 +80,14 @@ def show_gallery_page(df):
     """, unsafe_allow_html=True)
 
     st.title("🖼️ GALLERY")
+
+    # --- 👿 修正ポイント：最新データ更新ボタン ---
+    if st.button("🔄 最新データに更新 (キャッシュ破棄)"):
+        # 全てのキャッシュをクリアし、最新のスプレッドシートを読み直す
+        st.cache_data.clear()
+        st.success("深淵の記憶を更新した。最新の釣果が表示されるはずだ。")
+        time.sleep(1) # 成功メッセージを見せるための僅かな猶予
+        st.rerun()
     
     if df is None or df.empty:
         st.info("No records found.")
@@ -175,5 +183,6 @@ def show_gallery_page(df):
                 </a>
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
+
 
 
