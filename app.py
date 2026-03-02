@@ -340,34 +340,60 @@ def main():
         if "group_id" not in st.session_state: st.session_state.group_id = "default"
         if "target_dt" not in st.session_state: st.session_state.target_dt = datetime.now()
     
-        uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"], )
+        uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"], )   
         
         if uploaded_file:
-            img_for_upload = Image.open(uploaded_file)
-            exif = img_for_upload._getexif()
-            
-            # 1. 写真解析（一度だけ実行）
-            if exif:
-                # 日時抽出
-                for tag_id, value in exif.items():
-                    tag_name = ExifTags.TAGS.get(tag_id, tag_id)
-                    if tag_name == 'DateTimeOriginal':
+            # 内部の進行状況をユーザーに見せる（これでフリーズを防ぐ）
+            with st.status("📊 過去の記憶を解析中...", expanded=False) as status:
+                try:
+                    uploaded_file.seek(0)
+                    img_for_upload = Image.open(uploaded_file)
+                    
+                    # セッション初期化（解析前にリセット）
+                    st.session_state.lat = 0.0
+                    st.session_state.lon = 0.0
+                    st.session_state.detected_place = "新規地点"
+                    st.session_state.group_id = "default"
+                    st.session_state.target_dt = datetime.now()
+
+                    # 👿 1. EXIF抽出（ここがボトルネックになりやすい）
+                    exif = None
+                    try:
+                        exif = img_for_upload._getexif()
+                    except Exception:
+                        st.warning("メタデータが複雑すぎるため、一部の解析をスキップしたぞ。")
+
+                    if exif:
+                        # 日時抽出
+                        for tag_id, value in exif.items():
+                            tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+                            if tag_name == 'DateTimeOriginal':
+                                try:
+                                    # Androidの特殊な書式にも対応できるようクレンジング
+                                    clean_val = str(value).strip().replace("-", "/").replace(":", "/", 2)[:16]
+                                    st.session_state.target_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
+                                except: pass
+                        
+                        # 座標抽出
                         try:
-                            clean_val = str(value).strip()[:16].replace(":", "/", 2)
-                            st.session_state.target_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
-                        except: pass
-                
-                # 座標・場所抽出
-                geo = get_geotagging(exif)
-                if geo:
-                    lat = get_decimal_from_dms(geo['GPSLatitude'], geo['GPSLatitudeRef'])
-                    lon = get_decimal_from_dms(geo['GPSLongitude'], geo['GPSLongitudeRef'])
-                    if lat and lon:
-                        st.session_state.lat, st.session_state.lon = lat, lon
-                        p_name, g_id = find_nearest_place(lat, lon, df_master)
-                        st.session_state.detected_place = p_name
-                        st.session_state.group_id = g_id
-    
+                            geo = get_geotagging(exif)
+                            if geo:
+                                lat = get_decimal_from_dms(geo['GPSLatitude'], geo['GPSLatitudeRef'])
+                                lon = get_decimal_from_dms(geo['GPSLongitude'], geo['GPSLongitudeRef'])
+                                if lat and lon:
+                                    st.session_state.lat, st.session_state.lon = lat, lon
+                                    # 👿 2. 場所判定（ここも軽量化）
+                                    p_name, g_id = find_nearest_place(lat, lon, df_master)
+                                    st.session_state.detected_place = p_name
+                                    st.session_state.group_id = g_id
+                        except Exception as e:
+                            st.info("位置情報の特定には至らなかった。手動で入力せよ。")
+
+                    status.update(label="✅ 解析完了", state="complete", expanded=False)
+                except Exception as e:
+                    st.error(f"画像読み込みエラー: {e}")
+                    st.session_state.target_dt = datetime.now()
+
             st.success(f"📸 解析完了: {st.session_state.detected_place} ({st.session_state.target_dt.strftime('%Y/%m/%d %H:%M')})")
     
             # --- ここから入力エリア（一本化） ---
@@ -560,6 +586,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
