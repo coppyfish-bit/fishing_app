@@ -58,3 +58,46 @@ def get_day_events_hybrid(date, code):
         return []
 
 # --- 実行 UI は前回と同じ ---
+# --- メイン UI ---
+with st.sidebar:
+    st.header("🛠️ 設定")
+    station_code = st.text_input("地点コード", "HS").upper()
+    # 2026年3月3日の現在時刻を基準
+    base_dt = datetime.now()
+    st.write(f"現在時刻: {base_dt.strftime('%Y/%m/%d %H:%M')}")
+    execute = st.button("🔥 解析実行", use_container_width=True)
+
+if execute:
+    # 三日分を連結
+    all_events = []
+    for i in [-1, 0, 1]:
+        all_events.extend(get_day_events_fixed(base_dt + timedelta(days=i), station_code))
+    
+    all_events.sort(key=lambda x: x['time'])
+
+    # 直前・直後特定
+    prev = next((e for e in reversed(all_events) if e['time'] <= base_dt), None)
+    nxt = next((e for e in all_events if e['time'] > base_dt), None)
+
+    # 結果表示
+    st.markdown("### 🎯 潮汐イベント特定結果")
+    c1, c2 = st.columns(2)
+    with c1:
+        if prev:
+            st.metric("🎯 直前のイベント", f"{prev['type']}", f"{prev['time'].strftime('%m/%d %H:%M')} ({prev['cm']}cm)")
+        else:
+            st.error("直前のイベントなし")
+    with c2:
+        if nxt:
+            st.metric("⌛ 次のイベント", f"{nxt['type']}", f"{nxt['time'].strftime('%m/%d %H:%M')} ({nxt['cm']}cm)")
+        else:
+            st.error("次のイベントなし")
+
+    st.markdown("---")
+    st.markdown("### 📋 連結された全イベント（三日間）")
+    if all_events:
+        df = pd.DataFrame(all_events)
+        df['時刻'] = df['time'].dt.strftime('%m/%d %H:%M')
+        st.table(df[['時刻', 'type', 'cm']].rename(columns={'type':'種別', 'cm':'潮位(cm)'}))
+    else:
+        st.error("イベントが一つも抽出されておらん！")
