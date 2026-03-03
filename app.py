@@ -4,8 +4,8 @@ import requests
 from datetime import datetime
 
 # --- 👿 ここを自分の GitHub 情報に変えろ！ ---
-GITHUB_USER = "YOUR_GITHUB_USER"  # 貴様のユーザー名
-REPO_NAME = "YOUR_REPO_NAME"      # リポジトリ名（例: my-tide-data）
+GITHUB_USER = "coppyfish-bit"  # 貴様のユーザー名
+REPO_NAME = "fishing_app"      # リポジトリ名（例: my-tide-data）
 
 TIDE_STATIONS = [
     {"name": "苓北", "code": "RH"},
@@ -67,3 +67,4 @@ if st.button("🔥 潮位を召喚する"):
             st.error(f"本日（{today_str}）のデータが JSON 内に見当たりません。")
     else:
         st.error("GitHub からデータを取得できません。URL またはファイル名を確認せよ。")
+
