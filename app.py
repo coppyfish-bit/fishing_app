@@ -162,69 +162,78 @@ def find_nearest_tide_station(lat, lon):
         distances.append(d)
     return TIDE_STATIONS[np.argmin(distances)]
 
-# 気象庁から潮位(cm)を取得・計算
 def get_tide_details(station_code, dt):
     try:
-        # 秒やミリ秒を切り捨てた「分」までの基準時刻を作成
         base_dt = datetime.strptime(dt.strftime('%Y%m%d%H%M'), '%Y%m%d%H%M')
+        # デバッグ用：対象の日付を確認
+        # st.write(f"解析対象: {base_dt}, 観測所: {station_code}")
         
-        # 仕様に合わせた年月日文字列の作成 (73-78カラム用)
-        target_ymd = base_dt.strftime('%y') + f"{base_dt.month:2d}" + f"{base_dt.day:2d}"
+        target_ymd = base_dt.strftime('%y') + f"{base_dt.month:02d}" + f"{base_dt.day:02d}"
         
-        url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{year_to_fetch}/{station_code}.txt"
+        url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{base_dt.year}/{station_code}.txt"
+        
+        # --- デバッグ用：URLの表示 ---
+        # st.write(f"URL: {url}")
+        
         res = requests.get(url, timeout=10)
-        if res.status_code != 200: return None
+        if res.status_code != 200:
+            st.error(f"気象庁データ取得失敗: {res.status_code}")
+            return None
         
         lines = res.text.splitlines()
         day_data = None
         
-        # 1. 該当する日の行を特定
         for line in lines:
             if len(line) < 80: continue
             if line[72:78] == target_ymd and line[78:80] == station_code:
                 day_data = line
                 break
         
-        if not day_data: return None
+        if not day_data:
+            st.error(f"該当する日のデータが見つかりません。対象YM: {target_ymd}")
+            return None
 
-        # 2. 毎時潮位の取得 (1-72カラム)
+        # 毎時潮位の取得
         hourly = []
-        for i in range(24):
-            val = day_data[i*3 : (i+1)*3].strip()
-            hourly.append(int(val))
+        try:
+            for i in range(24):
+                val = day_data[i*3 : (i+1)*3].strip()
+                hourly.append(int(val))
+        except ValueError as e:
+            st.error(f"毎時潮位の数値変換エラー: {e}, データ: {day_data[0:72]}")
+            return None
         
-        # 現在時刻の潮位計算
+        # 潮位計算
         t1 = hourly[base_dt.hour]
         t2 = hourly[base_dt.hour+1] if base_dt.hour < 23 else hourly[base_dt.hour]
         current_cm = int(round(t1 + (t2 - t1) * (base_dt.minute / 60.0)))
 
-# --- 本渡瀬戸(HS.txt) 完全対応版ロジック ---
+        # 潮汐イベントロジック
         event_times = []
         today_ymd = base_dt.strftime('%Y%m%d')
 
-        # 1. 満潮データの抽出 (80文字目から7文字ずつ4回)
-        # 80-83, 87-90, 94-97, 101-104 をピンポイントで取得
-        for i in range(4):
-            start = 80 + (i * 7)
-            t_part = day_data[start : start+4].replace(" ", "")
-            if t_part and t_part.isdigit() and t_part != "9999":
-                ev_time = datetime.strptime(today_ymd + t_part.zfill(4), '%Y%m%d%H%M')
-                event_times.append({"time": ev_time, "type": "満潮"})
+        try:
+            # 満潮
+            for i in range(4):
+                start = 80 + (i * 7)
+                t_part = day_data[start : start+4].replace(" ", "")
+                if t_part and t_part.isdigit() and t_part != "9999":
+                    ev_time = datetime.strptime(today_ymd + t_part.zfill(4), '%Y%m%d%H%M')
+                    event_times.append({"time": ev_time, "type": "満潮"})
 
-        # 2. 干潮データの抽出 (108文字目から7文字ずつ4回)
-        # 108-111, 115-118, 122-125, 129-132 をピンポイントで取得
-        for i in range(4):
-            start = 108 + (i * 7)
-            t_part = day_data[start : start+4].replace(" ", "")
-            if t_part and t_part.isdigit() and t_part != "9999":
-                ev_time = datetime.strptime(today_ymd + t_part.zfill(4), '%Y%m%d%H%M')
-                event_times.append({"time": ev_time, "type": "干潮"})
+            # 干潮
+            for i in range(4):
+                start = 108 + (i * 7)
+                t_part = day_data[start : start+4].replace(" ", "")
+                if t_part and t_part.isdigit() and t_part != "9999":
+                    ev_time = datetime.strptime(today_ymd + t_part.zfill(4), '%Y%m%d%H%M')
+                    event_times.append({"time": ev_time, "type": "干潮"})
+        except Exception as e:
+            st.error(f"潮汐イベント抽出エラー: {e}")
+            return None
 
-        # 重要：ここで時間順に並べ替える
         event_times = sorted(event_times, key=lambda x: x['time'])
         
-
-        # 4. フェーズ計算
         phase_text = "不明"
         prev_ev = next((e for e in reversed(event_times) if e['time'] <= base_dt), None)
         next_ev = next((e for e in event_times if e['time'] > base_dt), None)
@@ -239,8 +248,8 @@ def get_tide_details(station_code, dt):
         return {"cm": current_cm, "phase": phase_text, "events": event_times}
 
     except Exception as e:
-        # ここでエラーが出た場合、詳細を表示
-        st.error(f"潮位解析内部エラー: {e}")
+        # 最終的なエラーの詳細
+        st.error(f"潮位解析致命的エラー: {e}")
         return None
 # 【修正】Open-Meteoを使用した過去48時間降水量対応の気象取得関数
 def get_weather_data_openmeteo(lat, lon, dt):
@@ -572,6 +581,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
