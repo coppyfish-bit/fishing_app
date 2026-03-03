@@ -1,66 +1,69 @@
 import streamlit as st
+import pandas as pd
 import requests
 from datetime import datetime
-import re
 
-def get_perfect_hourly_tide(date, station_code):
-    station_code = station_code.upper()
-    url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{date.year}/{station_code}.txt"
-    
+# --- 👿 ここを自分の GitHub 情報に変えろ！ ---
+GITHUB_USER = "YOUR_GITHUB_USER"  # 貴様のユーザー名
+REPO_NAME = "YOUR_REPO_NAME"      # リポジトリ名（例: my-tide-data）
+
+TIDE_STATIONS = [
+    {"name": "苓北", "code": "RH"},
+    {"name": "三角", "code": "MS"},
+    {"name": "本渡瀬戸", "code": "HS"},
+    {"name": "八代", "code": "O5"},
+    {"name": "水俣", "code": "O7"},
+    {"name": "熊本", "code": "KU"},
+    {"name": "大牟田", "code": "O6"},
+    {"name": "大浦", "code": "OU"},
+    {"name": "口之津", "code": "KT"},
+]
+
+def get_tide_data(year, code):
+    # GitHubの Raw URL（生データ用URL）を構築
+    url = f"https://raw.githubusercontent.com/{GITHUB_USER}/{REPO_NAME}/main/data/{year}/{code}.json"
     try:
-        res = requests.get(url, timeout=5)
-        if res.status_code != 200: return "取得失敗", None
-        
-        lines = res.text.splitlines()
-        # 日付と地点記号で行を特定
-        yy = date.strftime('%y')
-        pattern = rf"{yy}\s+{date.month}\s+{date.day}\s*{station_code}"
-        
-        target_line = None
-        for line in lines:
-            if re.search(pattern, line):
-                target_line = line
-                break
-        
-        if not target_line: return "該当日なし", None
+        res = requests.get(url)
+        if res.status_code == 200:
+            return res.json()
+        return None
+    except:
+        return None
 
-        # --- 仕様書通り：1〜72カラムを3文字ずつ分断 ---
-        hourly_data = []
-        for i in range(24):
-            # 0時(0-3カラム), 1時(3-6カラム)... 
-            # Pythonのスライスは [start:end] なので [0:3], [3:6] となる
-            start = i * 3
-            end = start + 3
-            val_str = target_line[start:end].strip()
-            if val_str:
-                hourly_data.append(int(val_str))
-            else:
-                hourly_data.append(0) # 万が一空なら0
+# --- UI 表示部 ---
+st.title("🌊 熊本・有明海 爆速潮汐システム")
 
-        # --- 最も近い時間を判定 ---
-        # 10:29なら10時、10:30なら11時
-        if date.minute < 30:
-            nearest_hour = date.hour
-        else:
-            nearest_hour = (date.hour + 1) % 24
-            
-        return hourly_data[nearest_hour], nearest_hour
-
-    except Exception as e:
-        return f"解析エラー: {e}", None
-
-# --- UI部 ---
-st.title("🌊 本渡瀬戸・3桁固定長 潮位奪取")
-
-code = st.text_input("地点", "HS").upper()
+selected_st = st.selectbox("地点を選択", TIDE_STATIONS, format_func=lambda x: x['name'])
 now = datetime.now()
 
-if st.button("🔥 現在時刻の潮位をピンポイントで引く"):
-    cm, hour = get_perfect_hourly_tide(now, code)
+if st.button("🔥 潮位を召喚する"):
+    # GitHubからJSONをロード
+    json_data = get_tide_data(now.year, selected_st['code'])
     
-    if isinstance(cm, int):
-        st.markdown(f"### 🎯 基準時刻: {now.strftime('%H:%M')}")
-        st.metric(label=f"【{hour}:00】の観測潮位", value=f"{cm} cm")
-        st.caption(f"※仕様書に基づき、1〜72カラムから3桁ごとに抽出しました。")
+    if json_data:
+        # 今日の日付のデータをリストから探す
+        today_str = now.strftime('%Y-%m-%d')
+        day_info = next((d for d in json_data['data'] if d['date'] == today_str), None)
+        
+        if day_info:
+            # 1. 現在潮位 (30分単位で最も近い時間を抽出)
+            nearest_hour = now.hour if now.minute < 30 else (now.hour + 1) % 24
+            current_cm = day_info['hourly'][nearest_hour]
+            
+            st.markdown(f"### 🎯 現在の判定時刻: {now.strftime('%H:%M')}")
+            st.metric(label=f"【{nearest_hour}:00】の観測潮位", value=f"{current_cm} cm")
+            
+            # 2. 満干潮イベント表
+            st.markdown("### 📋 本日の満干潮")
+            df_ev = pd.DataFrame(day_info['events'])
+            df_ev.columns = ['時刻', '種別', '潮位(cm)']
+            st.table(df_ev)
+            
+            # 3. 毎時潮位グラフ（おまけだ！）
+            st.markdown("### 📈 24時間の潮位推移")
+            st.line_chart(day_info['hourly'])
+            
+        else:
+            st.error(f"本日（{today_str}）のデータが JSON 内に見当たりません。")
     else:
-        st.error(f"エラー: {cm}")
+        st.error("GitHub からデータを取得できません。URL またはファイル名を確認せよ。")
