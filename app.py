@@ -1,89 +1,65 @@
 import streamlit as st
 import requests
-import re
 from datetime import datetime, timedelta
-import pandas as pd
 
-def get_day_events_final(date, code):
-    url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{date.year}/{code}.txt"
+def get_day_events_standard(date, code):
+    url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{date.year}/{code.upper()}.txt"
     try:
         res = requests.get(url, timeout=5)
         if res.status_code != 200: return []
         
         lines = res.text.splitlines()
-        yy, mm, dd = date.strftime('%y'), str(date.month), str(date.day)
-        pattern = rf"{yy}\s+{mm}\s+{dd}\s*{code}"
+        # 日付文字列を作成 (例: "26 3 3") ※1桁の場合は前にスペースが入る可能性があるが、
+        # 仕様書通りなら 73-78カラム（2桁x3）なので、スライスで探すのが確実。
+        target_line = None
+        yy, mm, dd = date.strftime('%y'), f"{date.month:2d}", f"{date.day:2d}"
         
-        line = next((l for l in lines if re.search(pattern, l)), None)
-        if not line: return []
+        for line in lines:
+            # 73-80カラム付近に "YYMMDDHS" があるかチェック
+            # Pythonのスライスは0始まりなので カラム73-80 は [72:80]
+            if line[72:74] == yy and line[74:76].strip() == str(date.month) and line[76:78].strip() == str(date.day):
+                target_line = line
+                break
+        
+        if not target_line: return []
 
-        # 地点記号(HS)以降の数値をすべて抽出
-        pos = line.find(code)
-        nums = re.findall(r'-?\d+', line[pos + len(code):])
-        
-        # --- 本渡瀬戸(HS)完全適合ロジック ---
-        # nums[0] : 謎の1桁 (無視)
-        # nums[1:9] : 満潮 4ペア [時分, 潮位, 時分, 潮位...]
-        # nums[9] : 謎の数値 (干潮の前の仕切り。これも無視)
-        # nums[10:18] : 干潮 4ペア [時分, 潮位, 時分, 潮位...]
-        
         day_events = []
         date_str = date.strftime('%Y%m%d')
 
-        # 1. 満潮抽出
-        high_tide_data = nums[1:9]
-        for i in range(0, len(high_tide_data), 2):
-            t_str, cm = high_tide_data[i], high_tide_data[i+1]
-            if t_str != "9999" and len(t_str) <= 4:
-                ev_t = datetime.strptime(date_str + t_str.zfill(4), '%Y%m%d%H%M')
-                day_events.append({"time": ev_t, "type": "満潮", "cm": int(cm)})
+        # 1. 満潮解析 (81-108カラム -> スライス [80:108])
+        # 4桁(時刻) + 3桁(潮位) の7文字セットが4つ並んでいる
+        high_part = target_line[80:108]
+        for i in range(0, 28, 7):
+            t_str = high_part[i:i+4]   # 時刻 4桁
+            h_str = high_part[i+4:i+7] # 潮位 3桁
+            if t_str != "9999":
+                ev_t = datetime.strptime(date_str + t_str, '%Y%m%d%H%M')
+                day_events.append({"time": ev_t, "type": "満潮", "cm": int(h_str)})
 
-        # 2. 干潮抽出 (インデックス10から開始)
-        low_tide_data = nums[10:18]
-        for i in range(0, len(low_tide_data), 2):
-            if i+1 < len(low_tide_data):
-                t_str, cm = low_tide_data[i], low_tide_data[i+1]
-                if t_str != "9999" and len(t_str) <= 4:
-                    ev_t = datetime.strptime(date_str + t_str.zfill(4), '%Y%m%d%H%M')
-                    day_events.append({"time": ev_t, "type": "干潮", "cm": int(cm)})
+        # 2. 干潮解析 (109-136カラム -> スライス [108:136])
+        low_part = target_line[108:136]
+        for i in range(0, 28, 7):
+            t_str = low_part[i:i+4]   # 時刻 4桁
+            l_str = low_part[i+4:i+7] # 潮位 3桁
+            if t_str != "9999":
+                ev_t = datetime.strptime(date_str + t_str, '%Y%m%d%H%M')
+                day_events.append({"time": ev_t, "type": "干潮", "cm": int(l_str)})
         
         return day_events
-    except:
+    except Exception as e:
         return []
 
-# --- 実行表示部 ---
-st.title("🌊 満干潮・完全補足デバッガー")
-
-with st.sidebar:
-    code = st.text_input("地点", "HS")
-    test_dt = st.date_input("基準日", datetime.now())
-    test_tm = st.time_input("基準時刻", datetime.now().time())
-    execute = st.button("🔥 執念の再解析")
-
-if execute:
-    base_dt = datetime.combine(test_dt, test_tm)
+# --- 判定部（三日分統合） ---
+def get_tide_context(base_dt, code):
     all_events = []
-    # 前後3日分を結合
+    # 前・今・次の3日分を回す
     for i in [-1, 0, 1]:
-        all_events.extend(get_day_events_final(base_dt + timedelta(days=i), code))
+        all_events.extend(get_day_events_standard(base_dt + timedelta(days=i), code))
     
     all_events.sort(key=lambda x: x['time'])
-
-    # 直前・直後特定
+    
+    # 直前と直後を特定
     prev = next((e for e in reversed(all_events) if e['time'] <= base_dt), None)
     nxt = next((e for e in all_events if e['time'] > base_dt), None)
-
-    # メイン表示
-    c1, c2 = st.columns(2)
-    with c1:
-        if prev: st.metric("🎯 直前のイベント", f"{prev['type']}", f"{prev['time'].strftime('%m/%d %H:%M')} ({prev['cm']}cm)")
-        else: st.error("直前なし")
-    with c2:
-        if nxt: st.metric("⌛ 次のイベント", f"{nxt['type']}", f"{nxt['time'].strftime('%m/%d %H:%M')} ({nxt['cm']}cm)")
-        else: st.error("直後なし")
-
-    st.write("### 📋 解析された全イベント（三日間）")
-    if all_events:
-        st.table(pd.DataFrame(all_events).assign(時刻=lambda d: d['time'].dt.strftime('%m/%d %H:%M'))[['時刻', 'type', 'cm']])
-    else:
-        st.error("イベントが一つも抽出されておらん！")
+    
+    return prev, nxt, all_events
