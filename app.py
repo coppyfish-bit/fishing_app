@@ -1,19 +1,18 @@
 import streamlit as st
 import requests
-from datetime import datetime, timedelta
-import pandas as pd
+from datetime import datetime
 import re
 
-def get_nearest_tide(date, station_code):
+def get_perfect_hourly_tide(date, station_code):
     station_code = station_code.upper()
-    
-    # --- 1. データ取得 ---
     url = f"https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{date.year}/{station_code}.txt"
+    
     try:
         res = requests.get(url, timeout=5)
         if res.status_code != 200: return "取得失敗", None
         
         lines = res.text.splitlines()
+        # 日付と地点記号で行を特定
         yy = date.strftime('%y')
         pattern = rf"{yy}\s+{date.month}\s+{date.day}\s*{station_code}"
         
@@ -25,40 +24,43 @@ def get_nearest_tide(date, station_code):
         
         if not target_line: return "該当日なし", None
 
-        # --- 2. 毎時潮位の塊を24個抽出 ---
-        # 地点記号(HS)より前にある数値をすべて抜き出す
-        pos_code = target_line.find(station_code)
-        hourly_nums = re.findall(r'-?\d+', target_line[:pos_code])
-        
-        if len(hourly_nums) < 24: return "データ欠損", None
-        
-        # --- 3. 最も近い時間のインデックスを特定 ---
-        # 10:30未満なら10時、10:30以上なら11時を「最も近い」とする
+        # --- 仕様書通り：1〜72カラムを3文字ずつ分断 ---
+        hourly_data = []
+        for i in range(24):
+            # 0時(0-3カラム), 1時(3-6カラム)... 
+            # Pythonのスライスは [start:end] なので [0:3], [3:6] となる
+            start = i * 3
+            end = start + 3
+            val_str = target_line[start:end].strip()
+            if val_str:
+                hourly_data.append(int(val_str))
+            else:
+                hourly_data.append(0) # 万が一空なら0
+
+        # --- 最も近い時間を判定 ---
+        # 10:29なら10時、10:30なら11時
         if date.minute < 30:
             nearest_hour = date.hour
         else:
             nearest_hour = (date.hour + 1) % 24
             
-        nearest_cm = int(hourly_nums[nearest_hour])
-        return nearest_cm, nearest_hour
+        return hourly_data[nearest_hour], nearest_hour
 
-    except:
-        return "解析エラー", None
+    except Exception as e:
+        return f"解析エラー: {e}", None
 
 # --- UI部 ---
-st.title("🌊 本渡瀬戸・直近潮位ピンポイント抽出")
+st.title("🌊 本渡瀬戸・3桁固定長 潮位奪取")
 
 code = st.text_input("地点", "HS").upper()
 now = datetime.now()
 
-if st.button("🔥 現在の直近潮位を奪取"):
-    cm, hour = get_nearest_tide(now, code)
+if st.button("🔥 現在時刻の潮位をピンポイントで引く"):
+    cm, hour = get_perfect_hourly_tide(now, code)
     
     if isinstance(cm, int):
-        # ど真ん中に大きく表示
-        st.markdown(f"### 🎯 現在時刻 {now.strftime('%H:%M')} に最も近い潮位")
-        st.metric(label=f"{hour}:00 の観測値", value=f"{cm} cm")
-        
-        st.info(f"💡 30分単位で四捨五入し、{hour}時ちょうどのデータを採用した。")
+        st.markdown(f"### 🎯 基準時刻: {now.strftime('%H:%M')}")
+        st.metric(label=f"【{hour}:00】の観測潮位", value=f"{cm} cm")
+        st.caption(f"※仕様書に基づき、1〜72カラムから3桁ごとに抽出しました。")
     else:
         st.error(f"エラー: {cm}")
