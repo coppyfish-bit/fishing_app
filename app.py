@@ -111,4 +111,6 @@ if st.button("🔥 解析実行"):
         if res["next"]:
             col3.metric("⌛ 次", f"{res['next']['type']}", f"{res['next']['time'].strftime('%m/%d %H:%M')} ({res['next']['cm']}cm)")
         
-        st.table(pd.DataFrame(res["all"]).assign(時刻=lambda x: x['time'].dt.strftime('%m/%d %H:%M'))
+        st.table(pd.DataFrame(res["all"]).assign(時刻=lambda x: x['time'].dt.strftime('%m/%d %H:%M'))[['時刻', 'type', 'cm']])
+    else:
+        st.error("データ取得に失敗。URLまたは地点コード『HS』が2026年データに存在するか確認せよ。")
