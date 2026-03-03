@@ -10,7 +10,7 @@ from datetime import datetime
 GITHUB_USER = "coppyfish-bit"
 REPO_NAME = "fishing_app"
 
-# --- 🖼️ 画像をBase64に変換（アイコン・ヘッダー用） ---
+# --- 🖼️ 画像をBase64に変換（アイコン用） ---
 def get_image_as_base64(file_path):
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -21,22 +21,38 @@ def get_image_as_base64(file_path):
     except:
         return "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
 
-# --- 🔮 JSONデータをGitHubから召喚する関数 ---
-def load_tide_json(code="HS"):
+# --- 🔮 JSONデータをGitHubから召喚し、現在潮位を線形補間する関数 ---
+def load_and_calculate_tide(code="HS"):
     now = datetime.now()
-    year = now.year
-    url = f"https://raw.githubusercontent.com/{GITHUB_USER}/{REPO_NAME}/main/data/{year}/{code}.json"
+    url = f"https://raw.githubusercontent.com/{GITHUB_USER}/{REPO_NAME}/main/data/{now.year}/{code}.json"
     
     try:
         res = requests.get(url)
-        if res.status_code == 200:
-            data = res.json()
-            # 日付の空白対策（"2026- 3- 3" 等に対応）
-            y, m, d = now.year, now.month, now.day
-            t1, t2 = f"{y}-{m:02d}-{d:02d}", f"{y}-{m:>2d}-{d:>2d}"
-            day_data = next((i for i in data['data'] if i['date'].strip() == t1 or i['date'] == t2), None)
-            return day_data, None
-        return None, f"死霊通信失敗 (Status: {res.status_code})"
+        if res.status_code != 200: return None, f"死霊通信失敗 ({res.status_code})"
+        
+        data = res.json()
+        y, m, d = now.year, now.month, now.day
+        t1, t2 = f"{y}-{m:02d}-{d:02d}", f"{y}-{m:>2d}-{d:>2d}"
+        day_info = next((i for i in data['data'] if i['date'].strip() == t1 or i['date'] == t2), None)
+        
+        if not day_info: return None, "本日のデータが深淵に見当たりません"
+
+        # --- 📏 線形補間ロジック（分単位の算出） ---
+        h = now.hour
+        mi = now.minute
+        h1_tide = day_info['hourly'][h]
+        h2_tide = day_info['hourly'][(h + 1) % 24]
+        # 1時間ごとの差分を「分」で割って現在の高さを出す
+        diff = h2_tide - h1_tide
+        current_tide = h1_tide + (diff * (mi / 60.0))
+        
+        return {
+            "current": current_tide,
+            "h1": h1_tide,
+            "h2": h2_tide,
+            "events": day_info['events'],
+            "hourly": day_info['hourly']
+        }, None
     except Exception as e:
         return None, str(e)
 
@@ -54,7 +70,7 @@ def calculate_tide_phase_10(now_time, events):
             next_ev = sorted_events[i]
             break
             
-    if not prev_ev or not next_ev: return "潮止まり（端境期）", 0
+    if not prev_ev or not next_ev: return "潮止まり", 0
 
     fmt = "%H:%M"
     t_prev = datetime.strptime(prev_ev['time'], fmt)
@@ -82,6 +98,7 @@ st.markdown("""
     }
     @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
     .stApp { background-color: #0e1117; }
+    .tide-card { text-align: center; padding: 25px; background: rgba(0, 0, 0, 0.4); border-radius: 20px; border: 2px solid #ff4b4b; margin-bottom: 20px; }
     .user-bubble { align-self: flex-end; background-color: #0084ff; color: white; padding: 10px 15px; border-radius: 18px 18px 2px 18px; max-width: 75%; margin-bottom: 10px; }
     .demon-bubble { align-self: flex-start; background-color: #262730; color: #e0e0e0; padding: 10px 15px; border-radius: 18px 18px 18px 2px; max-width: 80%; border-left: 4px solid #ff4b4b; margin-bottom: 10px; }
     .avatar-img { width: 45px; height: 45px; border-radius: 50%; margin-right: 10px; object-fit: cover; border: 1px solid #ff4b4b; }
@@ -101,23 +118,26 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# --- 🧪 潮汐解析セクション ---
-st.title("🧪 潮汐精密解析実験")
+# --- 🧪 潮汐精密解析セクション ---
+st.title("🧪 リアルタイム潮汐解析")
 if st.button("🔥 現在の潮汐を暴き出せ"):
-    day_info, err = load_tide_json("HS")
-    if day_info:
+    result, err = load_and_calculate_tide("HS")
+    if result:
         now = datetime.now()
-        phase_text, phase_val = calculate_tide_phase_10(now, day_info['events'])
+        phase_text, phase_val = calculate_tide_phase_10(now, result['events'])
         
         st.markdown(f"""
-            <div style="text-align: center; padding: 20px; background: rgba(255, 75, 75, 0.1); border-radius: 15px; border: 2px solid #ff4b4b;">
-                <h1 style="color: #ff4b4b; font-size: 3.5rem; margin: 0;">{phase_text}</h1>
-                <p style="color: #cccccc;">（{now.strftime('%H:%M')} 時点）</p>
+            <div class="tide-card">
+                <p style="color: #888; margin:0;">🎯 {now.strftime('%H:%M')} 推定潮位</p>
+                <h1 style="color: #ffffff; font-size: 4.5rem; margin: 10px 0;">{result['current']:.1f}<span style="font-size: 1.5rem;">cm</span></h1>
+                <h2 style="color: #ff4b4b; margin:0;">{phase_text}</h2>
+                <p style="color: #555; font-size: 0.8rem; margin-top:10px;">{now.hour}:00({result['h1']}cm) → {(now.hour+1)%24}:00({result['h2']}cm) を線形補間</p>
             </div>
         """, unsafe_allow_html=True)
+        
         st.progress(phase_val / 10.0)
-        st.line_chart(day_info['hourly'])
-        st.table(pd.DataFrame(day_info['events']))
+        st.line_chart(result['hourly'])
+        st.table(pd.DataFrame(result['events']))
     else:
         st.error(f"召喚失敗: {err}")
 
