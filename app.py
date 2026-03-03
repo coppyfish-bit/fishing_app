@@ -82,5 +82,59 @@ st.markdown("""
     }
     @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
     .stApp { background-color: #0e1117; }
-    .user-bubble { align-self: flex-end; background-color: #0084ff; color: white; padding: 10px 15px; border-radius: 18px 18px 2px 18px; max-width:
-    
+    .user-bubble { align-self: flex-end; background-color: #0084ff; color: white; padding: 10px 15px; border-radius: 18px 18px 2px 18px; max-width: 75%; margin-bottom: 10px; }
+    .demon-bubble { align-self: flex-start; background-color: #262730; color: #e0e0e0; padding: 10px 15px; border-radius: 18px 18px 18px 2px; max-width: 80%; border-left: 4px solid #ff4b4b; margin-bottom: 10px; }
+    .avatar-img { width: 45px; height: 45px; border-radius: 50%; margin-right: 10px; object-fit: cover; border: 1px solid #ff4b4b; }
+    </style>
+    <div class="maint-banner">
+        <h2 style="margin:0;">⚠️ 🚧 SYSTEM MAINTENANCE 🚧 ⚠️</h2>
+        <p style="margin:5px 0 0 0;">デーモン佐藤が深淵のデータを調整中だ。一般人は立ち去れ。</p>
+    </div>
+""", unsafe_allow_html=True)
+
+# --- 😈 デーモン佐藤・対話セクション ---
+avatar_url = get_image_as_base64("demon_sato.png")
+st.markdown(f"""
+    <div style="display: flex; align-items: center; background: rgba(255, 75, 75, 0.1); padding: 15px; border-radius: 15px; border: 1px solid #ff4b4b; margin-bottom: 20px;">
+        <img src="{avatar_url}" style="width:50px; border-radius:10px; margin-right:15px;">
+        <div><h3 style="color: #ff4b4b; margin:0;">デーモン佐藤</h3><p style="color: #00ff00; font-size: 0.8rem; margin:0;">● 稼働中：深淵の対話プロトコル有効</p></div>
+    </div>
+""", unsafe_allow_html=True)
+
+# --- 🧪 潮汐解析セクション ---
+st.title("🧪 潮汐精密解析実験")
+if st.button("🔥 現在の潮汐を暴き出せ"):
+    day_info, err = load_tide_json("HS")
+    if day_info:
+        now = datetime.now()
+        phase_text, phase_val = calculate_tide_phase_10(now, day_info['events'])
+        
+        st.markdown(f"""
+            <div style="text-align: center; padding: 20px; background: rgba(255, 75, 75, 0.1); border-radius: 15px; border: 2px solid #ff4b4b;">
+                <h1 style="color: #ff4b4b; font-size: 3.5rem; margin: 0;">{phase_text}</h1>
+                <p style="color: #cccccc;">（{now.strftime('%H:%M')} 時点）</p>
+            </div>
+        """, unsafe_allow_html=True)
+        st.progress(phase_val / 10.0)
+        st.line_chart(day_info['hourly'])
+        st.table(pd.DataFrame(day_info['events']))
+    else:
+        st.error(f"召喚失敗: {err}")
+
+# --- 💬 チャットセクション ---
+if "messages" not in st.session_state: st.session_state.messages = []
+for m in st.session_state.messages:
+    role_class = "user-bubble" if m["role"] == "user" else "demon-bubble"
+    content = f'<div style="display: flex; {"justify-content: flex-end" if m["role"] == "user" else ""}; margin-bottom: 10px;">'
+    if m["role"] != "user": content += f'<img src="{avatar_url}" class="avatar-img">'
+    content += f'<div class="{role_class}">{m["content"]}</div></div>'
+    st.markdown(content, unsafe_allow_html=True)
+
+if prompt := st.chat_input("深淵に問え..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    response = model.generate_content(f"あなたは傲慢なプロガイド、デーモン佐藤だ。：{prompt}")
+    st.session_state.messages.append({"role": "assistant", "content": response.text})
+    st.rerun()
