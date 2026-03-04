@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import traceback
 
 # AIとの会話は学習に使用したり外部に漏れたりしません。釣果情報も共有しません。
+# [2026-02-27] Disclaimer: この情報は外部に漏洩したり学習に使用されたりすることはありません。
 
 def show_edit_page(conn, url, weather_func, station_func, tide_func, moon_func, tide_name_func):
     st.subheader("🔄 登録情報の修正・削除")
@@ -29,6 +30,7 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
     if form_ver_key not in st.session_state:
         st.session_state[form_ver_key] = 0
 
+    # --- 再計算ロジック ---
     if st.button(f"🔄 気象・潮汐データを再計算する", key=f"recalc_btn_{idx}", use_container_width=True):
         try:
             with st.status("データ再計算中...", expanded=True):
@@ -43,14 +45,19 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 # 3. 気象データ取得
                 temp, w_s, w_d, rain = weather_func(lat, lon, dt_obj)
                 
-                # 4. 潮汐データ取得 (GitHubから)
-                t_url = f"https://raw.githubusercontent.com/coppyfish-bit/fishing_app/main/data/{dt_obj.year}/{station['code']}.json"
-                d_data = tide_func(t_url, dt_obj) # ここでフェーズも計算される想定
+                # 4. 潮汐データ取得 (get_tide_details を呼び出し)
+                # station['code'] を渡して詳細データ（潮位・フェーズ）を取得
+                d_data = tide_func(station['code'], dt_obj) 
                 
-                # 5. 潮名・月齢
-                t_name = tide_name_func(moon_func(dt_obj))
+                if d_data is None:
+                    st.error("潮汐データの取得に失敗しました。GitHub上のJSONを確認してください。")
+                    return
+
+                # 5. 潮名・月齢の計算
+                moon_age = moon_func(dt_obj)
+                t_name = tide_name_func(moon_age)
                 
-                # セッション保存（d_data['phase'] に "上げ7分" などが入る）
+                # セッション状態に一時保存
                 st.session_state[temp_data_key] = {
                     "temp": temp, "wind_s": w_s, "wind_d": w_d, "rain": rain,
                     "tide_cm": d_data.get('cm', 0),
@@ -58,10 +65,11 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                     "phase": d_data.get('phase', "不明") 
                 }
                 st.session_state[form_ver_key] += 1
-                st.success("再計算完了！フェーズを更新しました。")
+                st.success(f"再計算完了！フェーズ「{d_data.get('phase')}」を反映しました。")
                 st.rerun()
         except Exception as e:
             st.error(f"❌ 取得エラー: {e}")
+            st.code(traceback.format_exc())
 
     # --- フォーム表示 ---
     t_v = st.session_state.get(temp_data_key, {})
@@ -90,7 +98,7 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
         new_tide_cm = c5.number_input("潮位_cm", value=int(get_v("tide_cm", "潮位_cm", 0)))
         new_tide_name = c6.text_input("潮名", value=str(get_v("tide_name", "潮名", "不明")))
         
-        # ここに「上げ7分」などのフェーズが入ります
+        # 潮位フェーズ（上げ○分など）の入力欄
         new_phase = st.text_input("潮位フェーズ (例: 上げ7分)", value=str(get_v("phase", "潮位フェーズ", "不明")))
         
         new_memo = st.text_area("備考", value=str(df.at[idx, '備考']) if '備考' in df.columns else "")
@@ -107,6 +115,7 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 '降水量': new_rain, '潮位_cm': new_tide_cm, '潮名': new_tide_name,
                 '潮位フェーズ': new_phase, '備考': new_memo
             }
+            # 指定されたインデックスに値を書き戻す
             for col, val in updates.items():
                 if col in latest_df.columns:
                     latest_df.at[idx, col] = val
@@ -122,4 +131,5 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 latest_df = latest_df.drop(idx).reset_index(drop=True)
                 conn.update(spreadsheet=url, data=latest_df)
                 st.cache_data.clear()
+                st.success("データを削除しました。")
                 st.rerun()
