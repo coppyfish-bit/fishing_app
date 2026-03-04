@@ -318,8 +318,17 @@ def main():
                     st.error(f"❌ 保存失敗: {e}")
 
     # 他のタブ（編集、ギャラリー等）は既存のまま
-    with tab2: show_edit_page(conn, url)
-    with tab3: show_gallery_page(conn.read(spreadsheet=url, ttl="0s"))
+   # --- tab2: 編集ページ ---
+    with tab2:
+        # 引数に df を追加して、読み込み済みのデータを使えるようにします
+        show_edit_page(conn, url, df) 
+    
+    # --- tab3: ギャラリーページ ---
+    with tab3:
+        # ギャラリーも最新の状態を反映させるため、保存直後などの場合は
+        # キャッシュなしのデータを渡すようにします
+        df_for_gallery = conn.read(spreadsheet=url, ttl="0s")
+        show_gallery_page(df_for_gallery)
     with tab4: show_analysis_page(df)
     with tab5: show_monthly_stats(df)
     with tab6:
@@ -332,3 +341,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
