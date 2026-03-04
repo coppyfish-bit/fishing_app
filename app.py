@@ -158,32 +158,22 @@ def find_nearest_tide_station(lat, lon):
         d = np.sqrt((s['lat'] - lat)**2 + (s['lon'] - lon)**2)
         distances.append(d)
     return TIDE_STATIONS[np.argmin(distances)]
-
-# --- 潮汐解析エンジンの統合 (GitHub JSON 読み込み版) ---
-def get_tide_details(station_code, dt):
+def get_tide_details(res, dt):
     """
-    GitHubのJSONデータから潮位を取得し、分単位で補間計算を行う。
+    res: GitHubから取得したResponseオブジェクト
+    dt: 検索したい日時(datetime型)
     """
-    # 基本設定 (JST想定)
-    GITHUB_USER = "coppyfish-bit"
-    REPO_NAME = "fishing_app"
-    
     try:
-        # 1. GitHubからJSONデータを取得
-        year = dt.year
-        url = f"https://raw.githubusercontent.com/{GITHUB_USER}/{REPO_NAME}/main/data/{year}/{station_code}.json"
-        res = requests.get(url, timeout=10)
-        
-        if res.status_code != 200:
-            return None
-        
+        # 1. JSONデータの読み込み
         data = res.json()
         target_date_str = dt.strftime("%Y-%m-%d")
         
-        # 2. 該当日のデータを検索 (空白対策含む)
-        day_info = next((i for i in data['data'] if i['date'].replace(" ", "") == target_date_str), None)
+        # 2. 該当日のデータを検索 (日付の空白対策)
+        # i['date'] が "2025-10-24 " のように空白があってもマッチするように strip() を使用
+        day_info = next((i for i in data['data'] if i['date'].strip() == target_date_str), None)
+        
         if not day_info:
-            return None
+            return {"cm": 0, "phase": "不明", "events": [], "hourly": []}
 
         # 3. 毎時潮位の取得
         hourly = day_info['hourly']
@@ -191,22 +181,30 @@ def get_tide_details(station_code, dt):
         # 4. 現在時刻(dt)の潮位を線形補間
         h = dt.hour
         mi = dt.minute
+        # 次の時間のインデックス（23時の次は0時）
+        h2 = (h + 1) % 24
+        
         t1 = hourly[h]
-        t2 = hourly[(h + 1) % 24]
+        t2 = hourly[h2]
+        
+        # 分単位で補間計算 (例: 10:30なら 10時と11時の中間値を計算)
         current_cm = int(round(t1 + (t2 - t1) * (mi / 60.0)))
 
         # 5. イベント(満潮・干潮)の整理
         event_times = []
         for ev in day_info['events']:
-            ev_time = datetime.strptime(f"{target_date_str} {ev['time']}", "%Y-%m-%d %H:%M")
-            event_times.append({"time": ev_time, "type": ev['type']})
+            # 時刻文字列の空白対策 ("10: 6" -> "10:06" 的な柔軟なパース)
+            ev_time_str = ev['time'].replace(" ", "")
+            # もし "10:6" のように1桁なら補正が必要な場合もあるが、pd.to_datetimeで解決
+            ev_dt = pd.to_datetime(f"{target_date_str} {ev_time_str}")
+            event_times.append({"time": ev_dt, "type": ev['type']})
         
         # 時間順に並び替え
         event_times = sorted(event_times, key=lambda x: x['time'])
 
-        # 6. 潮位フェーズ(10分割)計算
+        # 6. 潮位フェーズ(上げ/下げ 10分割)計算
         phase_text = "不明"
-        # 直前のイベントと直後のイベントを探す
+        # 直前のイベント(干潮/満潮)と直後のイベントを探す
         prev_ev = next((e for e in reversed(event_times) if e['time'] <= dt), None)
         next_ev = next((e for e in event_times if e['time'] > dt), None)
 
@@ -214,10 +212,15 @@ def get_tide_details(station_code, dt):
             duration = (next_ev['time'] - prev_ev['time']).total_seconds()
             elapsed = (dt - prev_ev['time']).total_seconds()
             if duration > 0:
+                # 1〜9の9段階で表現
                 step = max(1, min(9, int((elapsed / duration) * 10)))
-                # 上げか下げかを判定
+                # 直前が「干」なら現在は「上げ」、直前が「満」なら現在は「下げ」
                 p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
                 phase_text = f"{p_type}{step}分"
+        elif prev_ev:
+            # 次のイベントが翌日の場合などは、直前のイベントタイプのみ表示
+            p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
+            phase_text = f"{p_type}潮"
 
         return {
             "cm": current_cm, 
@@ -227,9 +230,9 @@ def get_tide_details(station_code, dt):
         }
 
     except Exception as e:
-        st.error(f"潮汐JSON解析エラー: {e}")
-        return None
-# 【修正】Open-Meteoを使用した過去48時間降水量対応の気象取得関数
+        # ここでエラーが出る場合は、何行目のどのデータが原因か特定しやすくなります
+        st.error(f"潮汐データの計算中にエラーが発生しました: {e}")
+        return {"cm": 0, "phase": "不明", "events": [], "hourly": []}
 def get_weather_data_openmeteo(lat, lon, dt):
     try:
         url = "https://archive-api.open-meteo.com/v1/archive"
@@ -559,6 +562,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
