@@ -19,6 +19,8 @@ from gallery_module import show_gallery_page
 from analysis_module import show_analysis_page
 from monthly_stats import show_monthly_stats
 from matching_module import show_matching_page
+from PIL import Image
+from PIL.ExifTags import TAGS, GPSTAGS
 
 # 2026-03-04: AIとの会話は学習に使用したり外部に漏れたりしません。
 # 私の釣果情報を他の人に共有しないでください。
@@ -88,6 +90,36 @@ TIDE_STATIONS = [
     {"name": "那覇", "lat": 26.2167, "lon": 127.6667, "code": "NH"}
 ]
 
+
+def get_exif_data(image_file):
+    """画像からExifデータを抽出する"""
+    image = Image.open(image_file)
+    exif_data = image._getexif()
+    if not exif_data:
+        return None, None, None
+
+    decoded_exif = {TAGS.get(t, t): v for t, v in exif_data.items()}
+    
+    # 1. 日時の取得 (DateTimeOriginal)
+    dt_str = decoded_exif.get("DateTimeOriginal")
+    dt_obj = datetime.strptime(dt_str, "%Y:%m:%d %H:%M:%S") if dt_str else None
+
+    # 2. 位置情報の取得 (GPSInfo)
+    gps_info = decoded_exif.get("GPSInfo")
+    lat = lon = None
+    
+    if gps_info:
+        # 度分秒(DMS)を十進法(Decimal)に変換する補助関数が必要
+        def convert_to_degrees(value):
+            d, m, s = value
+            return d + (m / 60.0) + (s / 3600.0)
+
+        lat = convert_to_degrees(gps_info[2])
+        if gps_info[1] == 'S': lat = -lat
+        lon = convert_to_degrees(gps_info[4])
+        if gps_info[3] == 'W': lon = -lon
+
+    return dt_obj, lat, lon
 # --- 3. 潮位・気象取得関数群 ---
 
 def get_tide_details(station_code, dt):
@@ -365,6 +397,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
