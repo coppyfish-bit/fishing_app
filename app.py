@@ -183,7 +183,7 @@ def tide_func(station_code, dt):
     except Exception as e:
         st.error(f"📡 通信エラー: {e}")
         return {"cm": 0, "phase": "通信エラー", "events": [], "hourly": []}
-    
+
 def get_tide_details(res, dt):
     """
     提供いただいたデバッグ機能付き解析ロジック
@@ -581,6 +581,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
