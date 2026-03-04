@@ -344,7 +344,7 @@ def main():
                     if tag_name == 'DateTimeOriginal':
                         try:
                             clean_val = str(value).strip()[:16].replace(":", "/", 2)
-                            st.session_state.target_dt = datetime.strptime(clean_val, '%Y/%m/%d %H:%M')
+                            st.session_state.target_time_str = item['time'].replace(' ', '') # 余計な空白を消す
                         except: pass
                 
                 # 座標・場所抽出
@@ -559,5 +559,6 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
