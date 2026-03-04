@@ -1,54 +1,119 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
+
+# AIとの会話は学習に使用したり外部に漏れたりしません。釣果情報も共有しません。
 
 def show_edit_page(conn, url, weather_func, station_func, tide_func, moon_func, tide_name_func):
-    st.subheader("🧪 潮位取得テストモード")
-    
-    # 1. スプレッドシート読み込み
+    st.subheader("🔄 登録情報の修正・削除")
     df = conn.read(spreadsheet=url, ttl="0s")
     if df.empty:
-        st.error("スプレッドシートが空です。")
+        st.info("データがありません。")
         return
 
-    # 最新の1件を対象にする
-    target_idx = df.index[-1]
-    row = df.loc[target_idx]
+    df_reversed = df.iloc[::-1]
+    labels = [f"ID:{i} | {df.at[i, 'datetime']} | {df.at[i, '場所']}" for i in df_reversed.index]
     
-    st.info(f"対象データ ID:{target_idx} | 日時: {row['datetime']} | 場所: {row['場所']}")
+    selected_label = st.selectbox("編集したいデータを選んでください", options=labels, index=None, key="selector_main")
 
-    if st.button("🚀 この日時の潮位を計算してみる"):
-        with st.container(border=True):
-            try:
-                # --- 工程1: 日時の変換 ---
-                raw_dt = str(row['datetime']).strip()
+    if selected_label:
+        target_idx = int(selected_label.split('|')[0].replace('ID:', '').strip())
+        st.divider()
+        render_edit_form(df, target_idx, conn, url, weather_func, station_func, tide_func, moon_func, tide_name_func)
+
+def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, moon_func, tide_name_func):
+    temp_data_key = f"edit_temp_{idx}"
+    form_ver_key = f"edit_ver_{idx}"
+    
+    if form_ver_key not in st.session_state:
+        st.session_state[form_ver_key] = 0
+
+    # --- 再取得ボタン ---
+    if st.button(f"🔄 気象・潮汐データを再計算する", key=f"recalc_btn_{idx}", use_container_width=True):
+        try:
+            with st.status("データ取得中...", expanded=True):
+                # 日時のパース
+                raw_dt = str(df.at[idx, 'datetime']).strip()
+                while raw_dt.endswith(":"): raw_dt = raw_dt[:-1]
                 dt_obj = pd.to_datetime(raw_dt)
-                st.write(f"① 解析された日時: `{dt_obj}`")
-
-                # --- 工程2: 観測所の特定 ---
-                lat, lon = float(row['lat']), float(row['lon'])
-                station = station_func(lat, lon)
-                st.write(f"② 判定された観測所: `{station['name']}` (Code: {station['code']})")
-
-                # --- 工程3: 潮汐データの取得 ---
-                st.write("③ `tide_func` を実行中...")
-                d_data = tide_func(station['code'], dt_obj)
                 
-                # --- 結果表示 ---
-                st.write("---")
-                st.write("### 📊 取得結果（生データ）")
-                st.json(d_data)
+                lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
+                
+                # 各関数の実行
+                temp, w_s, w_d, rain = weather_func(lat, lon, dt_obj)
+                station = station_func(lat, lon)
+                d_data = tide_func(station['code'], dt_obj)
+                t_name = tide_name_func(moon_func(dt_obj))
+                
+                # セッション保存
+                st.session_state[temp_data_key] = {
+                    "temp": temp, "wind_s": w_s, "wind_d": w_d, "rain": rain,
+                    "tide_cm": d_data.get('cm', 0),
+                    "tide_name": t_name,
+                    "phase": d_data.get('phase', "不明")
+                }
+                st.session_state[form_ver_key] += 1
+                st.success("計算完了！")
+                st.rerun()
+        except Exception as e:
+            st.error(f"❌ 取得エラー: {e}")
 
-                if d_data and d_data.get('cm') != 0:
-                    st.success(f"✅ 成功！ 潮位は {d_data['cm']}cm です。")
-                else:
-                    st.error("❌ 失敗: 潮位が 0cm です。JSONにデータがないか、日時がマッチしていません。")
-                    
-                    # 2026年問題の切り分け
-                    if dt_obj.year == 2026:
-                        st.warning("⚠️ 検索対象が 2026年 です。参照先のJSONファイルが2026年に対応しているか確認が必要です。")
+    # --- フォーム表示 ---
+    t_v = st.session_state.get(temp_data_key, {})
+    has_new = temp_data_key in st.session_state
 
-            except Exception as e:
-                st.exception(e)
+    def get_v(key, col, default):
+        if has_new and key in t_v: return t_v[key]
+        return df.at[idx, col] if col in df.columns and pd.notna(df.at[idx, col]) else default
 
-    st.divider()
-    st.write("※このコードは確認専用です。確認が終わったら元のコードに戻してください。")
+    ver = st.session_state[form_ver_key]
+    with st.form(key=f"edit_form_{idx}_v{ver}"):
+        st.write(f"📝 ID:{idx} のデータを編集")
+        
+        c_f, c_l, c_p = st.columns([2, 1, 2])
+        new_fish = c_f.text_input("魚種", value=str(df.at[idx, '魚種']))
+        new_len = c_l.number_input("全長(cm)", value=float(df.at[idx, '全長_cm']) if '全長_cm' in df.columns else 0.0, step=0.1)
+        new_place = c_p.text_input("場所", value=str(df.at[idx, '場所']))
+        
+        c1, c2, c3 = st.columns(3)
+        new_temp = c1.number_input("気温", value=float(get_v("temp", "気温", 0.0)))
+        new_wind_s = c2.number_input("風速", value=float(get_v("wind_s", "風速", 0.0)))
+        new_wind_d = c3.text_input("風向", value=str(get_v("wind_d", "風向", "不明")))
+        
+        c4, c5, c6 = st.columns(3)
+        new_rain = c4.number_input("降水量", value=float(get_v("rain", "降水量", 0.0)))
+        new_tide_cm = c5.number_input("潮位_cm", value=int(get_v("tide_cm", "潮位_cm", 0)))
+        new_tide_name = c6.text_input("潮名", value=str(get_v("tide_name", "潮名", "不明")))
+        
+        new_phase = st.text_input("潮位フェーズ", value=str(get_v("phase", "潮位フェーズ", "不明")))
+        new_memo = st.text_area("備考", value=str(df.at[idx, '備考']) if '備考' in df.columns else "")
+        
+        st.divider()
+        confirm_del = st.checkbox("このデータを完全に削除する")
+        c_save, c_del = st.columns(2)
+        
+        if c_save.form_submit_button("✅ 更新内容を保存", use_container_width=True):
+            latest_df = conn.read(spreadsheet=url, ttl="0s")
+            # マッピング
+            updates = {
+                '魚種': new_fish, '全長_cm': new_len, '場所': new_place,
+                '気温': new_temp, '風速': new_wind_s, '風向': new_wind_d,
+                '降水量': new_rain, '潮位_cm': new_tide_cm, '潮名': new_tide_name,
+                '潮位フェーズ': new_phase, '備考': new_memo
+            }
+            for col, val in updates.items():
+                if col in latest_df.columns:
+                    latest_df.at[idx, col] = val
+            
+            conn.update(spreadsheet=url, data=latest_df)
+            st.cache_data.clear()
+            st.success("スプレッドシートを更新しました！")
+            st.rerun()
+
+        if c_del.form_submit_button("🗑️ 削除実行", type="primary", use_container_width=True):
+            if confirm_del:
+                latest_df = conn.read(spreadsheet=url, ttl="0s")
+                latest_df = latest_df.drop(idx)
+                conn.update(spreadsheet=url, data=latest_df)
+                st.cache_data.clear()
+                st.rerun()
