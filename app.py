@@ -320,14 +320,15 @@ def main():
     # 他のタブ（編集、ギャラリー等）は既存のまま
 # --- tab2: 登録情報の修正・削除 ---
     with tab2:
+        # edit_module.py の show_edit_page を呼び出す
         show_edit_page(
             conn, 
             url, 
-            get_weather_data_openmeteo,   # 定義済み
-            find_nearest_tide_station,   # 定義済み
-            get_tide_details,            # 定義済み
-            get_moon_age,                # 今追加した関数
-            get_tide_name                # 今追加した関数
+            get_weather_data_openmeteo,   # weather_func に対応
+            find_nearest_tide_station,   # station_func に対応
+            get_tide_details,            # tide_func に対応
+            get_moon_age,                # moon_func に対応
+            get_tide_name                # tide_name_func に対応
         )
     # --- tab3: ギャラリーページ ---
     with tab3:
@@ -347,6 +348,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
