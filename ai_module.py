@@ -1,3 +1,6 @@
+import streamlit as st  # ← これが足りないためにエラーになっています
+import google.generativeai as genai
+# ... その他のインポート ...
 def show_ai_page(conn, url, df, md=None):
     # --- 👿 デーモン佐藤・検問プロトコル ---
     # URLの末尾に「?user=sato」がついているか確認
@@ -36,3 +39,4 @@ def show_ai_page(conn, url, df, md=None):
     st.toast("👿 貴様か、佐藤。開発者権限を確認したぞ。", icon="🔥")
     
     # (ここから下に、貴様がさっき提示した avatar_display_url 以降のコードを繋げる)
+
