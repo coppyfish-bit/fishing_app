@@ -318,18 +318,16 @@ def main():
                     st.error(f"❌ 保存失敗: {e}")
 
     # 他のタブ（編集、ギャラリー等）は既存のまま
-   # --- tab2: 編集ページ ---
+# --- tab2: 登録情報の修正・削除 ---
     with tab2:
-        # show_edit_page に必要な 7つの引数をすべて渡します
-        # weather_func などの名前は、app.py 内で定義/インポートしている関数名に合わせてください
         show_edit_page(
             conn, 
             url, 
-            get_weather_data,    # 天気取得関数
-            get_nearest_station, # 観測点特定関数
-            get_tide_data,       # 潮汐データ取得関数
-            get_moon_age,        # 月齢計算関数
-            get_tide_name        # 潮名判定関数
+            get_weather_data_openmeteo,   # weather_func に対応
+            find_nearest_tide_station,   # station_func に対応
+            get_tide_details,            # tide_func に対応
+            get_moon_age,                # moon_func に対応
+            get_tide_name                # tide_name_func に対応
         )
     
     # --- tab3: ギャラリーページ ---
@@ -350,5 +348,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
