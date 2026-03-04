@@ -160,51 +160,46 @@ def find_nearest_tide_station(lat, lon):
     return TIDE_STATIONS[np.argmin(distances)]
 def get_tide_details(res, dt):
     """
-    res: GitHubから取得したResponseオブジェクト
-    dt: 検索したい日時(datetime型)
+    GitHubのJSONレスポンス(res)から、指定日時(dt)の潮位を解析する。
+    日時文字列に空白が含まれる異常系にも対応。
     """
     try:
-        # 1. JSONデータの読み込み
         data = res.json()
         target_date_str = dt.strftime("%Y-%m-%d")
         
-        # 2. 該当日のデータを検索 (日付の空白対策)
-        # i['date'] が "2025-10-24 " のように空白があってもマッチするように strip() を使用
+        # 1. 該当日のデータを検索 (日付文字列の前後空白をトリム)
         day_info = next((i for i in data['data'] if i['date'].strip() == target_date_str), None)
         
         if not day_info:
             return {"cm": 0, "phase": "不明", "events": [], "hourly": []}
 
-        # 3. 毎時潮位の取得
+        # 2. 毎時潮位の取得
         hourly = day_info['hourly']
         
-        # 4. 現在時刻(dt)の潮位を線形補間
+        # 3. 現在時刻(dt)の潮位を線形補間
         h = dt.hour
         mi = dt.minute
-        # 次の時間のインデックス（23時の次は0時）
         h2 = (h + 1) % 24
         
         t1 = hourly[h]
         t2 = hourly[h2]
         
-        # 分単位で補間計算 (例: 10:30なら 10時と11時の中間値を計算)
+        # 分単位で補間計算
         current_cm = int(round(t1 + (t2 - t1) * (mi / 60.0)))
 
-        # 5. イベント(満潮・干潮)の整理
+        # 4. イベント(満潮・干潮)のパース (空白対策)
         event_times = []
         for ev in day_info['events']:
-            # 時刻文字列の空白対策 ("10: 6" -> "10:06" 的な柔軟なパース)
+            # "10: 6" -> "10:6" への置換とPandasによる柔軟なパース
             ev_time_str = ev['time'].replace(" ", "")
-            # もし "10:6" のように1桁なら補正が必要な場合もあるが、pd.to_datetimeで解決
+            # target_date_strと結合してフル日時で解釈
             ev_dt = pd.to_datetime(f"{target_date_str} {ev_time_str}")
             event_times.append({"time": ev_dt, "type": ev['type']})
         
-        # 時間順に並び替え
         event_times = sorted(event_times, key=lambda x: x['time'])
 
-        # 6. 潮位フェーズ(上げ/下げ 10分割)計算
+        # 5. 潮位フェーズの計算
         phase_text = "不明"
-        # 直前のイベント(干潮/満潮)と直後のイベントを探す
         prev_ev = next((e for e in reversed(event_times) if e['time'] <= dt), None)
         next_ev = next((e for e in event_times if e['time'] > dt), None)
 
@@ -212,13 +207,10 @@ def get_tide_details(res, dt):
             duration = (next_ev['time'] - prev_ev['time']).total_seconds()
             elapsed = (dt - prev_ev['time']).total_seconds()
             if duration > 0:
-                # 1〜9の9段階で表現
                 step = max(1, min(9, int((elapsed / duration) * 10)))
-                # 直前が「干」なら現在は「上げ」、直前が「満」なら現在は「下げ」
                 p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
                 phase_text = f"{p_type}{step}分"
         elif prev_ev:
-            # 次のイベントが翌日の場合などは、直前のイベントタイプのみ表示
             p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
             phase_text = f"{p_type}潮"
 
@@ -230,8 +222,8 @@ def get_tide_details(res, dt):
         }
 
     except Exception as e:
-        # ここでエラーが出る場合は、何行目のどのデータが原因か特定しやすくなります
-        st.error(f"潮汐データの計算中にエラーが発生しました: {e}")
+        # ログにエラーを表示（実際のアプリ画面には出さず、内部的に0を返す）
+        print(f"DEBUG: 潮汐解析エラー: {e}")
         return {"cm": 0, "phase": "不明", "events": [], "hourly": []}
 def get_weather_data_openmeteo(lat, lon, dt):
     try:
@@ -562,6 +554,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
