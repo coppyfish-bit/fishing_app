@@ -165,25 +165,26 @@ import streamlit as st
 
 def tide_func(station_code, dt):
     """
-    GitHubからデータを取得し、その『Responseオブジェクト』を解析関数に渡す。
+    GitHubからデータを取得し、その『結果オブジェクト(res)』を解析関数に渡す。
     """
     year = dt.year
     user = "coppyfish-bit"
     repo = "fishing_app" 
     
+    # 1. URL文字列を作成
     url = f"https://raw.githubusercontent.com/{user}/{repo}/main/data/{year}/{station_code}.json"
     
     try:
-        # 1. 通信を実行
+        # 2. 通信を実行。res という変数に通信結果を入れる
         res = requests.get(url)
         
-        # 2. 通信が成功したかチェック
         if res.status_code == 200:
-            # --- 重要：ここで res (Responseオブジェクト) をそのまま渡す ---
-            # ここで url (文字列) を渡してしまうと 'str' object has no attribute 'json' エラーになります
+            # 【重要】ここを間違えないでください！
+            # 〇 正解: return get_tide_details(res, dt)  <- res(通信結果)を渡す
+            # × 間違い: return get_tide_details(url, dt)  <- url(文字列)を渡すとエラーになる
             return get_tide_details(res, dt)
         else:
-            st.error(f"🌐 データが見つかりません: {url}")
+            st.error(f"🌐 ファイルが見つかりません: {url}")
             return {"cm": 0, "phase": "ファイルなし"}
             
     except Exception as e:
@@ -607,6 +608,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
