@@ -323,13 +323,12 @@ def main():
         show_edit_page(
             conn, 
             url, 
-            get_weather_data_openmeteo,   # weather_func に対応
-            find_nearest_tide_station,   # station_func に対応
-            get_tide_details,            # tide_func に対応
-            get_moon_age,   # ← これで NameError が解消されます
-            get_tide_name    # ← これもセットで必要です
+            get_weather_data_openmeteo,   # 定義済み
+            find_nearest_tide_station,   # 定義済み
+            get_tide_details,            # 定義済み
+            get_moon_age,                # 今追加した関数
+            get_tide_name                # 今追加した関数
         )
-    
     # --- tab3: ギャラリーページ ---
     with tab3:
         # ギャラリーも最新の状態を反映させるため、保存直後などの場合は
@@ -348,6 +347,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
