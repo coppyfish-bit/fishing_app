@@ -21,24 +21,23 @@ def get_exif_datetime(uploaded_file):
         for tag_id, value in exif_data.items():
             tag = TAGS.get(tag_id, tag_id)
             if tag == "DateTimeOriginal":
+                # EXIF形式 "YYYY:MM:DD HH:MM:SS" をパース
                 return datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
         return None
     except:
         return None
 
-# --- 🔮 指定日時の潮位を算出する関数 ---
+# --- 🔮 指定日時の潮位を算出する関数（JST/空白対策済） ---
 def calculate_tide_at_time(target_dt, code="HS"):
-    # 指定された日時のJSONを読み込む
     url = f"https://raw.githubusercontent.com/{GITHUB_USER}/{REPO_NAME}/main/data/{target_dt.year}/{code}.json"
     try:
         res = requests.get(url)
         if res.status_code != 200: return None, f"データ召喚失敗({res.status_code})"
         data = res.json()
         
-        # 日付マッチング
+        # 日付マッチング（空白やゼロ埋めの有無を無視して比較）
         t1 = target_dt.strftime("%Y-%m-%d")
-        t2 = target_dt.strftime("%Y-%-m-%-d") # 空白・ゼロ埋めなし対策
-        day_info = next((i for i in data['data'] if i['date'].strip() in [t1, t2]), None)
+        day_info = next((i for i in data['data'] if i['date'].replace(" ", "") == t1 or i['date'].strip() == t1), None)
         
         if not day_info: return None, f"{t1}のデータが深淵に存在しません"
 
@@ -51,29 +50,30 @@ def calculate_tide_at_time(target_dt, code="HS"):
         
         return {
             "current": current_tide,
+            "h1": h1_tide,
+            "h2": h2_tide,
             "events": day_info['events'],
             "hourly": day_info['hourly']
         }, None
     except Exception as e:
         return None, str(e)
 
-# --- 📏 潮汐10分割算出（時間形式エラー対策版） ---
+# --- 📏 潮汐10分割算出（時間形式エラー鉄壁ガード版） ---
 def calculate_tide_phase_10(now_time, events):
     if not events: return "データなし", 0
     
-    # 1. 時間の空白を削除してソート
+    # データの正規化
+    norm_events = []
     for ev in events:
-        ev['time'] = ev['time'].strip()
+        clean_time = ev['time'].strip().zfill(5) # " 3:59" -> "03:59"
+        norm_events.append({"time": clean_time, "type": ev['type']})
         
-    sorted_events = sorted(events, key=lambda x: x['time'])
+    sorted_events = sorted(norm_events, key=lambda x: x['time'])
     now_str = now_time.strftime("%H:%M")
     
     prev_ev, next_ev = None, None
     for i in range(len(sorted_events)):
-        # 0埋めなしの比較にも対応させるため、一度数値や正規化された形式で比較するのが安全だが、
-        # ここでは文字列表現を整えて比較する
-        current_ev_time = sorted_events[i]['time'].zfill(5) # "3:59" -> "03:59"
-        if current_ev_time <= now_str:
+        if sorted_events[i]['time'] <= now_str:
             prev_ev = sorted_events[i]
         else:
             next_ev = sorted_events[i]
@@ -81,23 +81,13 @@ def calculate_tide_phase_10(now_time, events):
             
     if not prev_ev or not next_ev: return "潮止まり", 0
 
-    # 2. 👿 フォーマット不一致を破壊する解析ロジック
-    def parse_time_flexibly(time_str):
-        # " 3:59" や "3:59" を "03:59" として解釈する
-        time_str = time_str.strip()
-        try:
-            return datetime.strptime(time_str, "%H:%M")
-        except ValueError:
-            # 0埋めされていない形式（例: "3:59"）にも対応
-            return datetime.strptime(time_str, "%H:%M" if ":" in time_str else "%H")
-
-    t_prev = parse_time_flexibly(prev_ev['time'])
-    t_next = parse_time_flexibly(next_ev['time'])
-    t_now = datetime.strptime(now_str, "%H:%M")
+    fmt = "%H:%M"
+    t_prev = datetime.strptime(prev_ev['time'], fmt)
+    t_next = datetime.strptime(next_ev['time'], fmt)
+    t_now = datetime.strptime(now_str, fmt)
     
     total_min = (t_next - t_prev).total_seconds() / 60
-    # もし日付を跨ぐ場合（23時から01時など）の計算補正
-    if total_min < 0: total_min += 1440 
+    if total_min < 0: total_min += 1440 # 日またぎ補正
     
     elapsed_min = (t_now - t_prev).total_seconds() / 60
     if elapsed_min < 0: elapsed_min += 1440
@@ -107,3 +97,55 @@ def calculate_tide_phase_10(now_time, events):
     
     label = "📈 上げ" if prev_ev['type'] == 'low' else "📉 下げ"
     return f"{label} {phase_num} 分", phase_num
+
+# --- 🎨 画面構成 ---
+st.set_page_config(page_title="デーモン佐藤・深淵の祭壇", layout="centered")
+
+st.markdown("""
+    <style>
+    .stApp { background-color: #0e1117; }
+    .tide-card { text-align: center; padding: 25px; background: rgba(0, 255, 0, 0.05); border-radius: 20px; border: 2px dashed #00ff00; margin-bottom: 20px; }
+    </style>
+""", unsafe_allow_html=True)
+
+st.title("📸 釣果写真・海況復元プロトコル")
+st.write("写真を捧げよ。EXIFから刻を遡り、その瞬間の天草の海を再現する。")
+
+uploaded_file = st.file_uploader("写真をアップロード (JPEGのみ)", type=["jpg", "jpeg"])
+
+if uploaded_file:
+    with st.spinner("EXIF解析中..."):
+        photo_dt = get_exif_datetime(uploaded_file)
+        
+        if photo_dt:
+            st.success(f"🎯 撮影日時を検知: {photo_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            # 指定日時のデータで計算
+            result, err = calculate_tide_at_time(photo_dt)
+            
+            if result:
+                phase_text, _ = calculate_tide_phase_10(photo_dt, result['events'])
+                
+                st.markdown(f"""
+                    <div class="tide-card">
+                        <p style="color: #00ff00; margin:0;">⌛️ 復元された潮位</p>
+                        <h1 style="color: #ffffff; font-size: 4rem; margin: 10px 0;">{result['current']:.1f}<span style="font-size: 1.5rem;">cm</span></h1>
+                        <h2 style="color: #00ff00; margin:0;">{phase_text}</h2>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                st.image(uploaded_file, caption=f"撮影時: {photo_dt.strftime('%H:%M')}", use_container_width=True)
+                
+                # 撮影日の潮汐グラフ
+                st.markdown(f"### 📅 {photo_dt.strftime('%Y-%m-%d')} の潮汐グラフ")
+                st.line_chart(result['hourly'])
+            else:
+                st.error(f"解析失敗: {err}")
+        else:
+            st.error("🚨 EXIFが見つからん。SNS等で加工されていない、カメラの生データを捧げよ。")
+
+# 😈 デーモン佐藤への相談
+st.markdown("---")
+st.write("この潮回りでなぜ釣れたのか、デーモン佐藤に分析させるか？")
+if st.button("😈 デーモン分析を開始する"):
+    st.info("ここに分析結果を表示するロジックを組むことも可能だ。")
