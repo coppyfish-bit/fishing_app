@@ -161,24 +161,22 @@ def find_nearest_tide_station(lat, lon):
 
 def tide_func(station_code, dt):
     """
-    GitHubのパス構造 data/{year}/{code}.json に基づいてデータを取得
+    GitHubから潮汐JSONを取得し、そのまま解析して辞書を返す。
     """
     year = dt.year
     user = "coppyfish-bit"
-    # 画像からリポジトリ名を fishing_app と推測
     repo = "fishing_app" 
     
-    # Rawデータ取得用のURLを動的に生成
+    # 1. 正しいRawデータのURLを作成
     url = f"https://raw.githubusercontent.com/{user}/{repo}/main/data/{year}/{station_code}.json"
     
     try:
         res = requests.get(url)
         if res.status_code == 200:
+            # --- 重要：ここで get_tide_details に「Responseオブジェクト(res)」を渡す ---
             return get_tide_details(res, dt)
         else:
-            st.error(f"🌐 データが見つかりません: {year}年/{station_code}.json")
-            # デバッグ用にURLを表示（後で消してOK）
-            st.caption(f"Debug URL: {url}")
+            st.error(f"🌐 データ未検出 (404): {year}年/{station_code}.json")
             return {"cm": 0, "phase": "ファイルなし", "events": [], "hourly": []}
     except Exception as e:
         st.error(f"📡 通信エラー: {e}")
@@ -186,33 +184,28 @@ def tide_func(station_code, dt):
 
 def get_tide_details(res, dt):
     """
-    提供されたデバッグ機能付きの解析ロジック
+    Responseオブジェクト(res)を受け取って、中身をパースする。
     """
     try:
+        # ここで .json() を実行（res が Responseオブジェクトなら成功する）
         data = res.json()
         
-        # 解析ログを折りたたみ表示
-        with st.expander("🔍 潮汐データ解析ログ", expanded=False):
-            st.write(f"📂 JSONデータ件数: {len(data.get('data', []))}件")
-            if len(data.get('data', [])) > 0:
-                first = data['data'][0].get('date')
-                last = data['data'][-1].get('date')
-                st.write(f"📅 収録範囲: {first} ～ {last}")
-
         target_date_str = dt.strftime("%Y-%m-%d")
+        
+        # 1. 該当日のデータを検索
         day_info = next((i for i in data['data'] if i['date'].strip() == target_date_str), None)
         
         if not day_info:
             return {"cm": 0, "phase": "当日データなし", "events": [], "hourly": []}
 
-        # 潮位補間計算
+        # 2. 潮位の線形補間計算
         hourly = day_info['hourly']
         h, mi = dt.hour, dt.minute
         h2 = (h + 1) % 24
         t1, t2 = hourly[h], hourly[h2]
         current_cm = int(round(t1 + (t2 - t1) * (mi / 60.0)))
 
-        # イベント解析
+        # 3. イベント解析 (空白対策済み)
         event_times = []
         for ev in day_info['events']:
             ev_time_str = ev['time'].replace(" ", "")
@@ -221,7 +214,7 @@ def get_tide_details(res, dt):
         
         event_times = sorted(event_times, key=lambda x: x['time'])
 
-        # フェーズ判定
+        # 4. 潮位フェーズ判定
         phase_text = "不明"
         prev_ev = next((e for e in reversed(event_times) if e['time'] <= dt), None)
         next_ev = next((e for e in event_times if e['time'] > dt), None)
@@ -237,11 +230,18 @@ def get_tide_details(res, dt):
             p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
             phase_text = f"{p_type}潮"
 
-        return {"cm": current_cm, "phase": phase_text, "events": event_times, "hourly": hourly}
+        return {
+            "cm": current_cm, 
+            "phase": phase_text, 
+            "events": event_times, 
+            "hourly": hourly
+        }
 
     except Exception as e:
-        st.error(f"⚠️ 解析エラー: {e}")
+        # このエラーメッセージが出なくなるはず
+        st.error(f"⚠️ 解析ロジック内エラー: {e}")
         return {"cm": 0, "phase": "解析失敗", "events": [], "hourly": []}
+        
 def get_weather_data_openmeteo(lat, lon, dt):
     try:
         url = "https://archive-api.open-meteo.com/v1/archive"
@@ -571,6 +571,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
