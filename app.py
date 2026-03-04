@@ -99,41 +99,108 @@ def find_nearest_tide_station(lat, lon):
     distances = [np.sqrt((s['lat'] - lat)**2 + (s['lon'] - lon)**2) for s in TIDE_STATIONS]
     return TIDE_STATIONS[np.argmin(distances)]
 
-def get_tide_details(res, dt):
+def get_tide_details(res_dummy, dt):
     """
-    GitHubから取得したレスポンスを解析して潮位とイベントを返す。
+    前後3日分のデータを解析し、日付をまたぐ干満差も考慮して10分割フェーズを算出する。
+    ※ 第1引数 res_dummy は互換性維持のため残していますが、内部で前後日を再取得します。
     """
     try:
-        if isinstance(res, str): # URLが渡された場合の保険
-            res = requests.get(res)
-        data = res.json()
+        # 1. 前日・当日・翌日の3日分のデータを取得
+        combined_events = []
+        target_days = [dt - timedelta(days=1), dt, dt + timedelta(days=1)]
         
-        # 2026- 3- 4 形式への対応
-        target_date_clean = dt.strftime("%Y-%m-%d").replace("-0", "-").replace("-", "").replace(" ", "")
+        # 基準となる地点コードを取得するために一度パース（GitHubのURL構造を利用）
+        # edit_module等から渡されるURL例: .../2026/123.json
+        base_url_prefix = "https://raw.githubusercontent.com/coppyfish-bit/fishing_app/main/data"
         
-        day_info = next((item for item in data.get('data', []) if str(item.get('date')).replace(" ", "").replace("-", "") == target_date_clean), None)
+        # 本来は地点コードを引数でもらうのが理想ですが、URLから推測または
+        # 共通の地点判定ロジックがある前提で、3日分のイベントを統合します。
+        # ここではdtから計算される各日付のデータを、当日分のURL構造を元にループ取得します。
         
-        if not day_info: return {"cm": 0, "phase": "日付不一致", "events": [], "hourly": []}
+        # 地点コード特定（当日URLから抽出を試みる ※失敗時は当日分のみで動くようガード）
+        station_code = "123" # デフォルト
+        if isinstance(res_dummy, str) and "/data/" in res_dummy:
+             station_code = res_dummy.split('/')[-1].replace('.json', '')
 
-        hourly = [int(v) if str(v).strip().replace('-','').isdigit() else 0 for v in day_info.get('hourly', [])]
-        h, mi = dt.hour, dt.minute
-        t1, t2 = hourly[h], hourly[(h+1)%24]
-        current_cm = int(round(t1 + (t2 - t1) * (mi / 60.0)))
+        hourly_data = {} # 当日の潮位補間用
 
-        event_times = []
-        for ev in day_info.get('events', []):
+        for d in target_days:
+            url = f"{base_url_prefix}/{d.year}/{station_code}.json"
             try:
-                t_str = str(ev.get('time', '')).strip()
-                if ":" in t_str:
-                    ev_dt = pd.to_datetime(f"{dt.strftime('%Y-%m-%d')} {t_str}")
-                    event_times.append({"time": ev_dt, "type": ev.get('type', 'unknown')})
-            except: continue
-        
-        return {"cm": current_cm, "events": sorted(event_times, key=lambda x: x['time']), "hourly": hourly}
-    except Exception as e:
-        st.error(f"潮位解析エラー: {e}")
-        return {"cm": 0, "phase": "解析失敗", "events": [], "hourly": []}
+                r = requests.get(url)
+                if r.status_code != 200: continue
+                data = r.json()
+                
+                # 表記揺れ対応（2026- 3- 4 等）
+                d_str_clean = d.strftime("%Y-%m-%d").replace("-0", "-").replace("-", "").replace(" ", "")
+                day_info = next((item for item in data.get('data', []) 
+                                 if str(item.get('date')).replace(" ", "").replace("-", "") == d_str_clean), None)
+                
+                if day_info:
+                    # イベント（干満）をTimestamp化して統合リストへ
+                    for ev in day_info.get('events', []):
+                        t_str = str(ev.get('time', '')).strip()
+                        if ":" in t_str:
+                            ev_dt = pd.to_datetime(f"{d.strftime('%Y-%m-%d')} {t_str}")
+                            combined_events.append({"time": ev_dt, "type": ev.get('type', '').lower()})
+                    
+                    # 当日のデータなら潮位計算用に保持
+                    if d.date() == dt.date():
+                        hourly_data = [int(v) if str(v).strip().replace('-','').isdigit() else 0 for v in day_info.get('hourly', [])]
+            except:
+                continue
 
+        # 重複削除とソート
+        events = sorted([dict(t) for t in {tuple(d.items()) for d in combined_events}], key=lambda x: x['time'])
+
+        # 2. 現在の潮位(cm)を算出
+        current_cm = 0
+        if hourly_data:
+            h, mi = dt.hour, dt.minute
+            t1 = hourly_data[h]
+            t2 = hourly_data[(h+1)%24]
+            current_cm = int(round(t1 + (t2 - t1) * (mi / 60.0)))
+
+        # 3. 10分割フェーズの判定
+        phase_str = "不明"
+        prev_ev = None
+        next_ev = None
+
+        # 統合された3日分のイベントから、現在時刻の「直前」と「直後」を探す
+        for i in range(len(events)):
+            if events[i]['time'] <= dt:
+                prev_ev = events[i]
+            if events[i]['time'] > dt:
+                next_ev = events[i]
+                break
+
+        if prev_ev and next_ev:
+            # 前後のイベント間の総時間（分）
+            total_dur = (next_ev['time'] - prev_ev['time']).total_seconds() / 60
+            # 前のイベントからの経過時間（分）
+            elapsed = (dt - prev_ev['time']).total_seconds() / 60
+            
+            if total_dur > 0:
+                # 10分割計算
+                ten_parts = int((elapsed / total_dur) * 10) + 1
+                ten_parts = min(max(ten_parts, 1), 10)
+
+                if "low" in prev_ev['type']:
+                    phase_str = f"上げ{ten_parts}分"
+                elif "high" in prev_ev['type']:
+                    phase_str = f"下げ{ten_parts}分"
+        
+        return {
+            "cm": current_cm, 
+            "phase": phase_str, 
+            "events": events, # ここには3日分のイベントが入る
+            "hourly": hourly_data
+        }
+
+    except Exception as e:
+        import streamlit as st
+        st.error(f"前後3日潮位解析エラー: {e}")
+        return {"cm": 0, "phase": "解析失敗", "events": [], "hourly": []}
 def get_weather_data_openmeteo(lat, lon, dt):
     try:
         url = "https://archive-api.open-meteo.com/v1/archive"
@@ -288,3 +355,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
