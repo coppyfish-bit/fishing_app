@@ -4,7 +4,7 @@ import requests
 import google.generativeai as genai
 import os
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 # --- 👿 設定：リポジトリ情報 ---
 GITHUB_USER = "coppyfish-bit"
@@ -21,9 +21,12 @@ def get_image_as_base64(file_path):
     except:
         return "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
 
-# --- 🔮 JSONデータ取得とリアルタイム潮位補間 ---
+# --- 🔮 JSONデータ取得とリアルタイム潮位補間（JST修正版） ---
 def load_and_calculate_tide(code="HS"):
-    now = datetime.now()
+    # ⚡️ UTCから日本時間(JST)へ強制変換
+    jst = timezone(timedelta(hours=+9), 'JST')
+    now = datetime.now(jst) 
+    
     url = f"https://raw.githubusercontent.com/{GITHUB_USER}/{REPO_NAME}/main/data/{now.year}/{code}.json"
     
     try:
@@ -36,9 +39,9 @@ def load_and_calculate_tide(code="HS"):
         t1, t2 = f"{y}-{m:02d}-{d:02d}", f"{y}-{m:>2d}-{d:>2d}"
         day_info = next((i for i in data['data'] if i['date'].strip() == t1 or i['date'] == t2), None)
         
-        if not day_info: return None, "本日のデータが深淵に見当たりません"
+        if not day_info: return None, f"本日のデータ({t1})が深淵に見当たりません"
 
-        # 📏 線形補間（分単位の算出）
+        # 📏 精密な線形補間
         h = now.hour
         mi = now.minute
         h1_tide = day_info['hourly'][h]
@@ -52,12 +55,13 @@ def load_and_calculate_tide(code="HS"):
             "h2": h2_tide,
             "events": day_info['events'],
             "hourly": day_info['hourly'],
-            "date": day_info['date']
+            "date": day_info['date'],
+            "jst_now": now
         }, None
     except Exception as e:
         return None, str(e)
 
-# --- 📏 潮汐10分割（上げ/下げ○分）算出 ---
+# --- 📏 潮汐10分割（上げ/下げ○分）算出（JST対応） ---
 def calculate_tide_phase_10(now_time, events):
     if not events: return "データなし", 0
     sorted_events = sorted(events, key=lambda x: x['time'])
@@ -86,7 +90,7 @@ def calculate_tide_phase_10(now_time, events):
     label = "📈 上げ" if prev_ev['type'] == 'low' else "📉 下げ"
     return f"{label} {phase_num} 分", phase_num
 
-# --- 🎨 画面基本設定 ---
+# --- 🎨 画面構成 ---
 st.set_page_config(page_title="デーモン佐藤・深淵の祭壇", layout="centered")
 
 st.markdown("""
@@ -98,56 +102,54 @@ st.markdown("""
         margin-bottom: 20px; animation: blink 2s infinite;
     }
     @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
-    .tide-card { text-align: center; padding: 25px; background: rgba(0, 0, 0, 0.4); border-radius: 20px; border: 2px solid #ff4b4b; margin-bottom: 20px; }
+    .tide-card { text-align: center; padding: 25px; background: rgba(0, 0, 0, 0.5); border-radius: 20px; border: 2px solid #ff4b4b; margin-bottom: 20px; }
     .user-bubble { align-self: flex-end; background-color: #0084ff; color: white; padding: 10px 15px; border-radius: 18px 18px 2px 18px; max-width: 75%; margin-bottom: 10px; }
     .demon-bubble { align-self: flex-start; background-color: #262730; color: #e0e0e0; padding: 10px 15px; border-radius: 18px 18px 18px 2px; max-width: 80%; border-left: 4px solid #ff4b4b; margin-bottom: 10px; }
     .avatar-img { width: 45px; height: 45px; border-radius: 50%; margin-right: 10px; object-fit: cover; border: 1px solid #ff4b4b; }
     </style>
 """, unsafe_allow_html=True)
 
-# 🚧 メンテナンス・バナー
-st.markdown('<div class="maint-banner"><h2 style="margin:0;">⚠️ 🚧 SYSTEM MAINTENANCE 🚧 ⚠️</h2><p style="margin:5px 0 0 0;">デーモン佐藤がデータを調整中だ。一般人は立ち去れ。</p></div>', unsafe_allow_html=True)
+# 🚧 バナー
+st.markdown('<div class="maint-banner"><h2 style="margin:0;">⚠️ 🚧 SYSTEM MAINTENANCE 🚧 ⚠️</h2><p style="margin:5px 0 0 0;">デーモン佐藤が日本標準時を同期中だ。一般人は立ち去れ。</p></div>', unsafe_allow_html=True)
 
 # 😈 ヘッダー
 avatar_url = get_image_as_base64("demon_sato.png")
 st.markdown(f"""
     <div style="display: flex; align-items: center; background: rgba(255, 75, 75, 0.1); padding: 15px; border-radius: 15px; border: 1px solid #ff4b4b; margin-bottom: 20px;">
         <img src="{avatar_url}" style="width:50px; border-radius:10px; margin-right:15px;">
-        <div><h3 style="color: #ff4b4b; margin:0;">デーモン佐藤</h3><p style="color: #00ff00; font-size: 0.8rem; margin:0;">● 稼働中：深淵の全プロトコル有効</p></div>
+        <div><h3 style="color: #ff4b4b; margin:0;">デーモン佐藤</h3><p style="color: #00ff00; font-size: 0.8rem; margin:0;">● 稼働中：JST同期プロトコル完了</p></div>
     </div>
 """, unsafe_allow_html=True)
 
-# --- 🧪 潮汐精密解析セクション ---
-st.title("🧪 超精密・潮汐解析エンジン")
+# --- 🧪 潮汐解析セクション ---
+st.title("🧪 超精密・JST潮汐エンジン")
 if st.button("🔥 現在の海況を暴き出せ"):
     result, err = load_and_calculate_tide("HS")
     if result:
-        now = datetime.now()
+        now = result['jst_now'] # 日本時間
         phase_text, phase_val = calculate_tide_phase_10(now, result['events'])
         
-        # 1. 現在のメインカード
         st.markdown(f"""
             <div class="tide-card">
-                <p style="color: #888; margin:0;">🎯 {now.strftime('%H:%M')} 推定潮位</p>
+                <p style="color: #888; margin:0;">🎯 {now.strftime('%H:%M')} (JST) 推定潮位</p>
                 <h1 style="color: #ffffff; font-size: 4.5rem; margin: 10px 0;">{result['current']:.1f}<span style="font-size: 1.5rem;">cm</span></h1>
                 <h2 style="color: #ff4b4b; margin:0;">{phase_text}</h2>
+                <p style="color: #555; font-size: 0.8rem; margin-top:10px;">{now.hour}:00({result['h1']}cm) ➡ {(now.hour+1)%24}:00({result['h2']}cm) を線形補間</p>
             </div>
         """, unsafe_allow_html=True)
         
         st.progress(phase_val / 10.0)
         st.line_chart(result['hourly'])
 
-        # 2. 👿 【新規】分単位の精密計算表を最優先で表示
-        st.markdown(f"### 📋 潮汐精密データ（{now.strftime('%H:%M')} 現在）")
+        st.markdown(f"### 📋 潮汐精密データ（{now.strftime('%H:%M')}）")
         current_summary = pd.DataFrame([{
             "時刻": now.strftime("%H:%M"),
             "状態": phase_text.replace("📈 ", "").replace("📉 ", ""),
             "推算潮位": f"{result['current']:.1f} cm",
-            "前時との差": f"{result['h2'] - result['h1']} cm/h"
+            "時速": f"{result['h2'] - result['h1']} cm/h"
         }])
         st.table(current_summary)
 
-        # 3. 24時間毎時リスト
         st.markdown("### 📅 本日の毎時潮位（0時〜23時）")
         tide_list = result['hourly']
         col_a, col_b = st.columns(2)
@@ -157,7 +159,6 @@ if st.button("🔥 現在の海況を暴き出せ"):
             if i < 12: col_a.write(txt)
             else: col_b.write(txt)
 
-        # 4. 予測イベント（固定データ）
         st.markdown("### 📋 予測イベント（満潮・干潮）")
         st.table(pd.DataFrame(result['events']))
     else:
