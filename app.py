@@ -275,7 +275,7 @@ def main():
     def get_all_data(_conn, _url):
         # メインデータと場所マスターを一度に取得
         d_main = _conn.read(spreadsheet=_url, ttl="10m")
-        d_master = _conn.read(spreadsheet=_url, worksheet="place_master", ttl="1h")
+        d_master = _conn.read(spreadsheet=_url, worksheet="place_master", ttl="24h")
         return d_main, d_master
     
     conn = st.connection("gsheets", type=GSheetsConnection)
@@ -559,4 +559,5 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
