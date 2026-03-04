@@ -165,6 +165,13 @@ def get_tide_details(res, dt):
     """
     try:
         data = res.json()
+        # --- ここからデバッグ用 ---
+        st.write(f"📂 JSON内のデータ件数: {len(data.get('data', []))}件")
+        if len(data.get('data', [])) > 0:
+            first_date = data['data'][0].get('date')
+            last_date = data['data'][-1].get('date')
+            st.write(f"📅 データの範囲: {first_date} ～ {last_date}")
+        # --- ここまで ---
         target_date_str = dt.strftime("%Y-%m-%d")
         
         # 1. 該当日のデータを検索 (日付文字列の前後空白をトリム)
@@ -554,6 +561,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
