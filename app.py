@@ -320,8 +320,17 @@ def main():
     # 他のタブ（編集、ギャラリー等）は既存のまま
    # --- tab2: 編集ページ ---
     with tab2:
-        # 引数に df を追加して、読み込み済みのデータを使えるようにします
-        show_edit_page(conn, url, df) 
+        # show_edit_page に必要な 7つの引数をすべて渡します
+        # weather_func などの名前は、app.py 内で定義/インポートしている関数名に合わせてください
+        show_edit_page(
+            conn, 
+            url, 
+            get_weather_data,    # 天気取得関数
+            get_nearest_station, # 観測点特定関数
+            get_tide_data,       # 潮汐データ取得関数
+            get_moon_age,        # 月齢計算関数
+            get_tide_name        # 潮名判定関数
+        )
     
     # --- tab3: ギャラリーページ ---
     with tab3:
@@ -341,4 +350,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
