@@ -159,38 +159,43 @@ def find_nearest_tide_station(lat, lon):
         distances.append(d)
     return TIDE_STATIONS[np.argmin(distances)]
 
+import requests
+import streamlit as st
+
 def tide_func(station_code, dt):
     """
-    GitHubから潮汐JSONを取得し、そのまま解析して辞書を返す。
+    GitHubからデータを取得し、その『Responseオブジェクト』を解析関数に渡す。
     """
     year = dt.year
     user = "coppyfish-bit"
     repo = "fishing_app" 
     
-    # 1. 正しいRawデータのURLを作成
     url = f"https://raw.githubusercontent.com/{user}/{repo}/main/data/{year}/{station_code}.json"
     
     try:
+        # 1. 通信を実行
         res = requests.get(url)
+        
+        # 2. 通信が成功したかチェック
         if res.status_code == 200:
-            # --- 重要：ここで get_tide_details に「Responseオブジェクト(res)」を渡す ---
+            # --- 重要：ここで res (Responseオブジェクト) をそのまま渡す ---
+            # ここで url (文字列) を渡してしまうと 'str' object has no attribute 'json' エラーになります
             return get_tide_details(res, dt)
         else:
-            st.error(f"🌐 データ未検出 (404): {year}年/{station_code}.json")
-            return {"cm": 0, "phase": "ファイルなし", "events": [], "hourly": []}
+            st.error(f"🌐 データが見つかりません: {url}")
+            return {"cm": 0, "phase": "ファイルなし"}
+            
     except Exception as e:
         st.error(f"📡 通信エラー: {e}")
-        return {"cm": 0, "phase": "通信エラー", "events": [], "hourly": []}
-
-import traceback
+        return {"cm": 0, "phase": "通信エラー"}
 
 def get_tide_details(res, dt):
     """
-    データ型、空白、異常値、すべてを無理やりねじ伏せる究極の解析ロジック。
+    res.json() を実行して解析する関数
     """
     try:
+        # ここで .json() が使えるのは、res が Responseオブジェクトだからです
         data = res.json()
-        
         # 1. 日付比較（空白をすべて除去して比較）
         target_date_clean = dt.strftime("%Y-%m-%d").replace("-0", "-") # 2026-03-01 -> 2026-3-1
         target_date_clean = target_date_clean.replace("-", "")        # 202631
@@ -601,6 +606,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
