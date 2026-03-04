@@ -60,6 +60,7 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 }
                 st.session_state[form_ver_key] += 1
                 status.update(label="取得完了！", state="complete")
+                st.write(f"🔍 検索対象日時: {dt_obj}")
                 st.rerun()
         except Exception as e:
             st.error(f"❌ 解析エラー: {e}")
@@ -103,3 +104,4 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
             st.cache_data.clear()
             st.success("保存完了！")
             st.rerun()
+
