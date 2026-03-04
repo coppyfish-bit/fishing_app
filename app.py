@@ -89,7 +89,6 @@ def calculate_tide_phase_10(now_time, events):
 # --- 🎨 画面基本設定 ---
 st.set_page_config(page_title="デーモン佐藤・深淵の祭壇", layout="centered")
 
-# CSS装飾
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; }
@@ -126,20 +125,29 @@ if st.button("🔥 現在の海況を暴き出せ"):
         now = datetime.now()
         phase_text, phase_val = calculate_tide_phase_10(now, result['events'])
         
-        # 1. 現在のステータス（カード表示）
+        # 1. 現在のメインカード
         st.markdown(f"""
             <div class="tide-card">
                 <p style="color: #888; margin:0;">🎯 {now.strftime('%H:%M')} 推定潮位</p>
                 <h1 style="color: #ffffff; font-size: 4.5rem; margin: 10px 0;">{result['current']:.1f}<span style="font-size: 1.5rem;">cm</span></h1>
                 <h2 style="color: #ff4b4b; margin:0;">{phase_text}</h2>
-                <p style="color: #555; font-size: 0.8rem; margin-top:10px;">{now.hour}:00({result['h1']}cm) ➡ {(now.hour+1)%24}:00({result['h2']}cm) を線形補間</p>
             </div>
         """, unsafe_allow_html=True)
         
         st.progress(phase_val / 10.0)
         st.line_chart(result['hourly'])
 
-        # 2. 24時間潮位リスト（2列表示）
+        # 2. 👿 【新規】分単位の精密計算表を最優先で表示
+        st.markdown(f"### 📋 潮汐精密データ（{now.strftime('%H:%M')} 現在）")
+        current_summary = pd.DataFrame([{
+            "時刻": now.strftime("%H:%M"),
+            "状態": phase_text.replace("📈 ", "").replace("📉 ", ""),
+            "推算潮位": f"{result['current']:.1f} cm",
+            "前時との差": f"{result['h2'] - result['h1']} cm/h"
+        }])
+        st.table(current_summary)
+
+        # 3. 24時間毎時リスト
         st.markdown("### 📅 本日の毎時潮位（0時〜23時）")
         tide_list = result['hourly']
         col_a, col_b = st.columns(2)
@@ -149,8 +157,8 @@ if st.button("🔥 現在の海況を暴き出せ"):
             if i < 12: col_a.write(txt)
             else: col_b.write(txt)
 
-        # 3. 満干潮イベント
-        st.markdown("### 📋 満潮・干潮イベント")
+        # 4. 予測イベント（固定データ）
+        st.markdown("### 📋 予測イベント（満潮・干潮）")
         st.table(pd.DataFrame(result['events']))
     else:
         st.error(f"召喚失敗: {err}")
@@ -165,7 +173,7 @@ for m in st.session_state.messages:
     content += f'<div class="{role_class}">{m["content"]}</div></div>'
     st.markdown(content, unsafe_allow_html=True)
 
-if prompt := st.chat_input("メンテナンスを無視して深淵に問え..."):
+if prompt := st.chat_input("深淵に問え..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     api_key = st.secrets.get("GEMINI_API_KEY")
     genai.configure(api_key=api_key)
