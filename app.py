@@ -182,58 +182,66 @@ def tide_func(station_code, dt):
         st.error(f"📡 通信エラー: {e}")
         return {"cm": 0, "phase": "通信エラー", "events": [], "hourly": []}
 
+import traceback
+
 def get_tide_details(res, dt):
     """
-    JSON内の「2026- 3- 1」のような不規則な空白や
-    「71:1」のような異常な時刻をすべて許容・補正して解析する。
+    データ型、空白、異常値、すべてを無理やりねじ伏せる究極の解析ロジック。
     """
     try:
         data = res.json()
         
-        # 1. 検索ターゲットの日付を、JSONの形式「2026- 3- 1」に変換する関数
-        # ゼロ埋め(03)ではなく、空白埋め( 3)にする
-        def format_to_json_date(d):
-            return f"{d.year}-{d.month:>2}-{d.day:>2}"
+        # 1. 日付比較（空白をすべて除去して比較）
+        target_date_clean = dt.strftime("%Y-%m-%d").replace("-0", "-") # 2026-03-01 -> 2026-3-1
+        target_date_clean = target_date_clean.replace("-", "")        # 202631
         
-        target_date_str = format_to_json_date(dt)
-        # 念のため前後空白も考慮
-        target_date_trimmed = target_date_str.replace(" ", "")
-
-        # 2. 該当日のデータを検索
         day_info = None
         for item in data.get('data', []):
-            # JSON側の日付の空白をすべて消して比較する (2026- 3- 1 -> 2026-3-1)
-            json_date_clean = str(item.get('date')).replace(" ", "")
-            if json_date_clean == target_date_trimmed:
+            json_date_clean = str(item.get('date')).replace(" ", "").replace("-", "")
+            if json_date_clean == target_date_clean:
                 day_info = item
                 break
         
         if not day_info:
             return {"cm": 0, "phase": "日付不一致", "events": [], "hourly": []}
 
-        # 3. 潮位計算 (hourly)
-        hourly = day_info.get('hourly', [])
+        # 2. 毎時潮位の取得と数値化 (ここがエラーの温床になりやすい)
+        raw_hourly = day_info.get('hourly', [])
+        # すべての要素を強制的に int に変換（変換できないものは 0 にする）
+        hourly = []
+        for val in raw_hourly:
+            try:
+                hourly.append(int(val))
+            except:
+                hourly.append(0)
+        
+        if len(hourly) < 24:
+            return {"cm": 0, "phase": "データ不足", "events": [], "hourly": []}
+
+        # 3. 潮位の線形補間 (計算前に型をチェック)
         h, mi = dt.hour, dt.minute
         h2 = (h + 1) % 24
         t1, t2 = hourly[h], hourly[h2]
+        
+        # 線形補間計算
         current_cm = int(round(t1 + (t2 - t1) * (mi / 60.0)))
 
-        # 4. イベント解析 (異常な時刻 "71:1" 等を無視する)
+        # 4. イベント解析
         event_times = []
         for ev in day_info.get('events', []):
             try:
-                t_str = str(ev['time']).replace(" ", "")
-                # 時刻が 00:00～23:59 の範囲かチェック
-                h_part = int(t_str.split(':')[0])
-                if 0 <= h_part <= 23:
+                t_str = str(ev.get('time', '')).replace(" ", "")
+                # 異常な時刻形式(71:1など)のガード
+                parts = t_str.split(':')
+                if len(parts) == 2 and 0 <= int(parts[0]) <= 23:
                     ev_dt = pd.to_datetime(f"{dt.strftime('%Y-%m-%d')} {t_str}")
-                    event_times.append({"time": ev_dt, "type": ev['type']})
+                    event_times.append({"time": ev_dt, "type": ev.get('type', 'unknown')})
             except:
-                continue # "71:1" などはここで無視される
+                continue
         
         event_times = sorted(event_times, key=lambda x: x['time'])
 
-        # 5. フェーズ計算
+        # 5. フェーズ判定
         phase_text = "計算中"
         prev_ev = next((e for e in reversed(event_times) if e['time'] <= dt), None)
         next_ev = next((e for e in event_times if e['time'] > dt), None)
@@ -243,10 +251,10 @@ def get_tide_details(res, dt):
             elapsed = (dt - prev_ev['time']).total_seconds()
             if duration > 0:
                 step = max(1, min(9, int((elapsed / duration) * 10)))
-                p_type = "上げ" if "low" in prev_ev['type'] or "干" in prev_ev['type'] else "下げ"
+                p_type = "上げ" if "low" in str(prev_ev['type']).lower() else "下げ"
                 phase_text = f"{p_type}{step}分"
         elif prev_ev:
-            p_type = "上げ" if "low" in prev_ev['type'] or "干" in prev_ev['type'] else "下げ"
+            p_type = "上げ" if "low" in str(prev_ev['type']).lower() else "下げ"
             phase_text = f"{p_type}潮"
 
         return {
@@ -257,8 +265,12 @@ def get_tide_details(res, dt):
         }
 
     except Exception as e:
-        # 万が一のエラー時は 0 を返してアプリを止めない
-        return {"cm": 0, "phase": "解析エラー", "events": [], "hourly": []}
+        # 【デバッグ】エラーが起きた場所と内容を詳細に画面に出す
+        error_msg = traceback.format_exc()
+        st.error(f"⚠️ 解析中にエラーが発生しました\n内容: {e}")
+        with st.expander("🛠️ エラー詳細（エンジニア用）"):
+            st.code(error_msg)
+        return {"cm": 0, "phase": "解析失敗", "events": [], "hourly": []}
         
 def get_weather_data_openmeteo(lat, lon, dt):
     try:
@@ -589,6 +601,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
