@@ -326,8 +326,8 @@ def main():
             get_weather_data_openmeteo,   # weather_func に対応
             find_nearest_tide_station,   # station_func に対応
             get_tide_details,            # tide_func に対応
-            get_moon_age,                # moon_func に対応
-            get_tide_name                # tide_name_func に対応
+            get_moon_age,   # ← これで NameError が解消されます
+            get_tide_name    # ← これもセットで必要です
         )
     
     # --- tab3: ギャラリーページ ---
@@ -348,6 +348,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
