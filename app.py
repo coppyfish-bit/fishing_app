@@ -154,6 +154,23 @@ def get_tide_details(station_code, dt):
     except:
         return None
 
+def get_moon_age(dt):
+    # 月齢計算ロジック
+    year, month, day = dt.year, dt.month, dt.day
+    if month < 3:
+        year -= 1
+        month += 12
+    return (((year - 2009) % 19) * 11 + month + day) % 30
+
+def get_tide_name(moon_age):
+    # 潮名判定ロジック
+    if moon_age in [0, 1, 2, 14, 15, 16, 17, 29, 30]: return "大潮"
+    if moon_age in [3, 4, 5, 18, 19, 20]: return "中潮"
+    if moon_age in [6, 7, 8, 21, 22, 23]: return "小潮"
+    if moon_age in [9, 24]: return "長潮"
+    if moon_age in [10, 25]: return "若潮"
+    return "中潮"
+
 # (既存の補助関数: get_geotagging, get_decimal_from_dms, normalize_float, find_nearest_place, get_moon_age, get_tide_name は維持)
 def find_nearest_tide_station(lat, lon):
     distances = []
@@ -255,7 +272,7 @@ def main():
                         
                         # 気象取得
                         temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(st.session_state.lat, st.session_state.lon, target_dt)
-                        m_age = get_moon_age(target_dt)
+                        m_age = _age(target_dt)
                         t_name = get_tide_name(m_age)
                         station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
                         
@@ -348,6 +365,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
