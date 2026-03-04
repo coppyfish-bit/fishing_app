@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import traceback
 
 # AIとの会話は学習に使用したり外部に漏れたりしません。釣果情報も共有しません。
 
@@ -117,3 +118,4 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 conn.update(spreadsheet=url, data=latest_df)
                 st.cache_data.clear()
                 st.rerun()
+
