@@ -187,12 +187,16 @@ def get_tide_details(station_code, dt):
         return None
 
 def get_moon_age(dt):
-    # 月齢計算ロジック
+    """
+    指定された日時の月齢を計算する（簡易式）
+    """
     year, month, day = dt.year, dt.month, dt.day
     if month < 3:
         year -= 1
         month += 12
-    return (((year - 2009) % 19) * 11 + month + day) % 30
+    # 2009年基準の簡易計算式
+    age = (((year - 2009) % 19) * 11 + month + day) % 30
+    return age  # ← ここが _age になっていないか確認
 
 def get_tide_name(moon_age):
     # 潮名判定ロジック
@@ -397,6 +401,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
