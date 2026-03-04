@@ -193,14 +193,20 @@ def tide_func(station_code, dt):
 
 def get_tide_details(res, dt):
     """
-    res.json() を実行して解析する関数
+    引数 res が『Responseオブジェクト』ならそのまま使い、
+    『URL文字列』なら、この中で通信をやり直してデータを取得する。
     """
     try:
-        # ここで .json() が使えるのは、res が Responseオブジェクトだからです
+        # --- ここが魔法のガード：型をチェックして補正する ---
+        if isinstance(res, str):
+            # もし res がただの文字列（URL）だったら、ここで通信し直す
+            res = requests.get(res)
+        
+        # ここでようやく JSON をパース（res は必ず Response になっている）
         data = res.json()
-        # 1. 日付比較（空白をすべて除去して比較）
-        target_date_clean = dt.strftime("%Y-%m-%d").replace("-0", "-") # 2026-03-01 -> 2026-3-1
-        target_date_clean = target_date_clean.replace("-", "")        # 202631
+        
+        # 1. 日付の空白・ハイフンを除去して比較 (2026- 1- 1 対策)
+        target_date_clean = dt.strftime("%Y-%m-%d").replace("-0", "-").replace("-", "")
         
         day_info = None
         for item in data.get('data', []):
@@ -210,66 +216,48 @@ def get_tide_details(res, dt):
                 break
         
         if not day_info:
-            return {"cm": 0, "phase": "日付不一致", "events": [], "hourly": []}
+            return {"cm": 0, "phase": "日付不一致"}
 
-        # 2. 毎時潮位の取得と数値化 (ここがエラーの温床になりやすい)
-        raw_hourly = day_info.get('hourly', [])
-        # すべての要素を強制的に int に変換（変換できないものは 0 にする）
-        hourly = []
-        for val in raw_hourly:
-            try:
-                hourly.append(int(val))
-            except:
-                hourly.append(0)
-        
-        if len(hourly) < 24:
-            return {"cm": 0, "phase": "データ不足", "events": [], "hourly": []}
+        # 2. 潮位の数値化と補間
+        hourly = [int(v) if str(v).isdigit() else 0 for v in day_info.get('hourly', [])]
+        if len(hourly) < 24: return {"cm": 0, "phase": "データ不足"}
 
-        # 3. 潮位の線形補間 (計算前に型をチェック)
         h, mi = dt.hour, dt.minute
         h2 = (h + 1) % 24
         t1, t2 = hourly[h], hourly[h2]
-        
-        # 線形補間計算
         current_cm = int(round(t1 + (t2 - t1) * (mi / 60.0)))
 
-        # 4. イベント解析
+        # 3. イベント解析
         event_times = []
         for ev in day_info.get('events', []):
             try:
                 t_str = str(ev.get('time', '')).replace(" ", "")
-                # 異常な時刻形式(71:1など)のガード
-                parts = t_str.split(':')
-                if len(parts) == 2 and 0 <= int(parts[0]) <= 23:
+                if ":" in t_str and 0 <= int(t_str.split(':')[0]) <= 23:
                     ev_dt = pd.to_datetime(f"{dt.strftime('%Y-%m-%d')} {t_str}")
                     event_times.append({"time": ev_dt, "type": ev.get('type', 'unknown')})
-            except:
-                continue
+            except: continue
         
         event_times = sorted(event_times, key=lambda x: x['time'])
 
-        # 5. フェーズ判定
+        # 4. フェーズ判定
         phase_text = "計算中"
         prev_ev = next((e for e in reversed(event_times) if e['time'] <= dt), None)
         next_ev = next((e for e in event_times if e['time'] > dt), None)
 
         if prev_ev and next_ev:
-            duration = (next_ev['time'] - prev_ev['time']).total_seconds()
-            elapsed = (dt - prev_ev['time']).total_seconds()
-            if duration > 0:
-                step = max(1, min(9, int((elapsed / duration) * 10)))
-                p_type = "上げ" if "low" in str(prev_ev['type']).lower() else "下げ"
-                phase_text = f"{p_type}{step}分"
+            p_type = "上げ" if "low" in str(prev_ev['type']).lower() else "下げ"
+            phase_text = f"{p_type}潮"
         elif prev_ev:
             p_type = "上げ" if "low" in str(prev_ev['type']).lower() else "下げ"
             phase_text = f"{p_type}潮"
 
-        return {
-            "cm": current_cm, 
-            "phase": phase_text, 
-            "events": event_times, 
-            "hourly": hourly
-        }
+        return {"cm": current_cm, "phase": phase_text, "events": event_times, "hourly": hourly}
+
+    except Exception as e:
+        st.error(f"⚠️ 解析中にエラー: {e}")
+        with st.expander("詳細なログ"):
+            st.code(traceback.format_exc())
+        return {"cm": 0, "phase": "解析失敗"}
 
     except Exception as e:
         # 【デバッグ】エラーが起きた場所と内容を詳細に画面に出す
@@ -608,6 +596,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
