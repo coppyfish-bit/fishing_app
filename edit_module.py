@@ -69,35 +69,24 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 
                 lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
                 
-                # ★受け取った関数をそのまま使う！
+                # 気象データ取得
                 temp, w_s, w_d, rain = weather_func(lat, lon, dt_obj)
+                # 観測所特定
                 station = station_func(lat, lon)
                 
+                # --- 新しい辞書形式に対応した潮汐取得 ---
                 all_events = []
                 tide_cm = 0
-                for delta in [-1, 0, 1]:
-                    # ★受け取った関数を使う
-                    d_data = tide_func(station['code'], dt_obj + timedelta(days=delta))
-                    if d_data:
-                        if 'events' in d_data: all_events.extend(d_data['events'])
-                        if delta == 0: tide_cm = d_data['cm']
-
-                all_events = sorted({ev['time']: ev for ev in all_events}.values(), key=lambda x: x['time'])
-                
                 tide_phase = "不明"
-                search_dt = dt_obj + timedelta(minutes=5)
-                prev_ev = next((e for e in reversed(all_events) if e['time'] <= search_dt), None)
-                next_ev = next((e for e in all_events if e['time'] > search_dt), None)
                 
-                if prev_ev and next_ev:
-                    duration = (next_ev['time'] - prev_ev['time']).total_seconds()
-                    elapsed = (dt_obj - prev_ev['time']).total_seconds()
-                    if duration > 0:
-                        p_type = "上げ" if "干" in prev_ev['type'] else "下げ"
-                        step = max(1, min(9, int((elapsed / duration) * 10)))
-                        tide_phase = f"{p_type}{step}分"
-
-                # ★受け取った関数をそのまま使う！
+                # ターゲットの日付（当日）のデータを取得
+                d_data_main = tide_func(station['code'], dt_obj)
+                
+                if d_data_main and isinstance(d_data_main, dict):
+                    tide_cm = d_data_main.get('cm', 0)
+                    tide_phase = d_data_main.get('phase', "不明")
+                
+                # セッション状態に保存（再描画用）
                 st.session_state[temp_data_key] = {
                     "temp": temp, "wind_s": w_s, "wind_d": w_d, "rain": rain,
                     "tide_cm": tide_cm,
@@ -109,10 +98,10 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
         except Exception as e:
             st.error(f"再取得エラー: {e}")
 
-    # (修正フォーム部分は省略。前回と同じでOK)
-    # ... (前回の修正コードのフォーム部分をここに配置) ...
+    # --- フォーム表示用の変数セットアップ ---
     has_temp_data = temp_data_key in st.session_state and st.session_state[temp_data_key] is not None
     t_data = st.session_state.get(temp_data_key, {})
+    
     try:
         val_temp = float(t_data["temp"]) if has_temp_data else float(df.at[idx, '気温'])
         val_wind_s = float(t_data["wind_s"]) if has_temp_data else float(df.at[idx, '風速'])
@@ -122,7 +111,7 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
         val_tide_name = t_data["tide_name"] if has_temp_data else (str(df.at[idx, '潮名']) if '潮名' in df.columns else "不明")
         val_phase = t_data["phase"] if has_temp_data else (str(df.at[idx, '潮位フェーズ']) if '潮位フェーズ' in df.columns else "不明")
     except:
-        val_temp, val_wind_s, val_wind_d, val_rain, val_tide_cm, val_tide_name, val_phase = 0, 0, "不明", 0, 0, "不明", "不明"
+        val_temp, val_wind_s, val_wind_d, val_rain, val_tide_cm, val_tide_name, val_phase = 0.0, 0.0, "不明", 0.0, 0, "不明", "不明"
 
     ver = st.session_state[form_version_key]
     with st.form(key=f"form_{idx}_v{ver}"):
@@ -131,18 +120,23 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
         new_fish = col_f.text_input("魚種", value=df.at[idx, '魚種'])
         new_len = col_l.number_input("全長(cm)", value=float(df.at[idx, '全長_cm']), step=0.1)
         new_place = col_p.text_input("場所", value=df.at[idx, '場所'])
+        
         c1, c2, c3 = st.columns(3)
         new_temp = c1.number_input("気温(℃)", value=val_temp)
         new_wind_s = c2.number_input("風速(m)", value=val_wind_s)
         new_wind_d = c3.text_input("風向", value=val_wind_d)
+        
         c4, c5, c6 = st.columns(3)
         new_rain = c4.number_input("降水(48h)", value=val_rain)
         new_tide_cm = c5.number_input("潮位(cm)", value=val_tide_cm)
         new_tide_name = c6.text_input("潮名", value=val_tide_name)
+        
         new_phase = st.text_input("潮位フェーズ", value=val_phase)
         new_memo = st.text_area("備考", value=df.at[idx, '備考'] if pd.notna(df.at[idx, '備考']) else "")
+        
         st.markdown("---")
         confirm_delete = st.checkbox("このデータを完全に削除する", key=f"del_check_{idx}")
+        
         c_save, c_del = st.columns(2)
         if c_save.form_submit_button("✅ 更新内容を保存する", use_container_width=True):
             df_to_save = conn.read(spreadsheet=url, ttl="0s")
@@ -157,11 +151,13 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
             if '潮名' in df_to_save.columns: df_to_save.at[idx, '潮名'] = new_tide_name
             if '潮位フェーズ' in df_to_save.columns: df_to_save.at[idx, '潮位フェーズ'] = new_phase
             df_to_save.at[idx, '備考'] = new_memo
+            
             conn.update(spreadsheet=url, data=df_to_save)
             st.session_state[temp_data_key] = None
             st.cache_data.clear()
             st.success("修正を保存しました！")
             st.rerun()
+            
         if c_del.form_submit_button("🗑️ 削除実行", type="primary", use_container_width=True):
             if confirm_delete:
                 df_to_save = conn.read(spreadsheet=url, ttl="0s")
