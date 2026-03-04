@@ -57,10 +57,10 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
     if st.button(f"🔄 気象・潮汐データを再取得する", key=f"btn_{idx}", use_container_width=True):
         try:
             with st.spinner("最新データを計算中..."):
+                # 日時文字列のクリーニング
                 raw_val = str(df.at[idx, 'datetime']).replace("-", "/").strip()
                 clean_dt_str = raw_val[:16]
-                if clean_dt_str.endswith(":"):
-                    clean_dt_str = clean_dt_str[:-1]
+                if clean_dt_str.endswith(":"): clean_dt_str = clean_dt_str[:-1]
                 
                 try:
                     dt_obj = datetime.strptime(clean_dt_str, '%Y/%m/%d %H:%M')
@@ -69,25 +69,28 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 
                 lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
                 
-                # 気象データ取得
+                # 1. 気象データ取得
                 temp, w_s, w_d, rain = weather_func(lat, lon, dt_obj)
-                # 観測所特定
-                station = station_func(lat, lon)
                 
-                # --- 新しい辞書形式に対応した潮汐取得 ---
-                d_data_main = tide_func(station['code'], dt_obj)
+                # 2. 潮汐データ取得 (JSON辞書形式)
+                station = station_func(lat, lon)
+                d_data = tide_func(station['code'], dt_obj) # ここでapp.pyのロジックが走り、辞書が返る
                 
                 tide_cm = 0
                 tide_phase = "不明"
-                if d_data_main and isinstance(d_data_main, dict):
-                    tide_cm = d_data_main.get('cm', 0)
-                    tide_phase = d_data_main.get('phase', "不明")
                 
-                # セッション状態に保存（再描画時に優先される）
+                if isinstance(d_data, dict):
+                    tide_cm = d_data.get('cm', 0)
+                    tide_phase = d_data.get('phase', "不明")
+                
+                # 3. 潮名
+                tide_name = tide_name_func(moon_func(dt_obj))
+                
+                # セッションに保存（UIへの流し込み用）
                 st.session_state[temp_data_key] = {
                     "temp": temp, "wind_s": w_s, "wind_d": w_d, "rain": rain,
                     "tide_cm": tide_cm,
-                    "tide_name": tide_name_func(moon_func(dt_obj)),
+                    "tide_name": tide_name,
                     "phase": tide_phase
                 }
                 st.session_state[form_version_key] += 1
@@ -95,38 +98,32 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
         except Exception as e:
             st.error(f"再取得エラー: {e}")
 
-    # --- フォーム表示用の変数セットアップ（優先順位：再取得データ > DBデータ） ---
+    # --- UI反映用変数のセットアップ ---
     has_temp_data = temp_data_key in st.session_state and st.session_state[temp_data_key] is not None
     t_data = st.session_state.get(temp_data_key, {})
-    
-    # 安全に数値を取り出すためのヘルパー
-    def safe_float(val, default=0.0):
-        try:
-            return float(val) if pd.notna(val) and val != "" else default
-        except:
-            return default
 
-    def safe_int(val, default=0):
-        try:
-            return int(float(val)) if pd.notna(val) and val != "" else default
-        except:
-            return default
+    def get_val(key, column, default):
+        if has_temp_data and key in t_data: return t_data[key]
+        return df.at[idx, column] if column in df.columns else default
 
-    # 各変数の確定
-    val_temp = safe_float(t_data.get("temp") if has_temp_data else df.at[idx, '気温'])
-    val_wind_s = safe_float(t_data.get("wind_s") if has_temp_data else df.at[idx, '風速'])
-    val_wind_d = str(t_data.get("wind_d") if has_temp_data else (df.at[idx, '風向'] if '風向' in df.columns else "不明"))
-    val_rain = safe_float(t_data.get("rain") if has_temp_data else (df.at[idx, '降水量'] if '降水量' in df.columns else 0.0))
-    val_tide_cm = safe_int(t_data.get("tide_cm") if has_temp_data else df.at[idx, '潮位_cm'])
-    val_tide_name = str(t_data.get("tide_name") if has_temp_data else (df.at[idx, '潮名'] if '潮名' in df.columns else "不明"))
-    val_phase = str(t_data.get("phase") if has_temp_data else (df.at[idx, '潮位フェーズ'] if '潮位フェーズ' in df.columns else "不明"))
+    # 数値変換を安全に行う
+    try:
+        val_temp = float(get_val("temp", "気温", 0.0))
+        val_wind_s = float(get_val("wind_s", "風速", 0.0))
+        val_wind_d = str(get_val("wind_d", "風向", "不明"))
+        val_rain = float(get_val("rain", "降水量", 0.0))
+        val_tide_cm = int(float(get_val("tide_cm", "潮位_cm", 0)))
+        val_tide_name = str(get_val("tide_name", "潮名", "不明"))
+        val_phase = str(get_val("phase", "潮位フェーズ", "不明"))
+    except:
+        val_temp, val_wind_s, val_wind_d, val_rain, val_tide_cm, val_tide_name, val_phase = 0.0, 0.0, "不明", 0.0, 0, "不明", "不明"
 
     ver = st.session_state[form_version_key]
     with st.form(key=f"form_{idx}_v{ver}"):
         st.write("📝 **データの修正**")
         col_f, col_l, col_p = st.columns([2, 1, 2])
         new_fish = col_f.text_input("魚種", value=df.at[idx, '魚種'])
-        new_len = col_l.number_input("全長(cm)", value=safe_float(df.at[idx, '全長_cm']), step=0.1)
+        new_len = col_l.number_input("全長(cm)", value=float(df.at[idx, '全長_cm']) if pd.notna(df.at[idx, '全長_cm']) else 0.0, step=0.1)
         new_place = col_p.text_input("場所", value=df.at[idx, '場所'])
         
         c1, c2, c3 = st.columns(3)
@@ -148,7 +145,6 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
         c_save, c_del = st.columns(2)
         if c_save.form_submit_button("✅ 更新内容を保存する", use_container_width=True):
             df_to_save = conn.read(spreadsheet=url, ttl="0s")
-            # 指定した行(idx)を更新
             df_to_save.at[idx, '魚種'] = new_fish
             df_to_save.at[idx, '全長_cm'] = new_len
             df_to_save.at[idx, '場所'] = new_place
@@ -174,5 +170,4 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 conn.update(spreadsheet=url, data=df_to_save)
                 st.session_state[temp_data_key] = None
                 st.cache_data.clear()
-                st.success("削除しました。")
                 st.rerun()
