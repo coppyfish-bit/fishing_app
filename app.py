@@ -1,92 +1,64 @@
 import pandas as pd
 import requests
 from datetime import timedelta
-import streamlit as st
 
-# AIとの会話は学習に使用したり外部に漏れたりしません。釣果情報も共有しません。
-
-def get_tide_details(res, dt):
+def fetch_tide_data(dt, station_code):
     """
-    2025/2026年両対応・前後3日解析・10分割フェーズ算出
+    日時(dt)と地点コード(station_code)から潮位とフェーズを10分割で取得する
     """
-    import pandas as pd
-    import requests
-    from datetime import timedelta
-
-    # 初期値の設定（エラー時もこの形式で返す）
-    result = {"cm": 0, "phase": "不明", "events": [], "hourly": []}
+    # 1. 前後3日分のイベントをマージして日付またぎに対応
+    combined_events = []
+    hourly_data = []
     
-    try:
-        # 1. 地点コードの特定 (URLから抽出)
-        station_code = "HS"
-        if isinstance(res, str) and "/data/" in res:
-            station_code = res.split('/')[-1].replace('.json', '')
-        
-        combined_events = []
-        hourly_data = []
-        
-        # 2. 前後3日分のデータをループで取得
-        target_days = [dt - timedelta(days=1), dt, dt + timedelta(days=1)]
-        
-        for d in target_days:
-            url = f"https://raw.githubusercontent.com/coppyfish-bit/fishing_app/main/data/{d.year}/{station_code}.json"
-            try:
-                r = requests.get(url, timeout=5)
-                if r.status_code != 200:
-                    continue
-                
-                raw_json = r.json()
-                # 2025年(リスト直下)か2026年(dataキー)かを判別してデータを展開
-                items = raw_json.get('data', raw_json) if isinstance(raw_json, dict) else raw_json
-                
-                # 日付の正規化比較 (YYYYMMDD)
-                search_date = d.strftime("%Y%m%d")
-                day_info = next((item for item in items if str(item.get('date')).replace("-","").replace(" ","") == search_date), None)
-                
-                if day_info:
-                    # イベント(干満時刻)を統合リストに追加
-                    for ev in day_info.get('events', []):
-                        t_str = str(ev.get('time', '')).strip()
-                        if ":" in t_str:
-                            ev_dt = pd.to_datetime(f"{d.strftime('%Y-%m-%d')} {t_str}")
-                            combined_events.append({"time": ev_dt, "type": ev.get('type', '').lower()})
-                    
-                    # 当日の潮位(hourly)を保持
-                    if d.date() == dt.date():
-                        h_raw = day_info.get('hourly', [])
-                        hourly_data = [int(v) for v in h_raw if str(v).strip().replace('-','').isdigit()]
-            except:
-                continue
+    for d in [dt - timedelta(days=1), dt, dt + timedelta(days=1)]:
+        url = f"https://raw.githubusercontent.com/coppyfish-bit/fishing_app/main/data/{d.year}/{station_code}.json"
+        try:
+            r = requests.get(url, timeout=5)
+            if r.status_code != 200: continue
+            
+            raw = r.json()
+            # 2025年(リスト)と2026年(辞書)の両構造に対応
+            items = raw.get('data', raw) if isinstance(raw, dict) else raw
+            
+            # 日付一致確認
+            search_date = d.strftime("%Y%m%d")
+            day_info = next((i for i in items if str(i.get('date','')).replace("-","").replace(" ","") == search_date), None)
+            
+            if day_info:
+                # 干満イベント
+                for ev in day_info.get('events', []):
+                    t_str = str(ev.get('time', '')).strip()
+                    if ":" in t_str:
+                        ev_dt = pd.to_datetime(f"{d.strftime('%Y-%m-%d')} {t_str}")
+                        combined_events.append({"time": ev_dt, "type": ev.get('type', '').lower()})
+                # 当日の潮位
+                if d.date() == dt.date():
+                    hourly_data = [int(v) for v in day_info.get('hourly', []) if str(v).strip().replace('-','').isdigit()]
+        except: continue
 
-        # 3. 潮位(cm)の計算
-        if len(hourly_data) >= 24:
-            h, mi = dt.hour, dt.minute
-            t1, t2 = hourly_data[h], hourly_data[(h+1)%24]
-            result["cm"] = int(round(t1 + (t2 - t1) * (mi / 60.0)))
-            result["hourly"] = hourly_data
+    # 2. 現在の潮位計算(cm)
+    current_cm = 0
+    if len(hourly_data) >= 24:
+        h, mi = dt.hour, dt.minute
+        t1, t2 = hourly_data[h], hourly_data[(h+1)%24]
+        current_cm = int(round(t1 + (t2 - t1) * (mi / 60.0)))
 
-        # 4. 10分割フェーズの算出
-        events = sorted([dict(t) for t in {tuple(d.items()) for d in combined_events}], key=lambda x: x['time'])
-        result["events"] = events
-        
-        prev_ev, next_ev = None, None
-        for i in range(len(events)):
-            if events[i]['time'] <= dt:
-                prev_ev = events[i]
-            if events[i]['time'] > dt:
-                next_ev = events[i]
-                break
+    # 3. 10分割フェーズ判定
+    phase = "不明"
+    events = sorted(combined_events, key=lambda x: x['time'])
+    prev_ev = next((e for e in reversed(events) if e['time'] <= dt), None)
+    next_ev = next((e for e in events if e['time'] > dt), None)
 
-        if prev_ev and next_ev:
-            total_dur = (next_ev['time'] - prev_ev['time']).total_seconds() / 60
-            elapsed = (dt - prev_ev['time']).total_seconds() / 60
-            if total_dur > 0:
-                ten_parts = min(max(int((elapsed / total_dur) * 10) + 1, 1), 10)
-                label = "上げ" if "low" in prev_ev['type'] else "下げ"
-                result["phase"] = f"{label}{ten_parts}分"
+    if prev_ev and next_ev:
+        total = (next_ev['time'] - prev_ev['time']).total_seconds()
+        elapsed = (dt - prev_ev['time']).total_seconds()
+        if total > 0:
+            step = min(max(int((elapsed / total) * 10) + 1, 1), 10)
+            phase = f"{'上げ' if 'low' in prev_ev['type'] else '下げ'}{step}分"
 
-        return result
+    return {"cm": current_cm, "phase": phase}
 
-    except Exception as e:
-        # 万が一のエラー時も空の辞書を返してUI崩壊を防ぐ
-        return result
+# --- 使い方例 ---
+# target_dt = pd.to_datetime("2025-10-24 22:43:00")
+# result = fetch_tide_data(target_dt, "HS")
+# print(result) # {'cm': 186, 'phase': '上げ9分'} などの辞書が返ります
