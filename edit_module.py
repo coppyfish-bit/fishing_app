@@ -15,7 +15,7 @@ def show_edit_page(conn, url, weather_func, station_func, tide_func, moon_func, 
     # 全体を最新順に並び替え
     df = df_raw.iloc[::-1].copy()
 
-    # --- 1. 直近5件の表示（展開状態） ---
+    # --- 1. 直近5件の表示 ---
     st.markdown("### 📸 直近5件の記録")
     df_recent = df.head(5)
     for idx in df_recent.index:
@@ -28,7 +28,7 @@ def show_edit_page(conn, url, weather_func, station_func, tide_func, moon_func, 
 
     st.markdown("---")
 
-    # --- 2. 過去データの選択編集（リストから選択） ---
+    # --- 2. 過去データの選択編集 ---
     st.markdown("### 🔍 過去のデータをリストから選んで編集")
     df['select_label'] = df['datetime'].astype(str) + " | " + df['場所'].astype(str) + " | " + df['魚種'].astype(str)
     
@@ -58,8 +58,13 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
     if st.button(f"🔄 気象・潮汐データを再取得する", key=f"btn_{idx}", use_container_width=True):
         try:
             with st.spinner("最新データを計算中..."):
-                raw_val = str(df.at[idx, 'datetime']).replace("-", "/").strip()
-                dt_obj = pd.to_datetime(raw_val[:16])
+                # 日時の徹底クリーニング
+                raw_val = str(df.at[idx, 'datetime']).strip()
+                while raw_val.endswith(":"):
+                    raw_val = raw_val[:-1]
+                
+                # 柔軟なパース
+                dt_obj = pd.to_datetime(raw_val)
                 lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
                 
                 # 各種データ取得
@@ -98,7 +103,7 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
         
         c1, c2, c3 = st.columns(3)
         new_temp = c1.number_input("気温(℃)", value=float(val("temp", "気温", 0.0)))
-        new_wind_s = c2.number_input("風速(m)", value=float(val("wind_s", "風速", 0.0))) # ←ここを修正しました
+        new_wind_s = c2.number_input("風速(m)", value=float(val("wind_s", "風速", 0.0)))
         new_wind_d = c3.text_input("風向", value=str(val("wind_d", "風向", "不明")))
         
         c4, c5, c6 = st.columns(3)
