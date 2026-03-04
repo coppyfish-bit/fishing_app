@@ -158,6 +158,31 @@ def find_nearest_tide_station(lat, lon):
         d = np.sqrt((s['lat'] - lat)**2 + (s['lon'] - lon)**2)
         distances.append(d)
     return TIDE_STATIONS[np.argmin(distances)]
+
+def tide_func(station_code, dt):
+    """
+    1. 指定された日時の『年』を見て、GitHubの適切なフォルダ(2025 or 2026)からデータを取得する
+    2. 取得したレスポンスを get_tide_details に渡して解析する
+    """
+    # --- 1. URLの動的組み立て ---
+    year = dt.year  # 2026/03/01 なら 2026 が入る
+    user = "coppyfish-bit" # スクリーンショットから拝借
+    repo = "fishing_app"   # 実際のリポジトリ名に合わせてください
+    
+    # フォルダ構造: data/{year}/{station_code}.json
+    url = f"https://raw.githubusercontent.com/{user}/{repo}/main/data/{year}/{station_code}.json"
+    
+    try:
+        res = requests.get(url)
+        if res.status_code == 200:
+            # 成功したら、ユーザーが提供してくれた解析関数を実行
+            return get_tide_details(res, dt)
+        else:
+            st.error(f"🌐 GitHubにデータがありません: {year}年/{station_code}.json")
+            return {"cm": 0, "phase": "ファイル未検出", "events": [], "hourly": []}
+    except Exception as e:
+        st.error(f"📡 通信エラー: {e}")
+        return {"cm": 0, "phase": "通信エラー", "events": [], "hourly": []}
     
 def get_tide_details(res, dt):
     """
@@ -556,6 +581,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
