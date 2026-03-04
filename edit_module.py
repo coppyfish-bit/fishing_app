@@ -75,18 +75,15 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 station = station_func(lat, lon)
                 
                 # --- 新しい辞書形式に対応した潮汐取得 ---
-                all_events = []
-                tide_cm = 0
-                tide_phase = "不明"
-                
-                # ターゲットの日付（当日）のデータを取得
                 d_data_main = tide_func(station['code'], dt_obj)
                 
+                tide_cm = 0
+                tide_phase = "不明"
                 if d_data_main and isinstance(d_data_main, dict):
                     tide_cm = d_data_main.get('cm', 0)
                     tide_phase = d_data_main.get('phase', "不明")
                 
-                # セッション状態に保存（再描画用）
+                # セッション状態に保存（再描画時に優先される）
                 st.session_state[temp_data_key] = {
                     "temp": temp, "wind_s": w_s, "wind_d": w_d, "rain": rain,
                     "tide_cm": tide_cm,
@@ -98,27 +95,38 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
         except Exception as e:
             st.error(f"再取得エラー: {e}")
 
-    # --- フォーム表示用の変数セットアップ ---
+    # --- フォーム表示用の変数セットアップ（優先順位：再取得データ > DBデータ） ---
     has_temp_data = temp_data_key in st.session_state and st.session_state[temp_data_key] is not None
     t_data = st.session_state.get(temp_data_key, {})
     
-    try:
-        val_temp = float(t_data["temp"]) if has_temp_data else float(df.at[idx, '気温'])
-        val_wind_s = float(t_data["wind_s"]) if has_temp_data else float(df.at[idx, '風速'])
-        val_wind_d = t_data["wind_d"] if has_temp_data else (str(df.at[idx, '風向']) if '風向' in df.columns else "不明")
-        val_rain = float(t_data["rain"]) if has_temp_data else (float(df.at[idx, '降水量']) if '降水量' in df.columns else 0.0)
-        val_tide_cm = int(t_data["tide_cm"]) if has_temp_data else int(df.at[idx, '潮位_cm'])
-        val_tide_name = t_data["tide_name"] if has_temp_data else (str(df.at[idx, '潮名']) if '潮名' in df.columns else "不明")
-        val_phase = t_data["phase"] if has_temp_data else (str(df.at[idx, '潮位フェーズ']) if '潮位フェーズ' in df.columns else "不明")
-    except:
-        val_temp, val_wind_s, val_wind_d, val_rain, val_tide_cm, val_tide_name, val_phase = 0.0, 0.0, "不明", 0.0, 0, "不明", "不明"
+    # 安全に数値を取り出すためのヘルパー
+    def safe_float(val, default=0.0):
+        try:
+            return float(val) if pd.notna(val) and val != "" else default
+        except:
+            return default
+
+    def safe_int(val, default=0):
+        try:
+            return int(float(val)) if pd.notna(val) and val != "" else default
+        except:
+            return default
+
+    # 各変数の確定
+    val_temp = safe_float(t_data.get("temp") if has_temp_data else df.at[idx, '気温'])
+    val_wind_s = safe_float(t_data.get("wind_s") if has_temp_data else df.at[idx, '風速'])
+    val_wind_d = str(t_data.get("wind_d") if has_temp_data else (df.at[idx, '風向'] if '風向' in df.columns else "不明"))
+    val_rain = safe_float(t_data.get("rain") if has_temp_data else (df.at[idx, '降水量'] if '降水量' in df.columns else 0.0))
+    val_tide_cm = safe_int(t_data.get("tide_cm") if has_temp_data else df.at[idx, '潮位_cm'])
+    val_tide_name = str(t_data.get("tide_name") if has_temp_data else (df.at[idx, '潮名'] if '潮名' in df.columns else "不明"))
+    val_phase = str(t_data.get("phase") if has_temp_data else (df.at[idx, '潮位フェーズ'] if '潮位フェーズ' in df.columns else "不明"))
 
     ver = st.session_state[form_version_key]
     with st.form(key=f"form_{idx}_v{ver}"):
         st.write("📝 **データの修正**")
         col_f, col_l, col_p = st.columns([2, 1, 2])
         new_fish = col_f.text_input("魚種", value=df.at[idx, '魚種'])
-        new_len = col_l.number_input("全長(cm)", value=float(df.at[idx, '全長_cm']), step=0.1)
+        new_len = col_l.number_input("全長(cm)", value=safe_float(df.at[idx, '全長_cm']), step=0.1)
         new_place = col_p.text_input("場所", value=df.at[idx, '場所'])
         
         c1, c2, c3 = st.columns(3)
@@ -140,6 +148,7 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
         c_save, c_del = st.columns(2)
         if c_save.form_submit_button("✅ 更新内容を保存する", use_container_width=True):
             df_to_save = conn.read(spreadsheet=url, ttl="0s")
+            # 指定した行(idx)を更新
             df_to_save.at[idx, '魚種'] = new_fish
             df_to_save.at[idx, '全長_cm'] = new_len
             df_to_save.at[idx, '場所'] = new_place
@@ -165,4 +174,5 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 conn.update(spreadsheet=url, data=df_to_save)
                 st.session_state[temp_data_key] = None
                 st.cache_data.clear()
+                st.success("削除しました。")
                 st.rerun()
