@@ -521,7 +521,16 @@ def main():
                     
     # ↓ ここから下の「with tab...」が、すべて同じ左端の高さにあるか確認してください
     with tab2:
-        show_edit_page(conn, url)
+        # 関数そのものを引数として渡すことで、モジュール側で計算を可能にします
+        show_edit_page(
+            conn, 
+            url, 
+            get_weather_data_openmeteo, 
+            find_nearest_tide_station, 
+            get_tide_details, 
+            get_moon_age, 
+            get_tide_name
+        )
     
     with tab3:
         # 保存時にキャッシュをクリアする設定にしていれば、ここは ttl="10m" のままでも
@@ -550,3 +559,4 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
