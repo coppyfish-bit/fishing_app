@@ -158,54 +158,50 @@ def find_nearest_tide_station(lat, lon):
         d = np.sqrt((s['lat'] - lat)**2 + (s['lon'] - lon)**2)
         distances.append(d)
     return TIDE_STATIONS[np.argmin(distances)]
+    
 def get_tide_details(res, dt):
     """
-    GitHubのJSONレスポンス(res)から、指定日時(dt)の潮位を解析する。
-    日時文字列に空白が含まれる異常系にも対応。
+    提供いただいたデバッグ機能付き解析ロジック
     """
     try:
         data = res.json()
-        # --- ここからデバッグ用 ---
-        st.write(f"📂 JSON内のデータ件数: {len(data.get('data', []))}件")
-        if len(data.get('data', [])) > 0:
-            first_date = data['data'][0].get('date')
-            last_date = data['data'][-1].get('date')
-            st.write(f"📅 データの範囲: {first_date} ～ {last_date}")
+        
+        # --- ここからデバッグ用表示 ---
+        with st.expander("🔍 潮汐JSON解析デバッグ", expanded=False):
+            st.write(f"📂 JSON内のデータ件数: {len(data.get('data', []))}件")
+            if len(data.get('data', [])) > 0:
+                first_date = data['data'][0].get('date')
+                last_date = data['data'][-1].get('date')
+                st.write(f"📅 収録範囲: {first_date} ～ {last_date}")
         # --- ここまで ---
+
         target_date_str = dt.strftime("%Y-%m-%d")
         
-        # 1. 該当日のデータを検索 (日付文字列の前後空白をトリム)
+        # 1. 該当日のデータを検索
         day_info = next((i for i in data['data'] if i['date'].strip() == target_date_str), None)
         
         if not day_info:
-            return {"cm": 0, "phase": "不明", "events": [], "hourly": []}
+            return {"cm": 0, "phase": "当日データなし", "events": [], "hourly": []}
 
         # 2. 毎時潮位の取得
         hourly = day_info['hourly']
         
-        # 3. 現在時刻(dt)の潮位を線形補間
-        h = dt.hour
-        mi = dt.minute
+        # 3. 潮位を線形補間
+        h, mi = dt.hour, dt.minute
         h2 = (h + 1) % 24
-        
-        t1 = hourly[h]
-        t2 = hourly[h2]
-        
-        # 分単位で補間計算
+        t1, t2 = hourly[h], hourly[h2]
         current_cm = int(round(t1 + (t2 - t1) * (mi / 60.0)))
 
-        # 4. イベント(満潮・干潮)のパース (空白対策)
+        # 4. イベントのパース
         event_times = []
         for ev in day_info['events']:
-            # "10: 6" -> "10:6" への置換とPandasによる柔軟なパース
             ev_time_str = ev['time'].replace(" ", "")
-            # target_date_strと結合してフル日時で解釈
             ev_dt = pd.to_datetime(f"{target_date_str} {ev_time_str}")
             event_times.append({"time": ev_dt, "type": ev['type']})
         
         event_times = sorted(event_times, key=lambda x: x['time'])
 
-        # 5. 潮位フェーズの計算
+        # 5. フェーズ計算
         phase_text = "不明"
         prev_ev = next((e for e in reversed(event_times) if e['time'] <= dt), None)
         next_ev = next((e for e in event_times if e['time'] > dt), None)
@@ -229,9 +225,8 @@ def get_tide_details(res, dt):
         }
 
     except Exception as e:
-        # ログにエラーを表示（実際のアプリ画面には出さず、内部的に0を返す）
-        print(f"DEBUG: 潮汐解析エラー: {e}")
-        return {"cm": 0, "phase": "不明", "events": [], "hourly": []}
+        st.error(f"⚠️ 解析中にエラーが発生しました: {e}")
+        return {"cm": 0, "phase": "解析エラー", "events": [], "hourly": []}
 def get_weather_data_openmeteo(lat, lon, dt):
     try:
         url = "https://archive-api.open-meteo.com/v1/archive"
@@ -561,6 +556,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
