@@ -7,64 +7,67 @@ from datetime import datetime, timedelta
 
 def get_tide_only(dt, station_code):
     """
-    2025年(リスト直下)と2026年(dataキー)の構造を完全に統合。
-    日付判定を「文字列が含まれているか」に緩和して確実にヒットさせます。
+    2025年(List直下)と2026年(Dict/dataキー)を完全に自動判別し、
+    スペース混じりの日付や異常時刻(34:4)もすべて補正して取得します。
     """
-    # 検索したい月と日の文字列 (例: "10-24" や "3- 4")
-    # 2025年の "10- 1" のようなスペースも考慮
+    # 判定用文字列 (例: "10-24")
     search_md = f"{dt.month}-{dt.day}"
     search_md_zero = f"{dt.month:02d}-{dt.day:02d}"
-    search_md_space = f"{dt.month:2d}-{dt.day:2d}".replace(" ", " ") # " 3- 4" 形式
 
     for d in [dt - timedelta(days=1), dt, dt + timedelta(days=1)]:
         url = f"https://raw.githubusercontent.com/coppyfish-bit/fishing_app/main/data/{d.year}/{station_code}.json"
         try:
             r = requests.get(url, timeout=5)
             if r.status_code != 200: continue
-            raw = r.json()
+            raw_data = r.json()
             
-            # --- 1. データの取り出し (2025/2026両対応) ---
-            if isinstance(raw, dict) and "data" in raw:
-                items = raw["data"] # 2026年型
-            elif isinstance(raw, list):
-                items = raw # 2025年型
-            else:
-                items = []
-
-            # --- 2. 日付の一致確認 ---
+            # --- 1. 構造の自動仕分け (ここが最重要) ---
+            items = []
+            if isinstance(raw_data, list):
+                items = raw_data  # 2025年：リストが直下にある
+            elif isinstance(raw_data, dict):
+                items = raw_data.get('data', []) # 2026年：dataキーの中にリストがある
+            
+            # --- 2. 日付の柔軟マッチング ---
             day_info = None
-            target_date_str = d.strftime("%Y-%m-%d") # "2025-10-24"
+            target_full = d.strftime("%Y-%m-%d") # "2025-10-24"
             
             for item in items:
-                item_date = str(item.get('date', ''))
-                # YYYY-MM-DD が含まれるか、あるいは MM-DD が含まれるか
-                if (target_date_str in item_date) or (search_md in item_date) or (search_md_zero in item_date):
+                # itemが辞書形式であることを確認してからdateを取得
+                if not isinstance(item, dict): continue
+                
+                dt_str = str(item.get('date', ''))
+                # YYYY-MM-DD か、MM-DD (0埋めあり/なし) が含まれていれば一致とみなす
+                if (target_full in dt_str) or (search_md in dt_str) or (search_md_zero in dt_str):
                     day_info = item
                     break
             
             if day_info:
-                # --- 3. 潮位(hourly)の抽出 ---
+                # --- 3. 潮位(hourly)とイベントの解析 ---
                 h_raw = day_info.get('hourly', [])
                 hourly = [int(v) for v in h_raw if str(v).strip().replace('-','').isdigit()]
                 
-                # --- 4. 指定日時の潮位計算 ---
-                cm = 0
-                if d.date() == dt.date() and len(hourly) >= 24:
-                    h, mi = dt.hour, dt.minute
-                    t1, t2 = hourly[h], hourly[(h+1)%24]
-                    cm = int(round(t1 + (t2 - t1) * (mi / 60.0)))
+                # 指定した日時に合致する場合のみ計算して返す
+                if d.date() == dt.date():
+                    cm = 0
+                    if len(hourly) >= 24:
+                        h, mi = dt.hour, dt.minute
+                        t1, t2 = hourly[h], hourly[(h+1)%24]
+                        cm = int(round(t1 + (t2 - t1) * (mi / 60.0)))
                     
-                    # --- 5. イベント(干満)とフェーズの解析 ---
+                    # 干満イベントの解析 (34:4 などの異常値を補正)
                     events = []
                     for ev in day_info.get('events', []):
                         t_raw = str(ev.get('time', '')).replace(" ", "")
                         if ":" in t_raw:
-                            h_s, m_s = t_raw.split(":")
-                            # "34:4" などの異常値を24時間制に補正
-                            h_v, m_v = int(h_s) % 24, int(m_s)
-                            ev_dt = pd.to_datetime(f"{d.strftime('%Y-%m-%d')} {h_v:02d}:{m_v:02d}")
-                            events.append({"time": ev_dt, "type": ev.get('type', '').lower()})
+                            try:
+                                h_s, m_s = t_raw.split(":")
+                                h_v, m_v = int(h_s) % 24, int(m_s)
+                                ev_dt = pd.to_datetime(f"{d.strftime('%Y-%m-%d')} {h_v:02d}:{m_v:02d}")
+                                events.append({"time": ev_dt, "type": ev.get('type', '').lower()})
+                            except: continue
                     
+                    # 10分割フェーズ判定
                     phase = "不明"
                     events = sorted(events, key=lambda x: x['time'])
                     prev_e = next((e for e in reversed(events) if e['time'] <= dt), None)
@@ -78,20 +81,25 @@ def get_tide_only(dt, station_code):
                             phase = f"{label}{step}分"
                     
                     return cm, phase
-        except: continue
+        except Exception as e:
+            continue
+            
     return 0, "不明"
 
-# --- UI (確認用) ---
-st.title("🌊 2025/2026 最終統合チェッカー")
-dt_input = st.date_input("日付を選択", value=datetime.now())
-tm_input = st.time_input("時刻を選択", value=datetime.now().time())
-st_input = st.text_input("地点コード", value="HS")
+# --- UI (そのまま動作確認可能) ---
+st.title("🌊 潮汐データ 最終アクセスチェッカー")
+c1, c2 = st.columns(2)
+d_in = c1.date_input("日付", value=datetime(2025, 10, 24))
+t_in = c1.time_input("時刻", value=datetime(2025, 10, 24, 22, 43).time())
+s_in = c2.text_input("地点コード", value="HS")
 
-if st.button("取得実行"):
-    target = datetime.combine(dt_input, tm_input)
-    cm, ph = get_tide_only(target, st_input)
+if st.button("GitHubから潮位を再取得"):
+    target = datetime.combine(d_in, t_in)
+    cm, ph = get_tide_only(target, s_in)
+    
     if cm > 0:
-        st.success(f"✅ 取得成功！ 潮位: {cm}cm / フェーズ: {ph}")
+        st.success(f"✅ 取得成功！")
+        st.metric("算出潮位", f"{cm} cm")
+        st.metric("潮位フェーズ", ph)
     else:
-        st.error("❌ 取得できません。GitHubのURLかファイル名が正しいか確認してください。")
-        st.write(f"確認URL: https://raw.githubusercontent.com/coppyfish-bit/fishing_app/main/data/{dt_input.year}/{st_input}.json")
+        st.error("❌ 取得失敗。URLやJSONの構造を再確認してください。")
