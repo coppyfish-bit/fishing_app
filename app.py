@@ -99,75 +99,74 @@ def find_nearest_tide_station(lat, lon):
     distances = [np.sqrt((s['lat'] - lat)**2 + (s['lon'] - lon)**2) for s in TIDE_STATIONS]
     return TIDE_STATIONS[np.argmin(distances)]
 
+import pandas as pd
+import requests
+from datetime import timedelta
+import streamlit as st
+
+# AIとの会話は学習に使用したり外部に漏れたりしません。釣果情報も共有しません。
+
 def get_tide_details(res_dummy, dt):
-    """
-    2025年(直接リスト形式)と2026年(dataキー形式)の両方に対応した潮汐解析
-    """
     try:
-        combined_events = []
-        target_days = [dt - timedelta(days=1), dt, dt + timedelta(days=1)]
-        
-        # URLから地点コードを抽出 (例: HS)
+        # 1. 地点コードの特定
         station_code = "HS"
         if isinstance(res_dummy, str) and "/data/" in res_dummy:
              station_code = res_dummy.split('/')[-1].replace('.json', '')
 
-        hourly_data = {}
-
-        for d in target_days:
+        combined_events = []
+        hourly_data = []
+        
+        # 前後3日分ループ
+        for d in [dt - timedelta(days=1), dt, dt + timedelta(days=1)]:
             url = f"https://raw.githubusercontent.com/coppyfish-bit/fishing_app/main/data/{d.year}/{station_code}.json"
             try:
-                r = requests.get(url)
+                r = requests.get(url, timeout=5)
                 if r.status_code != 200: continue
                 raw_json = r.json()
                 
-                # --- 階層構造の吸収 ---
-                # 2026年版は {'data': [...]} だが、2025年版は直後に [...]
+                # 2025年(リスト)か2026年(dict)かを判別
                 items = raw_json.get('data', raw_json) if isinstance(raw_json, dict) else raw_json
                 
-                # --- 日付比較の柔軟化 ---
-                # 検索用: "20250101"
-                search_date = d.strftime("%Y%m%d")
-                
-                day_info = None
-                for item in items:
-                    # データのdate: "2025-01-01" や "2026- 3- 4" から記号を除去 -> "20250101"
-                    clean_item_date = str(item.get('date', '')).replace("-", "").replace(" ", "")
-                    if clean_item_date == search_date:
-                        day_info = item
-                        break
+                # 日付の一致確認 (YYYY-MM-DD 形式を正規化して比較)
+                target_date_str = d.strftime("%Y%m%d")
+                day_info = next((item for item in items if str(item.get('date')).replace("-","").replace(" ","") == target_date_str), None)
                 
                 if day_info:
-                    # イベント取得
+                    # イベントの取得
                     for ev in day_info.get('events', []):
                         t_str = str(ev.get('time', '')).strip()
                         if ":" in t_str:
+                            # 2025年のデータは秒がないため、一貫性を持たせる
                             ev_dt = pd.to_datetime(f"{d.strftime('%Y-%m-%d')} {t_str}")
                             combined_events.append({"time": ev_dt, "type": ev.get('type', '').lower()})
                     
-                    # 当日の潮位計算用
+                    # 当日の潮位（1時間ごとのデータ）
                     if d.date() == dt.date():
-                        hourly_data = [int(v) if str(v).strip().replace('-','').isdigit() else 0 for v in day_info.get('hourly', [])]
+                        hourly_data = [int(v) for v in day_info.get('hourly', []) if str(v).strip().replace('-','').isdigit()]
             except:
                 continue
 
-        # 重複削除とソート
+        # 重複排除とソート
         events = sorted([dict(t) for t in {tuple(d.items()) for d in combined_events}], key=lambda x: x['time'])
 
-        # 潮位算出
+        # 2. 現在の潮位(cm)を算出
         current_cm = 0
-        if hourly_data:
-            h, mi = dt.hour, dt.minute
+        if hourly_data and len(hourly_data) >= 24:
+            h = dt.hour
+            mi = dt.minute
             t1 = hourly_data[h]
-            t2 = hourly_data[(h+1)%24] if h < 23 else hourly_data[h]
+            t2 = hourly_data[(h+1)%24]
             current_cm = int(round(t1 + (t2 - t1) * (mi / 60.0)))
 
-        # 10分割フェーズ判定
+        # 3. 10分割フェーズ判定
         phase_str = "不明"
         prev_ev = None
         next_ev = None
+
+        # イベント間の判定（3日分あるので必ず前後が見つかるはず）
         for i in range(len(events)):
-            if events[i]['time'] <= dt: prev_ev = events[i]
+            if events[i]['time'] <= dt:
+                prev_ev = events[i]
             if events[i]['time'] > dt:
                 next_ev = events[i]
                 break
@@ -175,15 +174,25 @@ def get_tide_details(res_dummy, dt):
         if prev_ev and next_ev:
             total_dur = (next_ev['time'] - prev_ev['time']).total_seconds() / 60
             elapsed = (dt - prev_ev['time']).total_seconds() / 60
+            
             if total_dur > 0:
-                ten_parts = min(max(int((elapsed / total_dur) * 10) + 1, 1), 10)
+                # 1〜10にマッピング
+                ten_parts = int((elapsed / total_dur) * 10) + 1
+                ten_parts = min(max(ten_parts, 1), 10)
+                
                 label = "上げ" if "low" in prev_ev['type'] else "下げ"
                 phase_str = f"{label}{ten_parts}分"
         
+        # もしイベントが見つからない場合のフォールバック（上げ下げのみ）
+        if phase_str == "不明" and len(hourly_data) >= 24:
+            h = dt.hour
+            phase_str = "上げ潮" if hourly_data[(h+1)%24] > hourly_data[h] else "下げ潮"
+
         return {"cm": current_cm, "phase": phase_str, "events": events, "hourly": hourly_data}
 
     except Exception as e:
-        return {"cm": 0, "phase": f"エラー:{str(e)[:10]}", "events": [], "hourly": []}
+        st.error(f"解析エラー詳細: {e}")
+        return {"cm": 0, "phase": "解析失敗", "events": [], "hourly": []}
         
 def get_weather_data_openmeteo(lat, lon, dt):
     try:
@@ -339,5 +348,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
