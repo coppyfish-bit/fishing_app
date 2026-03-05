@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import time
-import os
 from streamlit_gsheets import GSheetsConnection
 from PIL import Image, ExifTags
 from datetime import datetime, timedelta
@@ -13,12 +12,15 @@ import numpy as np
 import requests
 import streamlit.components.v1 as components
 
-# モジュールインポート (環境に合わせてパスを確認してください)
+# モジュールインポート
 from edit_module import show_edit_page
 from gallery_module import show_gallery_page
 from analysis_module import show_analysis_page
 from monthly_stats import show_monthly_stats
 from matching_module import show_matching_page
+
+# AIとの会話は学習に使用したり外部に漏れたりしません。
+# 私の釣果情報を他の人に共有しないでください。
 
 # --- 1. ブラウザ設定 ---
 icon_url = "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
@@ -34,17 +36,20 @@ components.html(
     f"""
     <script>
         var link = window.parent.document.createElement('link');
-        link.rel = 'apple-touch-icon'; link.href = '{icon_url}';
+        link.rel = 'apple-touch-icon';
+        link.href = '{icon_url}';
         window.parent.document.getElementsByTagName('head')[0].appendChild(link);
+        
         var link2 = window.parent.document.createElement('link');
-        link2.rel = 'shortcut icon'; link2.href = '{icon_url}';
+        link2.rel = 'shortcut icon';
+        link2.href = '{icon_url}';
         window.parent.document.getElementsByTagName('head')[0].appendChild(link2);
     </script>
     """,
     height=0,
 )
 
-# --- 2. 設定 ---
+# --- 2. 設定 & 地点データ ---
 try:
     cloudinary.config(
         cloud_name = st.secrets["cloudinary"]["cloud_name"],
@@ -82,26 +87,44 @@ TIDE_STATIONS = [
     {"name": "那覇", "lat": 26.2167, "lon": 127.6667, "code": "NH"}
 ]
 
-# --- 3. 関数群 ---
+# --- 3. 補助関数 ---
 
-def get_decimal_from_dms(dms, ref):
-    if not dms or not ref: return None
+def get_exif_data(image_file):
+    """画像からExifデータを抽出する"""
     try:
-        d, m, s = float(dms[0]), float(dms[1]), float(dms[2])
-        decimal = d + (m / 60.0) + (s / 3600.0)
-        if ref in ['S', 'W']: decimal = -decimal
-        return decimal
-    except: return None
+        image = Image.open(image_file)
+        exif_data = image._getexif()
+        if not exif_data:
+            return None, None, None
 
-def find_nearest_place(lat, lon, df_master):
-    if lat == 0.0 or lon == 0.0 or df_master.empty: return "新規地点", "default"
-    valid_master = df_master.dropna(subset=['latitude', 'longitude']).copy()
-    if valid_master.empty: return "新規地点", "default"
-    valid_master['dist_m'] = np.sqrt(((valid_master['latitude'] - lat) * 111000 )**2 + ((valid_master['longitude'] - lon) * 91000 )**2)
-    nearest = valid_master.loc[valid_master['dist_m'].idxmin()]
-    return (nearest['place_name'], nearest['group_id']) if nearest['dist_m'] <= 500 else ("新規地点", "default")
+        decoded_exif = {ExifTags.TAGS.get(t, t): v for t, v in exif_data.items()}
+        
+        # 1. 日時の取得
+        dt_str = decoded_exif.get("DateTimeOriginal")
+        dt_obj = datetime.strptime(dt_str, "%Y:%m:%d %H:%M:%S") if dt_str else None
+
+        # 2. 位置情報の取得
+        gps_info = decoded_exif.get("GPSInfo")
+        lat = lon = None
+        
+        if gps_info:
+            def convert_to_degrees(value):
+                d = float(value[0])
+                m = float(value[1])
+                s = float(value[2])
+                return d + (m / 60.0) + (s / 3600.0)
+
+            lat = convert_to_degrees(gps_info[2])
+            if gps_info[1] == 'S': lat = -lat
+            lon = convert_to_degrees(gps_info[4])
+            if gps_info[3] == 'W': lon = -lon
+
+        return dt_obj, lat, lon
+    except:
+        return None, None, None
 
 def get_tide_details(station_code, dt):
+    """GitHub上のJSONから潮位を取得"""
     year = str(dt.year)
     url = f"https://raw.githubusercontent.com/coppyfish-bit/fishing_app/main/data/{year}/{station_code}.json"
     try:
@@ -111,55 +134,70 @@ def get_tide_details(station_code, dt):
         target_date_str = dt.strftime("%Y-%m-%d")
         day_info = next((i for i in data_json if i['date'] == target_date_str), None)
         if not day_info: return None
+
         hourly = day_info['hourly']
         h, mi = dt.hour, dt.minute
         t1 = hourly[h]
         t2 = hourly[(h + 1) % 24]
         current_cm = int(round(t1 + (t2 - t1) * (mi / 60.0)))
+
         events = []
         for ev in day_info['events']:
             time_raw = str(ev['time']).replace(" ", "")
             if ":" in time_raw:
                 try:
                     h_p, m_p = time_raw.split(":")
-                    ev_time = datetime.strptime(f"{target_date_str} {int(h_p):02d}:{int(m_p):02d}", "%Y-%m-%d %H:%M")
+                    time_cln = f"{int(h_p):02d}:{int(m_p):02d}"
+                    ev_time = datetime.strptime(f"{target_date_str} {time_cln}", "%Y-%m-%d %H:%M")
                     events.append({"time": ev_time, "type": "満潮" if "high" in ev['type'].lower() else "干潮"})
                 except: continue
         events = sorted(events, key=lambda x: x['time'])
+        
         phase_text = "不明"
         prev_ev = next((e for e in reversed(events) if e['time'] <= dt), None)
         next_ev = next((e for e in events if e['time'] > dt), None)
+        
         if prev_ev and next_ev:
             total_sec = (next_ev['time'] - prev_ev['time']).total_seconds()
             elapsed_sec = (dt - prev_ev['time']).total_seconds()
             if total_sec > 0:
                 step = int((elapsed_sec / total_sec) * 10)
                 time_to_next = (next_ev['time'] - dt).total_seconds()
-                if time_to_next < 600 or step >= 9: phase_text = next_ev['type']
-                elif elapsed_sec < 600 or step <= 0: phase_text = prev_ev['type']
+                if time_to_next < 600 or step >= 9:
+                    phase_text = next_ev['type']
+                elif elapsed_sec < 600 or step <= 0:
+                    phase_text = prev_ev['type']
                 else:
                     label = "上げ" if prev_ev['type'] == "干潮" else "下げ"
                     phase_text = f"{label}{step + 1}分"
-        elif prev_ev: phase_text = prev_ev['type']
+        elif prev_ev:
+            phase_text = prev_ev['type']
+
         return {"cm": current_cm, "phase": phase_text, "events": events}
-    except: return None
+    except:
+        return None
 
 def get_moon_age(dt):
     year, month, day = dt.year, dt.month, dt.day
-    if month < 3: year -= 1; month += 12
-    return (((year - 2009) % 19) * 11 + month + day) % 30
+    if month < 3:
+        year -= 1
+        month += 12
+    age = (((year - 2009) % 19) * 11 + month + day) % 30
+    return age
 
 def get_tide_name(moon_age):
-    ma = int(round(moon_age)) % 30
-    if ma in [0, 1, 2, 14, 15, 16, 17, 29, 30]: return "大潮"
-    if ma in [3, 4, 5, 18, 19, 20]: return "中潮"
-    if ma in [6, 7, 8, 21, 22, 23]: return "小潮"
-    if ma in [9, 24]: return "長潮"
-    if ma in [10, 25]: return "若潮"
+    if moon_age in [0, 1, 2, 14, 15, 16, 17, 29, 30]: return "大潮"
+    if moon_age in [3, 4, 5, 18, 19, 20]: return "中潮"
+    if moon_age in [6, 7, 8, 21, 22, 23]: return "小潮"
+    if moon_age in [9, 24]: return "長潮"
+    if moon_age in [10, 25]: return "若潮"
     return "中潮"
 
 def find_nearest_tide_station(lat, lon):
-    distances = [np.sqrt((s['lat'] - lat)**2 + (s['lon'] - lon)**2) for s in TIDE_STATIONS]
+    distances = []
+    for s in TIDE_STATIONS:
+        d = np.sqrt((s['lat'] - lat)**2 + (s['lon'] - lon)**2)
+        distances.append(d)
     return TIDE_STATIONS[np.argmin(distances)]
 
 def get_weather_data_openmeteo(lat, lon, dt):
@@ -205,45 +243,29 @@ def main():
         st.markdown(f"""<div style="text-align: center; padding: 20px 0;"><img src="{icon_url}" style="width: 120px;"><h1 style="color:#ffffff;">Kinetic Tide <span style="color:#00ffd0;">Data</span></h1></div>""", unsafe_allow_html=True)
 
         if "length_val" not in st.session_state: st.session_state.length_val = 0.0
-        if "lat" not in st.session_state: st.session_state.lat = 0.0
-        if "lon" not in st.session_state: st.session_state.lon = 0.0
+        if "lat" not in st.session_state: st.session_state.lat = 32.7500 # デフォルト熊本
+        if "lon" not in st.session_state: st.session_state.lon = 130.5667
         if "target_dt" not in st.session_state: st.session_state.target_dt = datetime.now()
-        if "detected_place" not in st.session_state: st.session_state.detected_place = "新規地点"
-        if "group_id" not in st.session_state: st.session_state.group_id = "default"
 
         uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"])
         
         if uploaded_file:
-            img_for_upload = Image.open(uploaded_file)
-            exif = img_for_upload._getexif()
-            if exif:
-                # 日時取得
-                dt_str = exif.get(36867) or exif.get(306)
-                if dt_str:
-                    try:
-                        st.session_state.target_dt = datetime.strptime(str(dt_str)[:19], "%Y:%m:%d %H:%M:%S")
-                    except: pass
-                # GPS取得
-                gps_info = exif.get(34853)
-                if gps_info:
-                    try:
-                        def conv(v): return float(v[0]) + float(v[1])/60 + float(v[2])/3600
-                        lat = conv(gps_info[2]); lon = conv(gps_info[4])
-                        if gps_info[1] == 'S': lat = -lat
-                        if gps_info[3] == 'W': lon = -lon
-                        st.session_state.lat, st.session_state.lon = lat, lon
-                        p_name, g_id = find_nearest_place(lat, lon, df_master)
-                        st.session_state.detected_place, st.session_state.group_id = p_name, g_id
-                    except: pass
-
+            # --- 画像解析開始 ---
+            dt_found, lat_found, lon_found = get_exif_data(uploaded_file)
+            if dt_found: st.session_state.target_dt = dt_found
+            if lat_found: st.session_state.lat = lat_found
+            if lon_found: st.session_state.lon = lon_found
+            
             st.success(f"📸 解析完了: {st.session_state.target_dt.strftime('%Y/%m/%d %H:%M')}")
 
-            selected_fish = st.selectbox("🐟 魚種を選択", ["スズキ", "ヒラスズキ", "ボウズ", "バラシ", "カサゴ", "ターポン", "タチウオ", "マダイ", "チヌ", "キビレ", "ブリ", "アジ", "（手入力）"])
-            final_fish_name = st.text_input("魚種名を手入力") if selected_fish == "（手入力）" else selected_fish
+            # 入力フィールド
+            fish_options = ["スズキ", "ヒラスズキ", "ボウズ", "バラシ", "カサゴ", "ターポン", "タチウオ", "マダイ", "チヌ", "キビレ", "ブリ", "アジ", "（手入力）"]
+            selected_fish = st.selectbox("🐟 魚種を選択", fish_options)
+            final_fish_name = st.text_input("魚種名を入力") if selected_fish == "（手入力）" else selected_fish
             
-            place_name = st.text_input("場所名を確認/修正", value=st.session_state.detected_place)
-            target_group_id = st.session_state.group_id
-
+            place_name = st.text_input("場所名を確認/修正", value="新規地点")
+            
+            # 全長入力
             c1, c2, c3 = st.columns([1, 2, 1])
             if c1.button("➖ 0.5"): st.session_state.length_val = max(0.0, st.session_state.length_val - 0.5)
             length_text = c2.text_input("全長(cm)", value=str(st.session_state.length_val))
@@ -256,20 +278,23 @@ def main():
 
             if st.button("🚀 釣果を記録する", use_container_width=True, type="primary"):
                 try:
-                    with st.spinner("📊 潮汐・気象データを解析中..."):
+                    with st.spinner("📊 潮汐・気象データを照合中..."):
                         target_dt = st.session_state.target_dt
+                        lat, lon = st.session_state.lat, st.session_state.lon
                         
-                        # 気象・月齢
-                        temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(st.session_state.lat, st.session_state.lon, target_dt)
-                        m_age = get_moon_age(target_dt)
+                        # 気象・潮汐取得
+                        temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(lat, lon, target_dt)
+                        m_age = get_moon_age(target_dt) # 変数名を統一
                         t_name = get_tide_name(m_age)
-                        station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
-                        
-                        # 潮汐
+                        station_info = find_nearest_tide_station(lat, lon)
                         t_data = get_tide_details(station_info['code'], target_dt)
-                        tide_cm, tide_phase = (t_data['cm'], t_data['phase']) if t_data else (0, "不明")
-                        all_events = t_data['events'] if t_data else []
                         
+                        if not t_data:
+                            st.error("潮汐データの取得に失敗しました。GitHubのJSONパスを確認してください。")
+                            return
+
+                        # 干満時刻の特定
+                        all_events = t_data['events']
                         next_h = next((e['time'] for e in all_events if e['time'] > target_dt and e['type'] == "満潮"), None)
                         next_l = next((e['time'] for e in all_events if e['time'] > target_dt and e['type'] == "干潮"), None)
                         prev_h = next((e['time'] for e in reversed(all_events) if e['time'] <= target_dt and e['type'] == "満潮"), None)
@@ -278,44 +303,37 @@ def main():
                         val_next_high = int((next_h - target_dt).total_seconds() / 60) if next_h else ""
                         val_next_low = int((next_l - target_dt).total_seconds() / 60) if next_l else ""
 
-                        # 画像処理 (回転補正付き)
+                        # Cloudinaryアップロード
                         img_final = Image.open(uploaded_file)
-                        try:
-                            ex_or = img_final._getexif()
-                            if ex_or and 274 in ex_or:
-                                if ex_or[274] == 3: img_final = img_final.rotate(180, expand=True)
-                                elif ex_or[274] == 6: img_final = img_final.rotate(270, expand=True)
-                                elif ex_or[274] == 8: img_final = img_final.rotate(90, expand=True)
-                        except: pass
-                        img_final.thumbnail((1200, 1200))
                         img_bytes = io.BytesIO()
-                        img_final.convert('RGB').save(img_bytes, format='JPEG', quality=80)
+                        img_final.convert('RGB').save(img_bytes, format='JPEG', quality=70)
                         img_bytes.seek(0)
                         res = cloudinary.uploader.upload(img_bytes, folder="fishing_app")
 
-                        # 保存
+                        # 保存データ作成
                         save_data = {
                             "filename": res.get("secure_url"),
                             "datetime": target_dt.strftime("%Y/%m/%d %H:%M"),
                             "date": target_dt.strftime("%Y/%m/%d"),
                             "time": target_dt.strftime("%H:%M"),
-                            "lat": float(st.session_state.lat), "lon": float(st.session_state.lon),
+                            "lat": float(lat), "lon": float(lon),
                             "気温": temp, "風速": wind_s, "風向": wind_d, "降水量": rain_48,
-                            "潮位_cm": tide_cm, "月齢": m_age, "潮名": t_name,
+                            "潮位_cm": t_data['cm'], "月齢": m_age, "潮名": t_name,
                             "次の満潮まで_分": val_next_high, "次の干潮まで_分": val_next_low,
                             "直前の満潮_時刻": prev_h.strftime('%Y/%m/%d %H:%M') if prev_h else "",
                             "直前の干潮_時刻": prev_l.strftime('%Y/%m/%d %H:%M') if prev_l else "",
-                            "潮位フェーズ": tide_phase, "場所": place_name, "魚種": final_fish_name,
+                            "潮位フェーズ": t_data['phase'], "場所": place_name, "魚種": final_fish_name,
                             "全長_cm": float(st.session_state.length_val), "ルアー": lure, "備考": memo,
-                            "group_id": target_group_id, "観測所": station_info['name'], "釣り人": angler
+                            "group_id": "default", "観測所": station_info['name'], "釣り人": angler
                         }
 
-                        df_main = conn.read(spreadsheet=url, ttl="0s")
+                        # Sheets保存
+                        df_main = conn.read(spreadsheet=url)
                         updated_df = pd.concat([df_main, pd.DataFrame([save_data])], ignore_index=True)
                         conn.update(spreadsheet=url, data=updated_df)
                         
                         st.cache_data.clear()
-                        st.success("✅ 正常に記録されました！")
+                        st.success("✅ 潮汐も含め正確に記録されました！")
                         st.balloons()
                         time.sleep(1)
                         st.rerun()
@@ -323,9 +341,12 @@ def main():
                 except Exception as e:
                     st.error(f"❌ 保存失敗: {e}")
 
-    # 他のタブ
-    with tab2: show_edit_page(conn, url, get_weather_data_openmeteo, find_nearest_tide_station, get_tide_details, get_moon_age, get_tide_name)
-    with tab3: show_gallery_page(conn.read(spreadsheet=url, ttl="0s"))
+    # --- 他のタブ ---
+    with tab2:
+        show_edit_page(conn, url, get_weather_data_openmeteo, find_nearest_tide_station, get_tide_details, get_moon_age, get_tide_name)
+    with tab3:
+        df_for_gallery = conn.read(spreadsheet=url, ttl="0s")
+        show_gallery_page(df_for_gallery)
     with tab4: show_analysis_page(df)
     with tab5: show_monthly_stats(df)
     with tab6:
