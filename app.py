@@ -24,52 +24,58 @@ import traceback
 # --- 3. 補助関数 (ここを追加) ---
 
 def get_exif_data(image_file):
-    """画像からExifデータを抽出する"""
+    """画像からExifデータを抽出する（GPSがない場合は本渡瀬戸をデフォルトにする）"""
+    # --- デフォルト値（本渡瀬戸） ---
+    DEFAULT_LAT = 32.4539
+    DEFAULT_LON = 130.2033
+    
     try:
-        # 画像を開き直す（ポインタを先頭に戻す）
         image = Image.open(image_file)
         exif_data = image._getexif()
+        
+        # Exifが全くない場合でも、日時だけは現在、場所はデフォルトで返す
         if not exif_data:
-            return None, None, None
+            return datetime.now(), DEFAULT_LAT, DEFAULT_LON
 
-        # タグ名で辞書を作成
         decoded_exif = {ExifTags.TAGS.get(t, t): v for t, v in exif_data.items()}
         
-        # 1. 日時の取得 (DateTimeOriginal)
-        dt_obj = None
+        # 1. 日時の取得
+        dt_obj = datetime.now() # デフォルトは現在時刻
         dt_str = decoded_exif.get("DateTimeOriginal")
         if dt_str:
             try:
-                # Exifの標準形式 "YYYY:MM:DD HH:MM:SS" をパース
                 dt_obj = datetime.strptime(dt_str, "%Y:%m:%d %H:%M:%S")
-            except:
-                pass
+            except: pass
 
-        # 2. 位置情報の取得 (GPSInfo)
+        # 2. 位置情報の取得
         gps_info = decoded_exif.get("GPSInfo")
-        lat = lon = None
+        lat, lon = DEFAULT_LAT, DEFAULT_LON # デフォルト値で初期化
         
         if gps_info:
             def convert_to_degrees(value):
-                # 度、分、秒のタプルを十進法に変換
                 d = float(value[0])
                 m = float(value[1])
                 s = float(value[2])
                 return d + (m / 60.0) + (s / 3600.0)
 
-            # 北緯・南緯、東経・西経を考慮して計算
             try:
-                lat = convert_to_degrees(gps_info[2])
-                if gps_info[1] == 'S': lat = -lat
-                lon = convert_to_degrees(gps_info[4])
-                if gps_info[3] == 'W': lon = -lon
+                lat_val = convert_to_degrees(gps_info[2])
+                if gps_info[1] == 'S': lat_val = -lat_val
+                lon_val = convert_to_degrees(gps_info[4])
+                if gps_info[3] == 'W': lon_val = -lon_val
+                
+                # GPSが正常に計算できたら上書き
+                lat, lon = lat_val, lon_val
+                st.success("📍 写真から位置情報を取得しました。")
             except:
-                pass
+                st.info("ℹ️ 写真に位置情報がないため、本渡瀬戸を基準にします。")
+        else:
+            st.info("ℹ️ 写真にGPSタグが含まれていないため、本渡瀬戸を基準にします。")
 
         return dt_obj, lat, lon
+
     except Exception as e:
-        # エラー時はNoneを返してメイン処理を止めない
-        return None, None, None
+        return datetime.now(), DEFAULT_LAT, DEFAULT_LON
 # 1. ブラウザのタブ用設定（ファビコン）
 icon_url = "https://res.cloudinary.com/dmkvcofvn/image/upload/v1771574282/ktd_rnaphy.png"
 
@@ -1006,6 +1012,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
