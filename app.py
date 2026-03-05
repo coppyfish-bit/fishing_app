@@ -1011,17 +1011,33 @@ def main():
                     st.success("記録完了！")
                     st.rerun()
 
-    # --- 他のタブ ---
-    with tabs[1]: show_edit_page(conn, url, get_weather_data_openmeteo, find_nearest_tide_station, get_tide_details, get_moon_age, get_tide_name)
-    with tabs[2]: show_gallery_page(conn.read(spreadsheet=url, ttl="0s"))
-    with tabs[3]: show_analysis_page(df)
-    with tabs[4]: show_monthly_stats(df)
-    with tabs[5]: show_strategy_analysis(df)
-    with tabs[6]: show_matching_page(df)
-    with tabs[7]: ai_module.show_ai_page(conn, url, df)
+try:
+        df = conn.read(spreadsheet=url, ttl="10s")
+    except Exception as e:
+        st.error("Google Sheets APIの制限にかかりました。少し待ってからリロードしてください。")
+        st.stop()
+
+    # --- 各タブの呼び出しに df を渡す ---
+    with tabs[0]:
+        # 記録タブ
+        show_record_page(conn, url, df_master) # 記録時は最新が必要な場合もあるが、まずはdfを流用可
+
+    with tabs[1]:
+        # 編集タブ（edit_module）
+        # 修正：ここで conn.read していたのを、上の df を使うように変更
+        show_edit_page(conn, url, get_weather_data_openmeteo, find_nearest_tide_station, get_tide_details, get_moon_age, get_tide_name, df)
+
+    with tabs[2]:
+        # ギャラリータブ
+        show_gallery_page(df) # conn, url ではなく df だけ渡せばAPI消費が減る
+
+    with tabs[3]:
+        # AIタブ
+        show_ai_page(conn, url, df)
 
 if __name__ == "__main__":
     main()
+
 
 
 
