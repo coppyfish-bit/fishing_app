@@ -53,7 +53,7 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
         st.session_state[form_ver_key] = 0
 
     # --- 再計算ロジック ---
-    if st.button(f"🔄 気象・潮汐を再計算(自動補完)", key=f"recalc_btn_{idx}", use_container_width=True):
+    if st.button(f"🔄 気象・潮汐を再計算(自動補完)", key=f"recalc_v2_{idx}", use_container_width=True):
         try:
             with st.spinner("最新ロジックで再計算中..."):
                 # 1. 日時の取得
@@ -107,7 +107,7 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
         return val if pd.notna(val) else default
 
     ver = st.session_state[form_ver_key]
-    with st.form(key=f"edit_form_{idx}_{ver}"):
+    with st.form(key=f"edit_form_final_{idx}_{ver}"):
         c1, c2, c3 = st.columns([2, 1, 2])
         new_fish = c1.text_input("🐟 魚種", value=str(df.at[idx, '魚種']))
         new_len = c2.number_input("📏 全長(cm)", value=float(get_v(None, '全長_cm', 0.0)))
@@ -160,4 +160,5 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 st.rerun()
             else:
                 st.warning("削除する場合はチェックを入れてください。")
+
 
