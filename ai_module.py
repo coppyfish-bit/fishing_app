@@ -114,7 +114,7 @@ def show_ai_page(conn, url, df, tide_data=None):
                 with st.spinner("深淵の底で思考中..."):
                     # キャッシュ対応の関数を呼び出し
                     api_key = st.secrets["GEMINI_API_KEY"]
-                    answer = get_demon_response(api_key, 'gemini-2.0-flash', full_prompt)
+                    answer = get_demon_response(api_key, 'gemini-3.1-flash-lite-preview', full_prompt)
                     
                     st.markdown(answer)
                     st.session_state.messages.append({"role": "assistant", "content": answer})
@@ -125,3 +125,4 @@ def show_ai_page(conn, url, df, tide_data=None):
                     st.error("⚠️ 貴様の問いが多すぎるのだ。1分待つか、新しい魔力（APIキー）を用意しろ。")
                 else:
                     st.error(f"魔界との通信が途絶えた...（詳細: {e}）")
+
