@@ -1011,32 +1011,38 @@ def main():
                     st.success("記録完了！")
                     st.rerun()
 
-        try:
-                df = conn.read(spreadsheet=url, ttl="10s")
-            except Exception as e:
-                st.error("Google Sheets APIの制限にかかりました。少し待ってからリロードしてください。")
-                st.stop()
-        
-            # --- 各タブの呼び出しに df を渡す ---
-            with tabs[0]:
-                # 記録タブ
-                show_record_page(conn, url, df_master) # 記録時は最新が必要な場合もあるが、まずはdfを流用可
-        
-            with tabs[1]:
-                # 編集タブ（edit_module）
-                # 修正：ここで conn.read していたのを、上の df を使うように変更
-                show_edit_page(conn, url, get_weather_data_openmeteo, find_nearest_tide_station, get_tide_details, get_moon_age, get_tide_name, df)
-        
-            with tabs[2]:
-                # ギャラリータブ
-                show_gallery_page(df) # conn, url ではなく df だけ渡せばAPI消費が減る
-        
-            with tabs[3]:
-                # AIタブ
-                show_ai_page(conn, url, df)
+
+                    # --- 1. データの読み込み（API節約のため1回だけ） ---
+                    try:
+                        # ttlを少し持たせることで、タブ切り替え時のAPI消費を抑える
+                        df = conn.read(spreadsheet=url, ttl="10s")
+                    except Exception as e:
+                        st.error("⚠️ Google Sheetsとの通信制限が発生しました。1分ほど待ってリロードしてください。")
+                        st.stop()
+                
+                    # --- 2. タブの定義 ---
+                    tabs = st.tabs(["📝 記録", "🔄 編集", "🖼️ ギャラリー", "😈 AI解析"])
+                
+                    with tabs[0]:
+                        # 記録ページ（既存のコード）
+                        # ※記録完了後に st.rerun() されるため、次は最新の df が読み込まれます
+                        show_record_page(conn, url, df_master) 
+                
+                    with tabs[1]:
+                        # 編集ページ：ここでも読み込み済みの df を渡す
+                        show_edit_page(conn, url, get_weather_data_openmeteo, find_nearest_tide_station, get_tide_details, get_moon_age, get_tide_name, df)
+                
+                    with tabs[2]:
+                        # ギャラリー：APIを叩かず df を渡すだけに
+                        show_gallery_page(df)
+                
+                    with tabs[3]:
+                        # AIページ（デーモン佐藤）：質問方式
+                        show_ai_page(conn, url, df)
 
 if __name__ == "__main__":
     main()
+
 
 
 
