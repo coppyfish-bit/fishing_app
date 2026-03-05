@@ -420,7 +420,7 @@ def main():
     
         uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"])
         
-            if uploaded_file:
+        if uploaded_file:
             # --- 1. Exifから日付と場所を抽出 ---
             # GPSがない場合は get_exif_data 内で本渡瀬戸の座標が返されます
             dt_found, lat_found, lon_found = get_exif_data(uploaded_file)
@@ -1022,6 +1022,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
