@@ -3,83 +3,107 @@ import google.generativeai as genai
 import pandas as pd
 
 def show_ai_page(conn, url, df):
-    # --- 1. スタイル設定（LINE風・魔界カスタム） ---
+    # --- 1. スタイル設定（LINE風吹き出しカスタム） ---
     st.markdown("""
         <style>
-        .stChatMessage { border-radius: 15px; padding: 10px; margin-bottom: 5px; }
-        [data-testid="stChatMessageAssistant"] { background-color: #2c2f33; color: white; border: 1px solid #ff4b4b; }
-        [data-testid="stChatMessageUser"] { background-color: #004a33; color: white; }
+        /* チャットエリア全体の背景 */
+        .stApp { background-color: #0e1117; }
+        
+        /* 吹き出しの共通設定 */
+        .stChatMessage { border-radius: 20px; padding: 15px; margin-bottom: 10px; max-width: 85%; }
+        
+        /* デーモン佐藤（Assistant）の吹き出し：黒背景に赤枠 */
+        [data-testid="stChatMessageAssistant"] {
+            background-color: #1a1c23;
+            color: #eeeeee;
+            border: 2px solid #ff4b4b;
+            margin-right: auto;
+        }
+        
+        /* ユーザーの吹き出し：深緑背景 */
+        [data-testid="stChatMessageUser"] {
+            background-color: #004a33;
+            color: white;
+            margin-left: auto;
+            border: 1px solid #006b4a;
+        }
+
+        /* ヘッダー画像の設定 */
+        .ai-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background: linear-gradient(180deg, #2c0000 0%, #0e1117 100%);
+            border-radius: 20px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ff4b4b;
+        }
         </style>
     """, unsafe_allow_html=True)
 
-    st.markdown("<h2 style='color: #ff4b4b;'>😈 デーモン佐藤の深淵知見</h2>", unsafe_allow_html=True)
-
-    AI_ICON = "damon_sato.png" 
+    # --- 2. 常に表示されるデーモン佐藤の肖像 ---
+    AI_ICON = "damon_sato.png"
     USER_ICON = "👤"
 
+    st.markdown(f"""
+        <div class="ai-header">
+            <img src="app/static/{AI_ICON}" width="150" style="border-radius: 50%; border: 4px solid #ff4b4b; box-shadow: 0 0 20px #ff4b4b;">
+            <h2 style="color: #ff4b4b; margin-top: 15px;">😈 デーモン佐藤の深淵知見</h2>
+            <p style="color: #cccccc; font-style: italic;">「貴様の釣果、データごと飲み干してやろう...」</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # モデル・設定の準備
     if "GEMINI_API_KEY" not in st.secrets:
         st.error("APIキーが設定されてないぞ、佐藤。")
         return
 
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('gemini-3-flash')
+    model = genai.GenerativeModel('gemini-3-flash') # Gemini 3 Flash を指定
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 履歴表示
+    # チャット履歴表示
     for message in st.session_state.messages:
         avatar = AI_ICON if message["role"] == "assistant" else USER_ICON
         with st.chat_message(message["role"], avatar=avatar):
             st.markdown(message["content"])
 
-    # --- 2. 場所別データの事前集計（AIへのインプット用） ---
+    # --- 3. 分析データの準備 ---
     if not df.empty:
-        # 場所ごとの統計を作成
         place_stats = df.groupby('場所').agg({
             '全長_cm': ['max', 'mean', 'count'],
             '潮位_cm': 'mean',
             '潮位フェーズ': lambda x: x.mode()[0] if not x.empty else "不明"
         }).reset_index()
-        place_stats.columns = ['場所', '最大サイズ', '平均サイズ', '釣果数', '平均潮位', '主要フェーズ']
+        place_stats.columns = ['場所', '最大', '平均', '数', '潮位', 'フェーズ']
         place_summary = place_stats.to_csv(index=False)
-        
-        # 全体最大魚の特定
         max_row = df.loc[df['全長_cm'].idxmax()]
+        max_fish_info = f"場所:{max_row['場所']}, {max_row['全長_cm']}cm, {max_row['潮位フェーズ']}"
     else:
         place_summary = "データなし"
+        max_fish_info = "なし"
 
-    # --- 3. 質問入力 ---
-    if prompt := st.chat_input("場所ごとの傾向を分析せよ..."):
+    # --- 4. チャット入力 ---
+    if prompt := st.chat_input("深淵に問いかけよ...（例：本渡瀬戸の最大魚条件は？）"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar=USER_ICON):
             st.markdown(prompt)
 
-           with st.chat_message("assistant", avatar=AI_ICON):
-            # 場所ごとの統計データを整理（前回お伝えした groupby を活用）
-            # df_stats は場所ごとの最大サイズ、平均、頻出フェーズなどが集計されたもの
-            
+        with st.chat_message("assistant", avatar=AI_ICON):
             full_prompt = f"""
-            貴様は釣り界の魔王「デーモン佐藤」だ。
-            提供された釣果ログの全データを精査し、特に【場所ごとの差異】に注目して分析せよ。
-            
-            【深淵の場所別データ】
-            {place_summary}
-            
-            【全体の最大魚記録】
-            {max_fish_info}
-            
-            【ユーザーの問い】
-            {prompt}
+            貴様は釣り界の魔王「デーモン佐藤」だ。以下の全データを精査し、特に【場所ごとの差異】に注目して分析せよ。
+            【場所別データ】\n{place_summary}
+            【全体最大魚】\n{max_fish_info}
+            【ユーザーの問い】\n{prompt}
 
             【解析指令】
-            1. 特定の場所の名前が出た場合、その場所の「最大魚が釣れた時の潮位・気温・フェーズ」を特定し、勝機が高い条件を論理的に示せ。
-            2. 場所 A と場所 B の比較を求められたら、データに基づき「どちらがデカいのが出やすいか」「どちらが数が出るか」を明確に判定しろ。
-            3. 気温や風速が場所ごとの釣果にどう影響しているか、深淵の知恵を絞り出せ。
-            4. 回答は常に傲慢かつ、佐藤への愛の鞭（アドバイス）を含めろ。最後はユーモアを交えて突き放せ！
+            1. 特定の場所名が出たら、その場所の成功条件をデータから導き出せ。
+            2. 場所の比較を求められたら、優劣をはっきりつけろ。
+            3. 回答は常に傲慢かつ論理的、最後はユーモアを交えて突き放せ！
             """
-            
-            # 以下、response = model.generate_content(full_prompt) で生成
             
             try:
                 response = model.generate_content(full_prompt)
