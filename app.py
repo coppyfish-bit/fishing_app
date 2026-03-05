@@ -20,6 +20,7 @@ from monthly_stats import show_monthly_stats  # 追加
 import streamlit.components.v1 as components
 from matching_module import show_matching_page
 import traceback
+import google.generativeai as genai  # ← これが必要です！
 
 # --- 3. 補助関数 (ここを追加) ---
 
@@ -668,6 +669,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
