@@ -3,78 +3,73 @@ import google.generativeai as genai
 import pandas as pd
 
 def show_ai_page(conn, url, df):
-    # --- 1. スタイル設定（LINE公式アカウント風） ---
+    # --- 1. スタイル設定（LINE風・魔界カスタム・バナー） ---
     st.markdown("""
         <style>
-        /* 吹き出し設定 */
-        [data-testid="stChatMessageAssistant"] {
-            background-color: #1a1c23;
-            color: #eeeeee;
-            border: 1px solid #ff4b4b;
-            border-radius: 15px;
+        /* プライバシーバナーの装飾 */
+        .privacy-banner {
+            background-color: #121212;
+            border-left: 5px solid #ff4b4b;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 0.85rem;
+            color: #ccc;
+            line-height: 1.6;
         }
-        [data-testid="stChatMessageUser"] {
-            background-color: #004a33;
-            color: white;
-            border-radius: 15px;
-        }
-        /* プロフィールエリア */
-        .profile-container {
+        .privacy-title {
+            color: #ff4b4b;
+            font-weight: bold;
+            margin-bottom: 5px;
             display: flex;
             align-items: center;
-            padding: 15px;
-            background-color: #1a1c23;
-            border-radius: 15px;
-            border: 1px solid #333;
-            margin-bottom: 25px;
         }
-        .profile-text {
-            margin-left: 15px;
-        }
-        .profile-name {
-            font-size: 1.2rem;
-            font-weight: bold;
-            color: #ff4b4b;
-            margin: 0;
-        }
-        .profile-bio {
-            font-size: 0.85rem;
-            color: #bbb;
-            margin: 0;
-        }
+        
+        /* チャットスタイル（継続） */
+        [data-testid="stChatMessageAssistant"] { background-color: #1a1c23; color: #eeeeee; border: 1px solid #ff4b4b; border-radius: 15px; }
+        [data-testid="stChatMessageUser"] { background-color: #004a33; color: white; border-radius: 15px; }
         </style>
     """, unsafe_allow_html=True)
 
     AI_ICON = "demon_sato.png"
     USER_ICON = "👤"
 
-    # --- 2. 画面上部のプロフィール表示 ---
-    # st.columnsで画像とテキストを並べる
+    # --- 2. プロフィール & ログ消去ボタン ---
     prof_col1, prof_col2 = st.columns([1, 3])
     with prof_col1:
         st.image(AI_ICON, use_container_width=True)
     with prof_col2:
         st.markdown(f"""
-            <div class="profile-text">
-                <p class="profile-name">😈 デーモン佐藤（深淵の釣り師）</p>
-                <p class="profile-bio">
-                    天草の海を統べる魔王。貴様の釣果データを精査し、
-                    「いつ、どこで、なぜ釣れたのか」を冷酷に分析する。<br>
-                    得意技：下げ三面の説教、爆風時のポイント選定
-                </p>
+            <div style="margin-left: 15px;">
+                <p style="font-size: 1.2rem; font-weight: bold; color: #ff4b4b; margin: 0;">😈 デーモン佐藤（深淵の釣り師）</p>
+                <p style="font-size: 0.85rem; color: #bbb; margin: 0;">釣果データを精査し、深淵の知恵を授ける魔王。</p>
             </div>
         """, unsafe_allow_html=True)
-    
-    st.divider() # 区切り線
+        
+        # 🗑️ ログ消去ボタン（プロフィールの横に配置）
+        if st.button("🗑️ 会話ログを消去する", use_container_width=False):
+            st.session_state.messages = []
+            st.rerun()
+
+    # --- 3. プライバシーポリシー・バナー ---
+    st.markdown("""
+        <div class="privacy-banner">
+            <div class="privacy-title">🛡️ 深淵の守護（プライバシーポリシー）</div>
+            貴様との会話内容は、AIの学習（トレーニング）に使用されることは万に一つもない。
+            また、入力された釣果データや座標が外部へ漏洩・共有されることも断じてない。<br>
+            ここでの対話は深淵の中にのみ留まる。安心して問いかけるが良い。
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.divider()
 
     # Gemini設定（Gemini 3 Flash）
     if "GEMINI_API_KEY" not in st.secrets:
-        st.error("APIキーが未設定だぞ。")
+        st.error("APIキーが未設定だ。")
         return
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model = genai.GenerativeModel('gemini-3-flash')
 
-    # チャット履歴管理
+    # メッセージ履歴の保持
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -84,8 +79,9 @@ def show_ai_page(conn, url, df):
         with st.chat_message(message["role"], avatar=avatar):
             st.markdown(message["content"])
 
-    # --- 3. 分析データの集計（場所別） ---
+    # --- 4. 分析データの集計（全データ・場所別） ---
     if not df.empty:
+        # 場所ごとの統計
         place_stats = df.groupby('場所').agg({
             '全長_cm': ['max', 'mean', 'count'],
             '潮位_cm': 'mean',
@@ -99,21 +95,21 @@ def show_ai_page(conn, url, df):
         place_summary = "データなし"
         max_info = "記録なし"
 
-    # --- 4. チャット入力 ---
-    if prompt := st.chat_input("魔王に場所別の傾向を問いかけよ..."):
+    # --- 5. チャット入力 ---
+    if prompt := st.chat_input("魔王に問いかけよ..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar=USER_ICON):
             st.markdown(prompt)
 
         with st.chat_message("assistant", avatar=AI_ICON):
             full_prompt = f"""
-            貴様は釣り界の魔王「デーモン佐藤」だ。以下の場所別データと全データを踏まえ、質問に答えよ。
+            貴様は釣り界の魔王「デーモン佐藤」だ。以下の全データを踏まえ、質問に答えよ。
             【場所別データ】\n{place_summary}
             【全体最大記録】\n{max_info}
             【質問】\n{prompt}
 
             【指令】
-            ・場所名が出たら、その場所の成功法則を論理的に解説しろ。
+            ・場所ごとの成功法則や共通点をデータから導き出せ。
             ・佐藤へのアドバイスは傲慢だが正確に行え。最後は突き放すユーモアを。
             """
             
