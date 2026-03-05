@@ -3,7 +3,7 @@ import google.generativeai as genai
 import pandas as pd
 
 def show_ai_page(conn, url, df):
-    # --- 1. スタイル設定（LINE風＋魔界演出） ---
+    # --- 1. スタイル設定（LINE風・魔界カスタム） ---
     st.markdown("""
         <style>
         .stChatMessage { border-radius: 15px; padding: 10px; margin-bottom: 5px; }
@@ -14,19 +14,16 @@ def show_ai_page(conn, url, df):
 
     st.markdown("<h2 style='color: #ff4b4b;'>😈 デーモン佐藤の深淵知見</h2>", unsafe_allow_html=True)
 
-    # アイコン設定
     AI_ICON = "damon_sato.png" 
     USER_ICON = "👤"
 
-    # APIキー確認
     if "GEMINI_API_KEY" not in st.secrets:
-        st.error("APIキーが設定されてないぞ、佐藤。Secretsを確認しろ。")
+        st.error("APIキーが設定されてないぞ、佐藤。")
         return
 
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-3-flash')
 
-    # 履歴の初期化
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -36,53 +33,57 @@ def show_ai_page(conn, url, df):
         with st.chat_message(message["role"], avatar=avatar):
             st.markdown(message["content"])
 
-    # --- 2. 質問入力 ---
-    if prompt := st.chat_input("最大魚が釣れた条件を分析せよ...など"):
+    # --- 2. 場所別データの事前集計（AIへのインプット用） ---
+    if not df.empty:
+        # 場所ごとの統計を作成
+        place_stats = df.groupby('場所').agg({
+            '全長_cm': ['max', 'mean', 'count'],
+            '潮位_cm': 'mean',
+            '潮位フェーズ': lambda x: x.mode()[0] if not x.empty else "不明"
+        }).reset_index()
+        place_stats.columns = ['場所', '最大サイズ', '平均サイズ', '釣果数', '平均潮位', '主要フェーズ']
+        place_summary = place_stats.to_csv(index=False)
+        
+        # 全体最大魚の特定
+        max_row = df.loc[df['全長_cm'].idxmax()]
+    else:
+        place_summary = "データなし"
+
+    # --- 3. 質問入力 ---
+    if prompt := st.chat_input("場所ごとの傾向を分析せよ..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar=USER_ICON):
             st.markdown(prompt)
 
-        with st.chat_message("assistant", avatar=AI_ICON):
-            # --- 3. 分析用の全データ要約作成 ---
-            # 全データから最大魚を特定
-            max_fish_row = df.loc[df['全長_cm'].idxmax()] if not df.empty else None
+           with st.chat_message("assistant", avatar=AI_ICON):
+            # 場所ごとの統計データを整理（前回お伝えした groupby を活用）
+            # df_stats は場所ごとの最大サイズ、平均、頻出フェーズなどが集計されたもの
             
-            # 全体の統計（平均気温、よく釣れる潮位など）
-            stats_summary = {
-                "総釣果数": len(df),
-                "最大サイズ": df['全長_cm'].max() if not df.empty else 0,
-                "よく釣れる潮位範囲": f"{df['潮位_cm'].min()} - {df['潮位_cm'].max()} cm",
-                "主なヒットフェーズ": df['潮位フェーズ'].mode()[0] if not df.empty else "不明"
-            }
-
-            # Geminiへの命令文（全データを背景として渡す）
             full_prompt = f"""
             貴様は釣り界の魔王「デーモン佐藤」だ。
-            以下の貴様の釣果ログ全体（全データ）を精査し、質問に答えよ。
+            提供された釣果ログの全データを精査し、特に【場所ごとの差異】に注目して分析せよ。
             
-            【深淵の全統計】
-            {stats_summary}
+            【深淵の場所別データ】
+            {place_summary}
             
-            【最大魚の記録】
-            魚種: {max_fish_row['魚種'] if max_fish_row is not None else 'なし'}
-            サイズ: {max_fish_row['全長_cm'] if max_fish_row is not None else '0'}cm
-            日時: {max_fish_row['datetime'] if max_fish_row is not None else '不明'}
-            条件: 気温{max_fish_row['気温']}度, 風速{max_fish_row['風速']}m, 潮位{max_fish_row['潮位_cm']}cm, フェーズ:{max_fish_row['潮位フェーズ']}
-            
-            【直近の釣果データ（CSV）】
-            {df.tail(30).to_csv(index=False)}
+            【全体の最大魚記録】
+            {max_fish_info}
             
             【ユーザーの問い】
             {prompt}
 
-            【指示】
-            ・最大魚が釣れた時の共通点や、気温・風速・潮位・フェーズの相関関係をプロの視点で分析しろ。
-            ・「次に釣行すべき最高な条件」を論理的に、かつ魔王らしく傲慢に提示せよ。
+            【解析指令】
+            1. 特定の場所の名前が出た場合、その場所の「最大魚が釣れた時の潮位・気温・フェーズ」を特定し、勝機が高い条件を論理的に示せ。
+            2. 場所 A と場所 B の比較を求められたら、データに基づき「どちらがデカいのが出やすいか」「どちらが数が出るか」を明確に判定しろ。
+            3. 気温や風速が場所ごとの釣果にどう影響しているか、深淵の知恵を絞り出せ。
+            4. 回答は常に傲慢かつ、佐藤への愛の鞭（アドバイス）を含めろ。最後はユーモアを交えて突き放せ！
             """
+            
+            # 以下、response = model.generate_content(full_prompt) で生成
             
             try:
                 response = model.generate_content(full_prompt)
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
-                st.error(f"深淵との接続が不安定だ... ({e})")
+                st.error(f"深淵との通信エラーだ... {e}")
