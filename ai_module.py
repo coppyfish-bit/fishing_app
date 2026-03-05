@@ -37,7 +37,7 @@ def show_ai_page(conn, url, df):
 
     # Gemini設定
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('gemini-3-flash')
+    model = genai.GenerativeModel('gemini-2.0-flash')
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -89,4 +89,5 @@ def show_ai_page(conn, url, df):
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
                 st.error(f"深淵との通信エラー：{e}")
+
 
