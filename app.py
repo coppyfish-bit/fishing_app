@@ -191,81 +191,77 @@ def tide_func(station_code, dt):
         st.error(f"📡 通信エラー: {e}")
         return {"cm": 0, "phase": "通信エラー"}
 
-def get_tide_details(res, dt):
+def get_tide_details(station_code, dt):
     """
-    引数 res が『Responseオブジェクト』ならそのまま使い、
-    『URL文字列』なら、この中で通信をやり直してデータを取得する。
+    デバッグ版：潮汐取得関数
     """
+    year = str(dt.year)
+    # 1. URLの確認
+    url = f"https://raw.githubusercontent.com/coppyfish-bit/fishing_app/main/data/{year}/{station_code}.json"
+    st.info(f"🔍 取得を試行中のURL: {url}")
+    
     try:
-        # --- ここが魔法のガード：型をチェックして補正する ---
-        if isinstance(res, str):
-            # もし res がただの文字列（URL）だったら、ここで通信し直す
-            res = requests.get(res)
+        r = requests.get(url, timeout=10)
+        # 2. HTTPステータスの確認
+        if r.status_code != 200:
+            st.error(f"❌ HTTPエラー: ステータスコード {r.status_code} (ファイルが存在しない可能性があります)")
+            return None
         
-        # ここでようやく JSON をパース（res は必ず Response になっている）
-        data = res.json()
+        full_json = r.json()
+        data_json = full_json.get('data', [])
         
-        # 1. 日付の空白・ハイフンを除去して比較 (2026- 1- 1 対策)
-        target_date_clean = dt.strftime("%Y-%m-%d").replace("-0", "-").replace("-", "")
+        # 3. JSON構造の確認
+        if not data_json:
+            st.error("❌ JSON内に 'data' キーが見つからないか、空です。")
+            st.write("実際のJSON構造:", list(full_json.keys()))
+            return None
+
+        # 4. 日付一致の確認
+        target_date_str = dt.strftime("%Y-%m-%d")
+        st.write(f"📅 検索中の日付: {target_date_str}")
         
-        day_info = None
-        for item in data.get('data', []):
-            json_date_clean = str(item.get('date')).replace(" ", "").replace("-", "")
-            if json_date_clean == target_date_clean:
-                day_info = item
-                break
+        day_info = next((i for i in data_json if i.get('date') == target_date_str), None)
         
         if not day_info:
-            return {"cm": 0, "phase": "日付不一致"}
+            st.error(f"❌ JSON内に日付 {target_date_str} のデータが見つかりません。")
+            if data_json:
+                st.write("JSON内の先頭の日付例:", data_json[0].get('date'))
+            return None
 
-        # 2. 潮位の数値化と補間
-        hourly = [int(v) if str(v).isdigit() else 0 for v in day_info.get('hourly', [])]
-        if len(hourly) < 24: return {"cm": 0, "phase": "データ不足"}
+        # 5. 各項目の存在確認
+        if 'hourly' not in day_info or 'events' not in day_info:
+            st.error("❌ 'hourly' または 'events' キーがデータ内に存在しません。")
+            return None
 
+        # --- 以下、計算処理 ---
+        hourly = day_info['hourly']
         h, mi = dt.hour, dt.minute
-        h2 = (h + 1) % 24
-        t1, t2 = hourly[h], hourly[h2]
+        t1 = hourly[h]
+        t2 = hourly[(h + 1) % 24]
         current_cm = int(round(t1 + (t2 - t1) * (mi / 60.0)))
 
-        # 3. イベント解析
-        event_times = []
-        for ev in day_info.get('events', []):
-            try:
-                t_str = str(ev.get('time', '')).replace(" ", "")
-                if ":" in t_str and 0 <= int(t_str.split(':')[0]) <= 23:
-                    ev_dt = pd.to_datetime(f"{dt.strftime('%Y-%m-%d')} {t_str}")
-                    event_times.append({"time": ev_dt, "type": ev.get('type', 'unknown')})
-            except: continue
+        events = []
+        for ev in day_info['events']:
+            time_raw = str(ev['time']).replace(" ", "")
+            if ":" in time_raw:
+                try:
+                    h_p, m_p = time_raw.split(":")
+                    time_cln = f"{int(h_p):02d}:{int(m_p):02d}"
+                    ev_time = datetime.strptime(f"{target_date_str} {time_cln}", "%Y-%m-%d %H:%M")
+                    events.append({"time": ev_time, "type": "満潮" if "high" in ev['type'].lower() else "干潮"})
+                except: continue
+        events = sorted(events, key=lambda x: x['time'])
         
-        event_times = sorted(event_times, key=lambda x: x['time'])
-
-        # 4. フェーズ判定
-        phase_text = "計算中"
-        prev_ev = next((e for e in reversed(event_times) if e['time'] <= dt), None)
-        next_ev = next((e for e in event_times if e['time'] > dt), None)
-
-        if prev_ev and next_ev:
-            p_type = "上げ" if "low" in str(prev_ev['type']).lower() else "下げ"
-            phase_text = f"{p_type}潮"
-        elif prev_ev:
-            p_type = "上げ" if "low" in str(prev_ev['type']).lower() else "下げ"
-            phase_text = f"{p_type}潮"
-
-        return {"cm": current_cm, "phase": phase_text, "events": event_times, "hourly": hourly}
+        st.success(f"✅ 取得成功: {current_cm}cm / 潮汐イベント数: {len(events)}")
+        
+        # (フェーズ判定ロジックは省略... 既存のまま)
+        # ※ここに既存の phase_text 判定を入れて return してください。
+        
+        return {"cm": current_cm, "phase": "デバッグ中", "events": events}
 
     except Exception as e:
-        st.error(f"⚠️ 解析中にエラー: {e}")
-        with st.expander("詳細なログ"):
-            st.code(traceback.format_exc())
-        return {"cm": 0, "phase": "解析失敗"}
-
-    except Exception as e:
-        # 【デバッグ】エラーが起きた場所と内容を詳細に画面に出す
-        error_msg = traceback.format_exc()
-        st.error(f"⚠️ 解析中にエラーが発生しました\n内容: {e}")
-        with st.expander("🛠️ エラー詳細（エンジニア用）"):
-            st.code(error_msg)
-        return {"cm": 0, "phase": "解析失敗", "events": [], "hourly": []}
+        st.error(f"❌ 予期せぬエラーが発生しました: {e}")
+        return None
         
 def get_weather_data_openmeteo(lat, lon, dt):
     try:
@@ -950,6 +946,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
