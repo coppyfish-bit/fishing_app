@@ -75,7 +75,7 @@ def show_ai_page(conn, url, df):
     
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     # 404エラー回避のため、確実に存在する 2.0-flash を指定
-    model = genai.GenerativeModel('gemini-3.0-flash')
+    model = genai.GenerativeModel('gemini-2.0-flash')
 
     # メッセージ履歴の保持
     if "messages" not in st.session_state:
@@ -139,4 +139,5 @@ def show_ai_page(conn, url, df):
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
                 st.error(f"魔界との通信が途絶えた...（エラー詳細: {e}）")
+
 
