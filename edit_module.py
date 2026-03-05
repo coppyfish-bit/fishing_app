@@ -45,6 +45,10 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
     temp_data_key = f"edit_temp_{idx}"
     form_ver_key = f"edit_ver_{idx}"
     
+    # デフォルト座標（本渡瀬戸）
+    DEFAULT_LAT = 32.4539
+    DEFAULT_LON = 130.2033
+    
     if form_ver_key not in st.session_state:
         st.session_state[form_ver_key] = 0
 
@@ -52,10 +56,26 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
     if st.button(f"🔄 気象・潮汐を再計算(自動補完)", key=f"recalc_btn_{idx}", use_container_width=True):
         try:
             with st.spinner("最新ロジックで再計算中..."):
+                # 1. 日時の取得
                 raw_dt = str(df.at[idx, 'datetime']).strip()
                 dt_obj = pd.to_datetime(raw_dt)
-                lat, lon = float(df.at[idx, 'lat']), float(df.at[idx, 'lon'])
                 
+                # 2. 緯度・経度の取得（空の場合はデフォルト値を使用）
+                try:
+                    lat_val = df.at[idx, 'lat']
+                    lon_val = df.at[idx, 'lon']
+                    
+                    # 値がNaN（空）または 0 の場合にデフォルトを割り当て
+                    lat = float(lat_val) if pd.notna(lat_val) and lat_val != 0 else DEFAULT_LAT
+                    lon = float(lon_val) if pd.notna(lon_val) and lon_val != 0 else DEFAULT_LON
+                    
+                    if lat == DEFAULT_LAT:
+                        st.info("ℹ️ 座標データがないため、本渡瀬戸を基準に計算します。")
+                except:
+                    lat, lon = DEFAULT_LAT, DEFAULT_LON
+                    st.info("ℹ️ 座標エラーのため、本渡瀬戸を基準に計算します。")
+                
+                # 3. 潮汐・気象データの取得
                 station = station_func(lat, lon)
                 temp, w_s, w_d, rain = weather_func(lat, lon, dt_obj)
                 d_data = tide_func(station['code'], dt_obj) 
@@ -64,6 +84,7 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                     m_age = moon_func(dt_obj)
                     t_name = tide_name_func(m_age)
                     
+                    # 計算結果をセッションに一時保存
                     st.session_state[temp_data_key] = {
                         "気温": temp, "風速": w_s, "風向": w_d, "降水量": rain,
                         "潮位_cm": d_data.get('cm', 0),
@@ -71,6 +92,7 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                         "潮位フェーズ": d_data.get('phase', "不明")
                     }
                     st.session_state[form_ver_key] += 1
+                    st.success("再計算が完了しました。保存ボタンを押すと確定します。")
                     st.rerun()
         except Exception as e:
             st.error(f"再計算エラー: {e}")
@@ -138,3 +160,4 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 st.rerun()
             else:
                 st.warning("削除する場合はチェックを入れてください。")
+
