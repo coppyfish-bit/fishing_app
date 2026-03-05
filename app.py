@@ -363,35 +363,46 @@ def main():
         if "group_id" not in st.session_state: st.session_state.group_id = "default"
         if "target_dt" not in st.session_state: st.session_state.target_dt = datetime.now()
     
-        uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"], )
+uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"])
         
         if uploaded_file:
-            img_for_upload = Image.open(uploaded_file)
-            exif = img_for_upload._getexif()
+            # --- 1. まずExifから日付と場所を抜く (ここをしっかり書く) ---
+            dt_found, lat_found, lon_found = get_exif_data(uploaded_file)
             
-            # 1. 写真解析（一度だけ実行）
-            if exif:
-                # 日時抽出
-                for tag_id, value in exif.items():
-                    tag_name = ExifTags.TAGS.get(tag_id, tag_id)
-                    if tag_name == 'DateTimeOriginal':
-                        try:
-                            clean_val = str(value).strip()[:16].replace(":", "/", 2)
-                            st.session_state.target_time_str = item['time'].replace(' ', '') # 余計な空白を消す
-                        except: pass
-                
-                # 座標・場所抽出
-                geo = get_geotagging(exif)
-                if geo:
-                    lat = get_decimal_from_dms(geo['GPSLatitude'], geo['GPSLatitudeRef'])
-                    lon = get_decimal_from_dms(geo['GPSLongitude'], geo['GPSLongitudeRef'])
-                    if lat and lon:
-                        st.session_state.lat, st.session_state.lon = lat, lon
-                        p_name, g_id = find_nearest_place(lat, lon, df_master)
-                        st.session_state.detected_place = p_name
-                        st.session_state.group_id = g_id
-    
-            st.success(f"📸 解析完了: {st.session_state.detected_place} ({st.session_state.target_dt.strftime('%Y/%m/%d %H:%M')})")
+            # 解析できた値をセッションに保存（これが潮汐取得の鍵になります）
+            if dt_found: st.session_state.target_dt = dt_found
+            if lat_found: st.session_state.lat = lat_found
+            if lon_found: st.session_state.lon = lon_found
+
+            # --- 2. 【ここがデバッグ表示】写真の日付で取得できるかテスト ---
+            st.markdown("---") # 区切り線
+            st.subheader("🔍 写真の解析結果チェック")
+            
+            test_dt = st.session_state.target_dt
+            # 最寄りの観測所を特定
+            station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
+            
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.write(f"📅 **写真の日時:** {test_dt.strftime('%Y/%m/%d %H:%M')}")
+                st.write(f"📍 **最寄りの観測所:** {station_info['name']}")
+            
+            # 実際にその日付で潮汐JSONを引いてみる
+            t_test = get_tide_details(station_info['code'], test_dt)
+            
+            with col_b:
+                if t_test:
+                    st.success(f"✅ 潮汐データ取得成功！")
+                    st.write(f"🌊 潮位: {t_test['cm']}cm")
+                    st.write(f"📈 状態: {t_test['phase']}")
+                else:
+                    st.error("❌ 潮汐データが引けません")
+                    # どこを見に行こうとしたかURLを表示させる
+                    year_val = test_dt.year
+                    code_val = station_info['code']
+                    st.code(f"試行URL: https://raw.githubusercontent.com/coppyfish-bit/fishing_app/main/data/{year_val}/{code_val}.json")
+
+            st.markdown("---")
     
             # --- ここから入力エリア（一本化） ---
             with st.expander("📍 位置情報の確認", expanded=False):
@@ -946,6 +957,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
