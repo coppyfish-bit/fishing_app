@@ -1,42 +1,52 @@
-import streamlit as st  # ← これが足りないためにエラーになっています
+import streamlit as st
 import google.generativeai as genai
-# ... その他のインポート ...
-def show_ai_page(conn, url, df, md=None):
-    # --- 👿 デーモン佐藤・検問プロトコル ---
-    # URLの末尾に「?user=sato」がついているか確認
-    query_params = st.query_params
-    is_demon_sato = query_params.get("user") == "sato"
+import pandas as pd
 
-    if not is_demon_sato:
-        # 🚧 一般人向けの「門前払い」画面 🚧
-        st.markdown("""
-            <style>
-            .maint-box {
-                text-align: center; 
-                padding: 40px; 
-                background-color: #1a1c23; 
-                color: #ff4b4b;
-                border: 3px double #ff4b4b; 
-                border-radius: 20px; 
-                margin-top: 50px;
-                box-shadow: 0 0 20px rgba(255, 75, 75, 0.2);
-            }
-            </style>
-            <div class="maint-box">
-                <h1 style="font-size: 2.5rem;">🚧 魔界メンテナンス中 🚧</h1>
-                <p style="font-size: 1.1rem; color: #cccccc;">
-                    現在、デーモン佐藤が深淵のデータを調整中だ。<br>
-                    貴様のような人間が立ち入る時間はまだ先の話よ。<br>
-                    潮が満ちるまで震えて待て。
-                </p>
-                <hr style="border: 0.5px solid #333;">
-                <p style="font-size: 0.8rem; color: #666;">Status: 深淵同期中... 66.6%</p>
-            </div>
-        """, unsafe_allow_html=True)
-        st.stop()  # ここで処理を強制終了！下のAIコードは読み込ませない。
+def show_ai_page(conn, url, df):
+    # --- 👿 デーモン佐藤の降臨（演出のみ） ---
+    st.markdown("<h2 style='color: #ff4b4b;'>😈 デーモン佐藤の深淵知見</h2>", unsafe_allow_html=True)
+    st.caption("「貴様の釣果を深淵の知恵（Gemini）で解き明かしてやろう...」")
 
-    # --- 👿 ここから下は「デーモン佐藤」だけが到達できる聖域 ---
-    st.toast("👿 貴様か、佐藤。開発者権限を確認したぞ。", icon="🔥")
-    
-    # (ここから下に、貴様がさっき提示した avatar_display_url 以降のコードを繋げる)
+    # APIキーの設定（Secretsから取得）
+    if "GEMINI_API_KEY" not in st.secrets:
+        st.error("APIキーが設定されていません。")
+        return
 
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel('gemini-1.5-flash')
+
+    # --- 💬 チャット履歴の初期化 ---
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # 履歴を表示
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # --- ユーザーからの質問 ---
+    if prompt := st.chat_input("例：最近の本渡瀬戸の傾向は？ / 2025年の最大サイズは？"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            # データフレームの要約をコンテキストとして渡す
+            df_summary = df.tail(20).to_csv(index=False) # 最近の20件
+            full_prompt = f"""
+            貴様は釣り界の魔王「デーモン佐藤」だ。以下の釣果データに基づき、
+            質問に「少し口の悪い、だが釣行には真摯なアドバイス」を添えて答えよ。
+            
+            【釣果データ(直近)】
+            {df_summary}
+            
+            【質問】
+            {prompt}
+            """
+            
+            try:
+                response = model.generate_content(full_prompt)
+                st.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
+            except Exception as e:
+                st.error(f"深淵との通信に失敗した...：{e}")
