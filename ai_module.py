@@ -11,7 +11,7 @@ def show_ai_page(conn, url, df):
     # --- 修正ポイント：確実に存在するモデルIDを指定 ---
     # 案1: gemini-1.5-flash (もっとも標準的)
     # 案2: gemini-1.5-flash-8b (さらに軽量で通りやすい)
-    model_name = "gemini-2.0-flash" 
+    model_name = "gemini-3.0-flash" 
     
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     
@@ -37,3 +37,4 @@ def show_ai_page(conn, url, df):
                 st.warning("指定したモデル名が正しくないようです。")
             elif "429" in str(e):
                 st.warning("利用制限（Quota）に達しています。1分待ってください。")
+
