@@ -21,9 +21,9 @@ def show_ai_page(conn, url, df):
     with prof_col1:
         st.image(AI_ICON, use_container_width=True)
     with prof_col2:
-        st.markdown(f'<p class="profile-name">😈 デーモン佐藤（深淵の釣り師）</p>', unsafe_allow_html=True)
+        st.markdown(f'<p class="profile-name"> デーモン佐藤（深淵の釣り師）</p>', unsafe_allow_html=True)
         st.caption("「貴様の未熟なデータを深淵の知恵で精査してやろう...」")
-        if st.button("🗑️ 会話ログを消去"):
+        if st.button("🔥記録を消去し深淵に葬る"):
             st.session_state.messages = []
             st.rerun()
 
@@ -89,3 +89,4 @@ def show_ai_page(conn, url, df):
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
                 st.error(f"深淵との通信エラー：{e}")
+
