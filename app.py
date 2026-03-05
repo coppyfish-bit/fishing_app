@@ -308,7 +308,12 @@ def main():
                         
                         # 気象取得
                         temp, wind_s, wind_d, rain_48 = get_weather_data_openmeteo(st.session_state.lat, st.session_state.lon, target_dt)
-                        m_age = _age(target_dt)
+                        moon_val = get_moon_age(dt_obj) 
+
+                        new_data = {
+                            "月齢": moon_val, 
+                            ...
+                        }
                         t_name = get_tide_name(m_age)
                         station_info = find_nearest_tide_station(st.session_state.lat, st.session_state.lon)
                         
@@ -401,6 +406,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
