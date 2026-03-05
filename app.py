@@ -420,14 +420,24 @@ def main():
     
         uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"])
         
-        if uploaded_file:
-            # --- 1. まずExifから日付と場所を抜く (ここをしっかり書く) ---
+            if uploaded_file:
+            # --- 1. Exifから日付と場所を抽出 ---
+            # GPSがない場合は get_exif_data 内で本渡瀬戸の座標が返されます
             dt_found, lat_found, lon_found = get_exif_data(uploaded_file)
             
-            # 解析できた値をセッションに保存（これが潮汐取得の鍵になります）
+            # セッション状態を更新
             if dt_found: st.session_state.target_dt = dt_found
-            if lat_found: st.session_state.lat = lat_found
-            if lon_found: st.session_state.lon = lon_found
+            st.session_state.lat = lat_found
+            st.session_state.lon = lon_found
+
+            # --- 2. 場所の自動判定を実行 ---
+            # ここで Place_master のデータと照合し、500m以内ならその場所名をセットします
+            p_name, g_id = find_nearest_place(st.session_state.lat, st.session_state.lon, df_master)
+            
+            st.session_state.detected_place = p_name
+            st.session_state.group_id = g_id
+            
+            st.success(f"📍 場所を「{p_name}」と判定しました。")
 
             # --- 2. 【ここがデバッグ表示】写真の日付で取得できるかテスト ---
             st.markdown("---") # 区切り線
@@ -1012,6 +1022,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
