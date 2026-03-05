@@ -32,7 +32,7 @@ def show_ai_page(conn, url, df):
     """, unsafe_allow_html=True)
 
     # --- 2. デーモン佐藤の肖像（ヘッダー） ---
-    AI_ICON = "damon_sato.png"
+    AI_ICON = "demon_sato.png"
     USER_ICON = "👤"
 
     # 画面上部に対話相手としてのアイコンを表示
@@ -110,3 +110,4 @@ def show_ai_page(conn, url, df):
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
                 st.error(f"深淵との通信エラーだ... {e}")
+
