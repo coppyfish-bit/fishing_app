@@ -363,7 +363,7 @@ def main():
         if "group_id" not in st.session_state: st.session_state.group_id = "default"
         if "target_dt" not in st.session_state: st.session_state.target_dt = datetime.now()
     
-uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"])
+        uploaded_file = st.file_uploader("魚の写真を選択してください", type=["jpg", "jpeg", "png"])
         
         if uploaded_file:
             # --- 1. まずExifから日付と場所を抜く (ここをしっかり書く) ---
@@ -957,6 +957,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
