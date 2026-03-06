@@ -670,12 +670,12 @@ def main():
         ai_module.show_ai_page(conn, url, df) # 前回の修正で df を追加した形
         
     with tab9:
-    # 釣り人別の実績・称号ページを表示
-    show_achievements_page(df)
-        
+        show_achievements_page(df) # ← 半角スペース4つ分、右にずらす
+            
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
