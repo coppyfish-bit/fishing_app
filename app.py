@@ -375,7 +375,7 @@ def main():
     
     # --- タブ設定 ---
     tabs = st.tabs(["記録", "編集", "ギャラリー", "分析", "統計", "戦略", "マッチング", "デーモン佐藤","🏆 実績解除"])
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = tabs
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = tabs
     with tab1:
         # --- ロゴとタイトルのデザイン ---
         st.markdown(f"""
@@ -675,6 +675,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
