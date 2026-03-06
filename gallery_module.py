@@ -9,51 +9,47 @@ import numpy as np
 def create_mini_tide_chart(row):
     try:
         dt = row['datetime_parsed']
-        # --- 1. 時間軸：12時=0, 24時=12, 06時=18 (夜を中央) ---
+        # 1. 時間軸：深夜0時を12（中央）にするシフト
         raw_hour = dt.hour + dt.minute / 60.0
         centered_hour = (raw_hour - 12) % 24 
 
-        # --- 2. 潮位フェーズの解析 ---
+        # 2. フェーズ解析
         phase_str = str(row.get('潮位フェーズ', '不明'))
         import re
         step_match = re.search(r'\d+', phase_str)
         step = int(step_match.group()) if step_match else 5
         
-        # --- 3. 【重要】波の数式とプロット位置の完全同期 ---
-        # 位相(中心)を -9 に固定した12時間周期の波
-        def get_wave_y(x):
-            return 70 * np.sin((x - 9) * (2 * np.pi / 12)) + 110
-
-        # プロット用の X座標（Centered Hour）
-        px = centered_hour
-        
-        # プロット用の Y座標（フェーズから算出）
-        # 「上げ」は波が上がっている斜面、「下げ」は下がっている斜面の X を逆算して高さを出す
+        # 3. プロットの高さ(Y)を計算（波の振幅に合わせる）
+        # 波の底を 40, 頂点を 180 と定義
         if "上げ" in phase_str:
-            # 上げフェーズ (sinが-1から1へ向かう区間) の高さ
-            plot_y = 40 + (step * 14) # 40〜180
+            plot_y = 40 + (step * 14)
         elif "下げ" in phase_str:
-            # 下げフェーズ (sinが1から-1へ向かう区間) の高さ
-            plot_y = 180 - (step * 14) # 180〜40
+            plot_y = 180 - (step * 14)
         elif "満潮" in phase_str:
             plot_y = 180
         elif "干潮" in phase_str:
             plot_y = 40
         else:
-            plot_y = 110
+            plot_y = 110 # 不明
 
-        # --- 4. グラフ作成 ---
+        # 4. 背景の波（ガイドライン）を描画
+        # プロットのX（時間）において、必ずプロットのY（高さ）を通るように位相を強制調整
+        # (x_wave - centered_hour) の位相計算により、プロット位置で波が plot_y を通るようにする
         x_wave = np.linspace(0, 24, 100)
-        y_wave = get_wave_y(x_wave)
+        
+        # 潮位を無視し、上げ下げを表現するための「動的なガイド波」を作成
+        # この数式は、centered_hour の位置で plot_y を通るように設計されています
+        phase_offset = 0 if "上げ" in phase_str else np.pi
+        y_wave = 70 * np.sin((x_wave - centered_hour) * (np.pi / 6) + np.arcsin((plot_y - 110) / 70)) + 110
 
         fig = go.Figure()
 
-        # 背景塗り分け
-        fig.add_vrect(x0=0, x1=6, fillcolor="#161b22", opacity=1, layer="below", line_width=0)
+        # 背景（夜間強調：18時〜6時）
         fig.add_vrect(x0=6, x1=18, fillcolor="#06090f", opacity=1, layer="below", line_width=0)
+        fig.add_vrect(x0=0, x1=6, fillcolor="#161b22", opacity=1, layer="below", line_width=0)
         fig.add_vrect(x0=18, x1=24, fillcolor="#161b22", opacity=1, layer="below", line_width=0)
 
-        # 潮汐曲線
+        # 潮汐ガイド曲線
         fig.add_trace(go.Scatter(
             x=x_wave, y=y_wave,
             mode='lines',
@@ -62,19 +58,19 @@ def create_mini_tide_chart(row):
             hoverinfo='skip'
         ))
 
-        # センターライン
+        # 深夜0時のセンターライン
         fig.add_vline(x=12, line=dict(color="rgba(255, 255, 255, 0.1)", width=1))
 
-        # プロット
-        is_night = (6 <= px <= 18)
+        # プロット（夜間は光彩付き）
+        is_night = (6 <= centered_hour <= 18)
         main_color = "#ffca00" if is_night else "#ff4b4b"
         
         if is_night:
-            fig.add_trace(go.Scatter(x=[px], y=[plot_y], mode='markers',
-                                     marker=dict(color=main_color, size=20, opacity=0.2), hoverinfo='skip'))
+            fig.add_trace(go.Scatter(x=[centered_hour], y=[plot_y], mode='markers',
+                                     marker=dict(color=main_color, size=22, opacity=0.2), hoverinfo='skip'))
 
         fig.add_trace(go.Scatter(
-            x=[px], y=[plot_y],
+            x=[centered_hour], y=[plot_y],
             mode='markers',
             marker=dict(color=main_color, size=11, symbol='x', line=dict(width=2, color="white")),
             name='Hit!'
@@ -270,6 +266,7 @@ def show_gallery_page(df):
                     # keyを追加して重複エラーを回避！
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{row.name}_{i}_{j}")
                 st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 
