@@ -247,79 +247,79 @@ def tide_func(station_code, dt):
         st.error(f"📡 通信エラー: {e}")
         return {"cm": 0, "phase": "通信エラー"}
 
-    def get_tide_details(station_code, dt):
-        """
-        GitHubから取得したJSONのeventsを解析し、上げ/下げ○分を算出する完全版
-        """
-        year = str(dt.year)
-        target_date_str = dt.strftime("%Y-%m-%d")
+def get_tide_details(station_code, dt):
+    """
+    GitHubから取得したJSONのeventsを解析し、上げ/下げ○分を算出する完全版
+    """
+    year = str(dt.year)
+    target_date_str = dt.strftime("%Y-%m-%d")
+    
+    try:
+        all_events = []
+        current_cm = 0
         
-        try:
-            all_events = []
-            current_cm = 0
+        # 前後1日分を取得してタイドグラフを繋げる（日を跨ぐ判定のため）
+        for delta in [-1, 0, 1]:
+            d = dt + timedelta(days=delta)
+            url = f"https://raw.githubusercontent.com/coppyfish-bit/fishing_app/main/data/{d.year}/{station_code}.json"
+            r = requests.get(url, timeout=5)
             
-            # 前後1日分を取得してタイドグラフを繋げる（日を跨ぐ判定のため）
-            for delta in [-1, 0, 1]:
-                d = dt + timedelta(days=delta)
-                url = f"https://raw.githubusercontent.com/coppyfish-bit/fishing_app/main/data/{d.year}/{station_code}.json"
-                r = requests.get(url, timeout=5)
+            if r.status_code == 200:
+                day_data = r.json().get('data', [])
+                day_str = d.strftime("%Y-%m-%d")
+                day_info = next((i for i in day_data if i.get('date') == day_str), None)
                 
-                if r.status_code == 200:
-                    day_data = r.json().get('data', [])
-                    day_str = d.strftime("%Y-%m-%d")
-                    day_info = next((i for i in day_data if i.get('date') == day_str), None)
+                if day_info:
+                    # 潮汐イベントの解析
+                    for ev in day_info.get('events', []):
+                        try:
+                            # " 5:24" のような空白混じりや形式に対応
+                            t_raw = str(ev['time']).strip()
+                            if ":" in t_raw:
+                                h_p, m_p = t_raw.split(":")
+                                t_cln = f"{int(h_p):02d}:{int(m_p):02d}"
+                                ev_dt = datetime.strptime(f"{day_str} {t_cln}", "%Y-%m-%d %H:%M")
+                                # high/low 判定
+                                e_type = "満潮" if "high" in str(ev.get('type', '')).lower() else "干潮"
+                                all_events.append({"time": ev_dt, "type": e_type})
+                        except: continue
                     
-                    if day_info:
-                        # 潮汐イベントの解析
-                        for ev in day_info.get('events', []):
-                            try:
-                                # " 5:24" のような空白混じりや形式に対応
-                                t_raw = str(ev['time']).strip()
-                                if ":" in t_raw:
-                                    h_p, m_p = t_raw.split(":")
-                                    t_cln = f"{int(h_p):02d}:{int(m_p):02d}"
-                                    ev_dt = datetime.strptime(f"{day_str} {t_cln}", "%Y-%m-%d %H:%M")
-                                    # high/low 判定
-                                    e_type = "満潮" if "high" in str(ev.get('type', '')).lower() else "干潮"
-                                    all_events.append({"time": ev_dt, "type": e_type})
-                            except: continue
-                        
-                        # 当日の潮位(cm)計算
-                        if delta == 0:
-                            hourly = day_info.get('hourly', [0]*24)
-                            h, m = dt.hour, dt.minute
-                            v1, v2 = hourly[h], hourly[(h + 1) % 24]
-                            current_cm = int(round(v1 + (v2 - v1) * (m / 60.0)))
-    
-            # 重複排除とソート
-            all_events = sorted({e['time']: e for e in all_events}.values(), key=lambda x: x['time'])
+                    # 当日の潮位(cm)計算
+                    if delta == 0:
+                        hourly = day_info.get('hourly', [0]*24)
+                        h, m = dt.hour, dt.minute
+                        v1, v2 = hourly[h], hourly[(h + 1) % 24]
+                        current_cm = int(round(v1 + (v2 - v1) * (m / 60.0)))
+
+        # 重複排除とソート
+        all_events = sorted({e['time']: e for e in all_events}.values(), key=lambda x: x['time'])
+        
+        # --- 判定ロジック ---
+        tide_phase = "不明"
+        if all_events:
+            # 直前と直後のイベントを特定
+            prev_ev = next((e for e in reversed(all_events) if e['time'] <= dt), None)
+            next_ev = next((e for e in all_events if e['time'] > dt), None)
             
-            # --- 判定ロジック ---
-            tide_phase = "不明"
-            if all_events:
-                # 直前と直後のイベントを特定
-                prev_ev = next((e for e in reversed(all_events) if e['time'] <= dt), None)
-                next_ev = next((e for e in all_events if e['time'] > dt), None)
+            if prev_ev and next_ev:
+                duration = (next_ev['time'] - prev_ev['time']).total_seconds()
+                elapsed = (dt - prev_ev['time']).total_seconds()
                 
-                if prev_ev and next_ev:
-                    duration = (next_ev['time'] - prev_ev['time']).total_seconds()
-                    elapsed = (dt - prev_ev['time']).total_seconds()
-                    
-                    if duration > 0:
-                        p_type = "上げ" if "干潮" in prev_ev['type'] else "下げ"
-                        # 0〜9 の 10段階で計算
-                        step = int((elapsed / duration) * 10)
-                        # 1〜9分で表示（0は1に、10は9に丸める）
-                        step_display = max(1, min(9, step))
-                        tide_phase = f"{p_type}{step_display}分"
-                else:
-                    # イベントが足りない場合は「潮止まり付近」など暫定
-                    tide_phase = "潮止まり付近"
-    
-            return {"cm": current_cm, "phase": tide_phase, "events": all_events}
-    
-        except Exception as e:
-            return {"cm": 0, "phase": "取得失敗", "events": []}
+                if duration > 0:
+                    p_type = "上げ" if "干潮" in prev_ev['type'] else "下げ"
+                    # 0〜9 の 10段階で計算
+                    step = int((elapsed / duration) * 10)
+                    # 1〜9分で表示（0は1に、10は9に丸める）
+                    step_display = max(1, min(9, step))
+                    tide_phase = f"{p_type}{step_display}分"
+            else:
+                # イベントが足りない場合は「潮止まり付近」など暫定
+                tide_phase = "潮止まり付近"
+
+        return {"cm": current_cm, "phase": tide_phase, "events": all_events}
+
+    except Exception as e:
+        return {"cm": 0, "phase": "取得失敗", "events": []}
         
 def get_weather_data_openmeteo(lat, lon, dt):
     try:
@@ -671,6 +671,7 @@ def main():
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
     main()
+
 
 
 
