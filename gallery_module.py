@@ -9,24 +9,43 @@ import numpy as np
 def create_mini_tide_chart(row):
     try:
         dt = row['datetime_parsed']
-        hit_hour = dt.hour + dt.minute / 60.0
+        # --- 1. 時間軸を「夜中心」に変換 ---
+        # 12時(正午)を0とし、24時(深夜)を12、翌12時を24とする軸
+        raw_hour = dt.hour + dt.minute / 60.0
+        centered_hour = (raw_hour - 12) % 24 
+
         phase_str = str(row.get('潮位フェーズ', '不明'))
         
-        # 波のデータ
-        hours = np.linspace(0, 24, 100)
-        tide_curve = 70 * np.sin(hours * (2 * np.pi / 12.5)) + 120
+        # --- 2. 潮汐波の生成 (夜を真ん中にした24時間分) ---
+        x_wave = np.linspace(0, 24, 100)
+        # 12時間周期の波。12の位置(深夜24時)が波の中心付近にくるよう調整
+        y_wave = 70 * np.sin(x_wave * (2 * np.pi / 12.5)) + 120
+
+        # --- 3. プロット位置(y)を「潮位フェーズ」から直接計算 ---
+        # 波の高さ(70)に対して、○分(1〜9)を高さに割り当てる
+        step_match = ''.join(filter(str.isdigit, phase_str))
+        step = int(step_match) if step_match else 5
+        
+        if "上げ" in phase_str:
+            # 上げ：低い位置(50)から高い位置(190)へ
+            plot_y = 50 + (step * 14)
+        elif "下げ" in phase_str:
+            # 下げ：高い位置(190)から低い位置(50)へ
+            plot_y = 190 - (step * 14)
+        else:
+            plot_y = 120 # 不明な場合は真ん中
 
         fig = go.Figure()
 
-        # --- 1. 背景の塗り分け（昼と夜） ---
-        # 0時〜6時（夜）、18時〜24時（夜）を暗く、6時〜18時（昼）を少し明るく
-        fig.add_vrect(x0=0, x1=6, fillcolor="#06090f", opacity=1, layer="below", line_width=0)
-        fig.add_vrect(x0=6, x1=18, fillcolor="#161b22", opacity=1, layer="below", line_width=0)
-        fig.add_vrect(x0=18, x1=24, fillcolor="#06090f", opacity=1, layer="below", line_width=0)
+        # --- 4. 背景の塗り分け（夜を中央に） ---
+        # 左端(12時-18時:昼)、中央(18時-翌6時:夜)、右端(6時-12時:昼)
+        fig.add_vrect(x0=0, x1=6, fillcolor="#161b22", opacity=1, layer="below", line_width=0) # 12-18時
+        fig.add_vrect(x0=6, x1=18, fillcolor="#06090f", opacity=1, layer="below", line_width=0) # 18-06時(夜)
+        fig.add_vrect(x0=18, x1=24, fillcolor="#161b22", opacity=1, layer="below", line_width=0) # 06-12時
 
         # 潮汐曲線
         fig.add_trace(go.Scatter(
-            x=hours, y=tide_curve,
+            x=x_wave, y=y_wave,
             mode='lines',
             line=dict(color='#00ffd0', width=1.5),
             fill='tozeroy',
@@ -34,49 +53,43 @@ def create_mini_tide_chart(row):
             hoverinfo='skip'
         ))
 
-        # --- 2. プロットの高さ計算 ---
-        plot_y = 120
-        if "上げ" in phase_str:
-            step = int(''.join(filter(str.isdigit, phase_str))) if any(c.isdigit() for c in phase_str) else 5
-            plot_y = 50 + (step * 14)
-        elif "下げ" in phase_str:
-            step = int(''.join(filter(str.isdigit, phase_str))) if any(c.isdigit() for c in phase_str) else 5
-            plot_y = 190 - (step * 14)
+        # 夜の中心（24時/0時）にガイドライン
+        fig.add_vline(x=12, line=dict(color="rgba(255, 255, 255, 0.1)", width=1))
 
-        # --- 3. 夜釣りのプロットを「光らせる」 ---
-        is_night = hit_hour < 6 or hit_hour >= 18
-        main_color = "#ffca00" if is_night else "#ff4b4b" # 夜は黄色、昼は赤
+        # --- 5. プロット（夜釣りは光らせる） ---
+        is_night = (6 <= centered_hour <= 18) # この軸では6-18が18時-06時
+        main_color = "#ffca00" if is_night else "#ff4b4b"
         
-        # 外光（光って見えるように重ねる）
         if is_night:
             fig.add_trace(go.Scatter(
-                x=[hit_hour], y=[plot_y],
+                x=[centered_hour], y=[plot_y],
                 mode='markers',
                 marker=dict(color=main_color, size=20, opacity=0.3),
                 hoverinfo='skip'
             ))
 
-        # メインの×印
         fig.add_trace(go.Scatter(
-            x=[hit_hour], y=[plot_y],
+            x=[centered_hour], y=[plot_y],
             mode='markers',
-            marker=dict(
-                color=main_color, size=12, symbol='x',
-                line=dict(width=2, color="white")
-            ),
+            marker=dict(color=main_color, size=12, symbol='x', line=dict(width=2, color="white")),
             name='Hit!'
         ))
 
         fig.update_layout(
-            height=90, margin=dict(l=5, r=5, t=5, b=5),
+            height=100, margin=dict(l=5, r=5, t=5, b=5),
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
             showlegend=False,
-            xaxis=dict(showgrid=False, zeroline=False, range=[0, 24], showticklabels=False),
+            xaxis=dict(
+                showgrid=False, zeroline=False, range=[0, 24], 
+                tickvals=[0, 6, 12, 18, 24],
+                ticktext=['12h', '18h', '0h', '6h', '12h'],
+                tickfont=dict(size=8, color="#666")
+            ),
             yaxis=dict(showgrid=False, zeroline=False, range=[0, 240], showticklabels=False),
         )
         return fig
     except:
-        return None
+        return NoneNone
 
 def show_gallery_page(df):
     # --- 1. スタイル設定（CSS） ---
@@ -258,6 +271,7 @@ def show_gallery_page(df):
                     # keyを追加して重複エラーを回避！
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{row.name}_{i}_{j}")
                 st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 
