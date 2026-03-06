@@ -80,17 +80,23 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 temp, w_s, w_d, rain = weather_func(lat, lon, dt_obj)
                 d_data = tide_func(station['code'], dt_obj) 
                 
+              # --- edit_page の再計算ロジック部分を修正 ---
                 if d_data:
                     m_age = moon_func(dt_obj)
                     t_name = tide_name_func(m_age)
                     
+                    # フェーズの取得を安全にする
+                    raw_phase = d_data.get('phase', "不明")
+                    # もしフェーズが「デバッグ中」や「Error」などの文字列なら「不明」に置き換えるガード
+                    if "デバッグ" in raw_phase or "Error" in raw_phase:
+                        raw_phase = "不明"
+                
                     # 計算結果をセッションに一時保存
                     st.session_state[temp_data_key] = {
                         "気温": temp, "風速": w_s, "風向": w_d, "降水量": rain,
                         "潮位_cm": d_data.get('cm', 0),
                         "月齢": m_age, "潮名": t_name,
-                        "潮位フェーズ": d_data.get('phase', "不明")
-                    }
+                        "潮位フェーズ": raw_phase # 安全な値を代入
                     st.session_state[form_ver_key] += 1
                     st.success("再計算が完了しました。保存ボタンを押すと確定します。")
                     st.rerun()
@@ -160,5 +166,6 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 st.rerun()
             else:
                 st.warning("削除する場合はチェックを入れてください。")
+
 
 
