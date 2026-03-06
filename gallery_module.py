@@ -248,5 +248,7 @@ def show_gallery_page(df):
                 st.markdown('<div class="chart-container">', unsafe_allow_html=True)
                 fig = create_mini_tide_chart(row)
                 if fig:
-                    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                    # keyを追加して重複エラーを回避！
+                    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{row.name}_{i}_{j}")
                 st.markdown('</div>', unsafe_allow_html=True)
+
