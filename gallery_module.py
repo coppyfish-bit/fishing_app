@@ -9,53 +9,43 @@ import numpy as np
 def create_mini_tide_chart(row):
     try:
         dt = row['datetime_parsed']
-        # 1. 時間軸：深夜0時を12（中央）にするシフト (12時=0, 0時=12, 12時=24)
+        # 1. 時間軸：深夜0時を12（中央）にするシフト (12時=0, 24時=12, 12時=24)
         raw_hour = dt.hour + dt.minute / 60.0
         centered_hour = (raw_hour - 12) % 24 
 
-        # 2. フェーズ解析
-        phase_str = str(row.get('潮位フェーズ', '不明'))
+        # 2. フェーズ解析（解析ページの extract_step ロジックを適用）
+        phase_str = str(row.get('潮位フェーズ', '不明')).translate(str.maketrans('０１２３４５６７８９', '0123456789'))
         import re
-        step_match = re.search(r'\d+', phase_str)
-        step = int(step_match.group()) if step_match else 5
-        
-        # 3. プロットの高さ(Y)を計算（波の振幅に合わせる）
-        # 波の底を 40, 頂点を 180 と定義
-        if "上げ" in phase_str:
-            plot_y = 40 + (step * 14)
-        elif "下げ" in phase_str:
-            plot_y = 180 - (step * 14)
-        elif "満潮" in phase_str:
-            plot_y = 180
-        elif "干潮" in phase_str:
-            plot_y = 40
-        else:
-            plot_y = 110
+        nums = re.findall(r'\d+', phase_str)
+        step_val = max(0, min(10, int(nums[0]))) if nums else 5
+        is_up = "下げ" not in phase_str
 
-        # 4. 背景の波（完全なガイドライン）を生成
-        # 24時間で「上げ」と「下げ」が視覚的に分かれるように2コブの波を作る
-        x_wave = np.linspace(0, 24, 100)
+        # 3. 波の計算（解析ページと同じ cos 波を採用）
+        # x_base: 干潮(0) -> 満潮(6.25) -> 干潮(12.5) という1サイクルの位置
+        x_base = step_val * 0.625 if not is_up else 6.25 + (step_val * 0.625)
         
-        # ここが肝： centered_hour の位置で、上げなら上昇、下げなら下降する波を動的に生成
-        # 釣果のフェーズに合わせて「その瞬間の波の形」を合わせる
-        if "上げ" in phase_str:
-            # centered_hour で上昇中になる位相
-            y_wave = 70 * np.sin((x_wave - centered_hour) * (np.pi / 6) - (np.pi/4)) + 110
-        elif "下げ" in phase_str:
-            # centered_hour で下降中になる位相
-            y_wave = 70 * np.sin((x_wave - centered_hour) * (np.pi / 6) + (np.pi/4)) + 110
-        else:
-            # デフォルト
-            y_wave = 70 * np.sin(x_wave * (np.pi / 6)) + 110
+        # 背景の波を描画するための関数 (解析ページと同期)
+        def get_sync_y(x_pos):
+            # 振幅をギャラリーの高さに合わせて調整
+            return 75 * np.cos(x_pos * np.pi / 6.25) + 110
+
+        # プロットの高さ（x_base から直接算出）
+        plot_y = get_sync_y(x_base)
+
+        # 4. グラフ作成
+        # 背景の波は「 centered_hour でちょうど plot_y を通る」ように描画
+        x_wave = np.linspace(0, 24, 100)
+        # 釣果の時間(centered_hour)とフェーズ(x_base)のズレを補正して波を描く
+        y_wave = 75 * np.cos((x_wave - centered_hour + x_base) * np.pi / 6.25) + 110
 
         fig = go.Figure()
 
-        # 背景（夜間強調：18時〜6時）
+        # 背景（夜間強調）
         fig.add_vrect(x0=6, x1=18, fillcolor="#06090f", opacity=1, layer="below", line_width=0)
         fig.add_vrect(x0=0, x1=6, fillcolor="#161b22", opacity=1, layer="below", line_width=0)
         fig.add_vrect(x0=18, x1=24, fillcolor="#161b22", opacity=1, layer="below", line_width=0)
 
-        # 潮汐ガイド曲線
+        # 同期された潮汐曲線
         fig.add_trace(go.Scatter(
             x=x_wave, y=y_wave,
             mode='lines',
@@ -64,16 +54,15 @@ def create_mini_tide_chart(row):
             hoverinfo='skip'
         ))
 
-        # センターライン
+        # センターライン（深夜0時）
         fig.add_vline(x=12, line=dict(color="rgba(255, 255, 255, 0.1)", width=1))
 
-        # プロット（夜間は光彩付き）
-        is_night = (6 <= centered_hour <= 18)
-        main_color = "#ffca00" if is_night else "#ff4b4b"
+        # 5. プロット（夜間は光彩付き）
+        main_color = "#ffca00" if (6 <= centered_hour <= 18) else "#ff4b4b"
         
-        if is_night:
+        if (6 <= centered_hour <= 18):
             fig.add_trace(go.Scatter(x=[centered_hour], y=[plot_y], mode='markers',
-                                     marker=dict(color=main_color, size=22, opacity=0.2), hoverinfo='skip'))
+                                     marker=dict(color=main_color, size=20, opacity=0.2), hoverinfo='skip'))
 
         fig.add_trace(go.Scatter(
             x=[centered_hour], y=[plot_y],
@@ -272,6 +261,7 @@ def show_gallery_page(df):
                     # keyを追加して重複エラーを回避！
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{row.name}_{i}_{j}")
                 st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 
