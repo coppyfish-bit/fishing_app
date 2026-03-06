@@ -8,24 +8,21 @@ import numpy as np
 
 def create_mini_tide_chart(row):
     """
-    レコードのデータから24時間のタイドグラフを生成する
+    18時までの釣果は左側、18時以降は右側の波にプロットする特殊グラフ
     """
     try:
         dt = row['datetime_parsed']
-        # 釣れた時間の計算 (例: 15:30 -> 15.5)
         hit_hour = dt.hour + dt.minute / 60.0
         hit_cm = row.get('潮位_cm', 0)
         
-        # --- 潮汐カーブのデータ準備 ---
-        hours = list(range(24))
-        # 本来はGitHubから取得したhourlyデータを入れたいが、
-        # gallery単体で動くよう、簡易的な潮汐カーブを生成
-        # (満潮・干潮の時間を考慮したサインカーブ)
-        tide_curve = 80 * np.sin((np.array(hours) - 6) * (2 * np.pi / 12.5)) + 130
+        # 潮汐データの準備（24時間分）
+        hours = np.linspace(0, 24, 100)
+        # 2つの大きな波を作る（18時付近で谷になるような設定）
+        tide_curve = 80 * np.sin((hours - 3) * (2 * np.pi / 12.5)) + 130
 
         fig = go.Figure()
 
-        # 1. 潮汐曲線（水色のライン）
+        # 背景の潮汐曲線
         fig.add_trace(go.Scatter(
             x=hours, y=tide_curve,
             mode='lines',
@@ -35,16 +32,24 @@ def create_mini_tide_chart(row):
             hoverinfo='skip'
         ))
 
-        # 2. ヒットポイント（釣れた瞬間の赤い×）
-        # もし潮位データがNaNなら、カーブ上の値を推測してプロット
-        plot_y = hit_cm if pd.notnull(hit_cm) and hit_cm != '-' else tide_curve[dt.hour]
+        # 18時を示すガイドライン（境界線）
+        fig.add_shape(
+            type="line", x0=18, y0=0, x1=18, y1=250,
+            line=dict(color="rgba(255, 255, 255, 0.2)", width=1, dash="dot")
+        )
+
+        # プロット位置の決定
+        # 18時までなら左半分、18時以降なら右半分
+        plot_color = "#ff4b4b" if hit_hour < 18 else "#ffca00" # 色を変えて区別
+        
+        plot_y = hit_cm if pd.notnull(hit_cm) and hit_cm != '-' else 130
         
         fig.add_trace(go.Scatter(
             x=[hit_hour], 
             y=[plot_y],
             mode='markers',
             marker=dict(
-                color='#ff4b4b', 
+                color=plot_color, 
                 size=12, 
                 symbol='x',
                 line=dict(width=2, color="white")
@@ -52,20 +57,19 @@ def create_mini_tide_chart(row):
             name='Hit!'
         ))
 
-        # レイアウト設定（超ミニマム）
         fig.update_layout(
-            height=80, 
+            height=100, 
             margin=dict(l=5, r=5, t=5, b=5),
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
             showlegend=False,
             xaxis=dict(
-                showgrid=False, zeroline=False, range=[0, 23], 
-                tickvals=[0, 6, 12, 18, 23],
-                ticktext=['0h', '6', '12', '18', '24'],
-                tickfont=dict(size=8, color="#666")
+                showgrid=False, zeroline=False, range=[0, 24], 
+                tickvals=[0, 6, 12, 18, 24],
+                ticktext=['0h', '昼間', '12', '18', '夜'],
+                tickfont=dict(size=8, color="#888")
             ),
-            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, range=[0, 300], showticklabels=False),
         )
         return fig
     except:
@@ -251,4 +255,5 @@ def show_gallery_page(df):
                     # keyを追加して重複エラーを回避！
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{row.name}_{i}_{j}")
                 st.markdown('</div>', unsafe_allow_html=True)
+
 
