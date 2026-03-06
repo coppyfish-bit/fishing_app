@@ -5,47 +5,49 @@ import time
 import plotly.graph_objects as go
 import requests
 import numpy as np
+import re
 
 def create_mini_tide_chart(row):
     try:
-        dt = row['datetime_parsed']
+        # datetimeが文字列の場合も想定してパースを確認
+        dt = row.get('datetime_parsed')
+        if pd.isna(dt):
+            return None
+
         # 1. 時間軸：深夜0時を12（中央）にするシフト (12時=0, 24時=12, 12時=24)
         raw_hour = dt.hour + dt.minute / 60.0
         centered_hour = (raw_hour - 12) % 24 
 
-        # 2. フェーズ解析（解析ページの extract_step ロジックを適用）
+        # 2. フェーズ解析（全角数字を半角にし、ステップ値を抽出）
         phase_str = str(row.get('潮位フェーズ', '不明')).translate(str.maketrans('０１２３４５６７８９', '0123456789'))
-        import re
         nums = re.findall(r'\d+', phase_str)
         step_val = max(0, min(10, int(nums[0]))) if nums else 5
         is_up = "下げ" not in phase_str
 
-        # 3. 波の計算（解析ページと同じ cos 波を採用）
-        # x_base: 干潮(0) -> 満潮(6.25) -> 干潮(12.5) という1サイクルの位置
+        # 3. 波の計算（解析ページと完全に同期させる cos 波）
+        # x_base: 干潮(0) -> 満潮(6.25) -> 干潮(12.5) のスケール
         x_base = step_val * 0.625 if not is_up else 6.25 + (step_val * 0.625)
         
-        # 背景の波を描画するための関数 (解析ページと同期)
+        # グラフの高さを決定する関数
         def get_sync_y(x_pos):
-            # 振幅をギャラリーの高さに合わせて調整
             return 75 * np.cos(x_pos * np.pi / 6.25) + 110
 
-        # プロットの高さ（x_base から直接算出）
+        # プロットの高さ（x_baseから直接算出することで波に吸着）
         plot_y = get_sync_y(x_base)
 
         # 4. グラフ作成
-        # 背景の波は「 centered_hour でちょうど plot_y を通る」ように描画
+        #centered_hour(時間)において波がちょうど plot_y(フェーズ高さ) を通るように描画
         x_wave = np.linspace(0, 24, 100)
-        # 釣果の時間(centered_hour)とフェーズ(x_base)のズレを補正して波を描く
         y_wave = 75 * np.cos((x_wave - centered_hour + x_base) * np.pi / 6.25) + 110
 
         fig = go.Figure()
 
-        # 背景（夜間強調）
+        # 背景（夜間強調：中央の18時〜6時を最も暗く）
         fig.add_vrect(x0=6, x1=18, fillcolor="#06090f", opacity=1, layer="below", line_width=0)
         fig.add_vrect(x0=0, x1=6, fillcolor="#161b22", opacity=1, layer="below", line_width=0)
         fig.add_vrect(x0=18, x1=24, fillcolor="#161b22", opacity=1, layer="below", line_width=0)
 
-        # 同期された潮汐曲線
+        # 潮汐曲線
         fig.add_trace(go.Scatter(
             x=x_wave, y=y_wave,
             mode='lines',
@@ -57,12 +59,12 @@ def create_mini_tide_chart(row):
         # センターライン（深夜0時）
         fig.add_vline(x=12, line=dict(color="rgba(255, 255, 255, 0.1)", width=1))
 
-        # 5. プロット（夜間は光彩付き）
+        # 5. プロット（夜間は黄色い光彩、昼間は赤い印）
         main_color = "#ffca00" if (6 <= centered_hour <= 18) else "#ff4b4b"
         
         if (6 <= centered_hour <= 18):
             fig.add_trace(go.Scatter(x=[centered_hour], y=[plot_y], mode='markers',
-                                     marker=dict(color=main_color, size=20, opacity=0.2), hoverinfo='skip'))
+                                     marker=dict(color=main_color, size=22, opacity=0.2), hoverinfo='skip'))
 
         fig.add_trace(go.Scatter(
             x=[centered_hour], y=[plot_y],
@@ -81,6 +83,7 @@ def create_mini_tide_chart(row):
         return fig
     except:
         return None
+
 def show_gallery_page(df):
     # --- 1. スタイル設定（CSS） ---
     st.markdown("""
@@ -102,14 +105,11 @@ def show_gallery_page(df):
         .fish-card {
             position: relative;
             width: 100%;
-            border-radius: 20px 20px 0 0; /* 下側を平らにしてグラフと結合 */
+            border-radius: 20px 20px 0 0;
             overflow: hidden;
             background: #0e1117;
             box-shadow: 0 10px 25px rgba(0,0,0,0.6);
             transition: transform 0.3s ease;
-        }
-        .fish-card:hover {
-            transform: translateY(-5px);
         }
         .fish-img {
             width: 100%;
@@ -152,7 +152,7 @@ def show_gallery_page(df):
             margin-top: 5px;
             border: 1px solid rgba(0, 255, 208, 0.3);
         }
-        /* グラフエリアのスタイル */
+        /* グラフエリア：スマホでの誤操作を防ぐ設定 */
         .chart-container {
             background: #0e1117;
             border-radius: 0 0 20px 20px;
@@ -160,13 +160,15 @@ def show_gallery_page(df):
             box-shadow: 0 10px 25px rgba(0,0,0,0.6);
             margin-bottom: 25px;
             border-top: 1px solid rgba(255,255,255,0.05);
+            pointer-events: none; /* スマホ操作を無効化 */
+            user-select: none;
         }
         </style>
     """, unsafe_allow_html=True)
 
     st.title("🖼️ GALLERY")
 
-    if st.button("🔄 最新データに更新 (キャッシュ破棄)"):
+    if st.button("🔄 最新データに更新"):
         st.cache_data.clear()
         st.success("深淵の記憶を更新した。")
         time.sleep(1)
@@ -225,7 +227,7 @@ def show_gallery_page(df):
     for i in range(0, len(valid_rows), 3):
         chunk = valid_rows.iloc[i : i + 3]
         cols = st.columns(3) 
-        for j, (_, row) in enumerate(chunk.iterrows()):
+        for j, (idx, row) in enumerate(chunk.iterrows()):
             with cols[j]:
                 img_url = row.get("filename")
                 lat, lon = row.get('lat'), row.get('lon')
@@ -254,21 +256,14 @@ def show_gallery_page(df):
                 </a>
                 """, unsafe_allow_html=True)
                 
-                # グラフ(Plotly)をコンテナに入れて表示
+                # グラフ(Plotly)：staticPlot=True でスマホ誤操作を防止
                 st.markdown('<div class="chart-container">', unsafe_allow_html=True)
                 fig = create_mini_tide_chart(row)
                 if fig:
-                    # keyを追加して重複エラーを回避！
-                    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{row.name}_{i}_{j}")
+                    st.plotly_chart(
+                        fig, 
+                        use_container_width=True, 
+                        config={'staticPlot': True, 'displayModeBar': False}, 
+                        key=f"chart_gallery_{idx}"
+                    )
                 st.markdown('</div>', unsafe_allow_html=True)
-
-
-
-
-
-
-
-
-
-
-
