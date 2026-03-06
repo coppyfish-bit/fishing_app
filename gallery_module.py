@@ -7,69 +7,72 @@ import requests
 import numpy as np
 
 def create_mini_tide_chart(row):
-    """
-    18時までの釣果は左側、18時以降は右側の波にプロットする特殊グラフ
-    """
     try:
         dt = row['datetime_parsed']
         hit_hour = dt.hour + dt.minute / 60.0
-        hit_cm = row.get('潮位_cm', 0)
+        phase_str = str(row.get('潮位フェーズ', '不明'))
         
-        # 潮汐データの準備（24時間分）
+        # 波のデータ
         hours = np.linspace(0, 24, 100)
-        # 2つの大きな波を作る（18時付近で谷になるような設定）
-        tide_curve = 80 * np.sin((hours - 3) * (2 * np.pi / 12.5)) + 130
+        tide_curve = 70 * np.sin(hours * (2 * np.pi / 12.5)) + 120
 
         fig = go.Figure()
 
-        # 背景の潮汐曲線
+        # --- 1. 背景の塗り分け（昼と夜） ---
+        # 0時〜6時（夜）、18時〜24時（夜）を暗く、6時〜18時（昼）を少し明るく
+        fig.add_vrect(x0=0, x1=6, fillcolor="#06090f", opacity=1, layer="below", line_width=0)
+        fig.add_vrect(x0=6, x1=18, fillcolor="#161b22", opacity=1, layer="below", line_width=0)
+        fig.add_vrect(x0=18, x1=24, fillcolor="#06090f", opacity=1, layer="below", line_width=0)
+
+        # 潮汐曲線
         fig.add_trace(go.Scatter(
             x=hours, y=tide_curve,
             mode='lines',
-            line=dict(color='#00ffd0', width=2, shape='spline'),
+            line=dict(color='#00ffd0', width=1.5),
             fill='tozeroy',
-            fillcolor='rgba(0, 255, 208, 0.05)',
+            fillcolor='rgba(0, 255, 208, 0.08)',
             hoverinfo='skip'
         ))
 
-        # 18時を示すガイドライン（境界線）
-        fig.add_shape(
-            type="line", x0=18, y0=0, x1=18, y1=250,
-            line=dict(color="rgba(255, 255, 255, 0.2)", width=1, dash="dot")
-        )
+        # --- 2. プロットの高さ計算 ---
+        plot_y = 120
+        if "上げ" in phase_str:
+            step = int(''.join(filter(str.isdigit, phase_str))) if any(c.isdigit() for c in phase_str) else 5
+            plot_y = 50 + (step * 14)
+        elif "下げ" in phase_str:
+            step = int(''.join(filter(str.isdigit, phase_str))) if any(c.isdigit() for c in phase_str) else 5
+            plot_y = 190 - (step * 14)
 
-        # プロット位置の決定
-        # 18時までなら左半分、18時以降なら右半分
-        plot_color = "#ff4b4b" if hit_hour < 18 else "#ffca00" # 色を変えて区別
+        # --- 3. 夜釣りのプロットを「光らせる」 ---
+        is_night = hit_hour < 6 or hit_hour >= 18
+        main_color = "#ffca00" if is_night else "#ff4b4b" # 夜は黄色、昼は赤
         
-        plot_y = hit_cm if pd.notnull(hit_cm) and hit_cm != '-' else 130
-        
+        # 外光（光って見えるように重ねる）
+        if is_night:
+            fig.add_trace(go.Scatter(
+                x=[hit_hour], y=[plot_y],
+                mode='markers',
+                marker=dict(color=main_color, size=20, opacity=0.3),
+                hoverinfo='skip'
+            ))
+
+        # メインの×印
         fig.add_trace(go.Scatter(
-            x=[hit_hour], 
-            y=[plot_y],
+            x=[hit_hour], y=[plot_y],
             mode='markers',
             marker=dict(
-                color=plot_color, 
-                size=12, 
-                symbol='x',
+                color=main_color, size=12, symbol='x',
                 line=dict(width=2, color="white")
             ),
             name='Hit!'
         ))
 
         fig.update_layout(
-            height=100, 
-            margin=dict(l=5, r=5, t=5, b=5),
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
+            height=90, margin=dict(l=5, r=5, t=5, b=5),
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
             showlegend=False,
-            xaxis=dict(
-                showgrid=False, zeroline=False, range=[0, 24], 
-                tickvals=[0, 6, 12, 18, 24],
-                ticktext=['0h', '昼間', '12', '18', '夜'],
-                tickfont=dict(size=8, color="#888")
-            ),
-            yaxis=dict(showgrid=False, zeroline=False, range=[0, 300], showticklabels=False),
+            xaxis=dict(showgrid=False, zeroline=False, range=[0, 24], showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, range=[0, 240], showticklabels=False),
         )
         return fig
     except:
@@ -255,5 +258,6 @@ def show_gallery_page(df):
                     # keyを追加して重複エラーを回避！
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{row.name}_{i}_{j}")
                 st.markdown('</div>', unsafe_allow_html=True)
+
 
 
