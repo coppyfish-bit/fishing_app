@@ -2,10 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-import streamlit as st
-import pandas as pd
-import numpy as np
-
 def show_achievements_page(df):
     st.title("🏆 HUNTER RANK & MISSIONS")
 
@@ -196,4 +192,5 @@ def show_card(ach, is_met, color, is_shame=False):
             </div>
         </div>
     """, unsafe_allow_html=True)
+
 
