@@ -9,7 +9,7 @@ import numpy as np
 def create_mini_tide_chart(row):
     try:
         dt = row['datetime_parsed']
-        # 1. 時間軸：深夜0時を12（中央）にするシフト
+        # 1. 時間軸：深夜0時を12（中央）にするシフト (12時=0, 0時=12, 12時=24)
         raw_hour = dt.hour + dt.minute / 60.0
         centered_hour = (raw_hour - 12) % 24 
 
@@ -30,17 +30,23 @@ def create_mini_tide_chart(row):
         elif "干潮" in phase_str:
             plot_y = 40
         else:
-            plot_y = 110 # 不明
+            plot_y = 110
 
-        # 4. 背景の波（ガイドライン）を描画
-        # プロットのX（時間）において、必ずプロットのY（高さ）を通るように位相を強制調整
-        # (x_wave - centered_hour) の位相計算により、プロット位置で波が plot_y を通るようにする
+        # 4. 背景の波（完全なガイドライン）を生成
+        # 24時間で「上げ」と「下げ」が視覚的に分かれるように2コブの波を作る
         x_wave = np.linspace(0, 24, 100)
         
-        # 潮位を無視し、上げ下げを表現するための「動的なガイド波」を作成
-        # この数式は、centered_hour の位置で plot_y を通るように設計されています
-        phase_offset = 0 if "上げ" in phase_str else np.pi
-        y_wave = 70 * np.sin((x_wave - centered_hour) * (np.pi / 6) + np.arcsin((plot_y - 110) / 70)) + 110
+        # ここが肝： centered_hour の位置で、上げなら上昇、下げなら下降する波を動的に生成
+        # 釣果のフェーズに合わせて「その瞬間の波の形」を合わせる
+        if "上げ" in phase_str:
+            # centered_hour で上昇中になる位相
+            y_wave = 70 * np.sin((x_wave - centered_hour) * (np.pi / 6) - (np.pi/4)) + 110
+        elif "下げ" in phase_str:
+            # centered_hour で下降中になる位相
+            y_wave = 70 * np.sin((x_wave - centered_hour) * (np.pi / 6) + (np.pi/4)) + 110
+        else:
+            # デフォルト
+            y_wave = 70 * np.sin(x_wave * (np.pi / 6)) + 110
 
         fig = go.Figure()
 
@@ -58,7 +64,7 @@ def create_mini_tide_chart(row):
             hoverinfo='skip'
         ))
 
-        # 深夜0時のセンターライン
+        # センターライン
         fig.add_vline(x=12, line=dict(color="rgba(255, 255, 255, 0.1)", width=1))
 
         # プロット（夜間は光彩付き）
@@ -266,6 +272,7 @@ def show_gallery_page(df):
                     # keyを追加して重複エラーを回避！
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{row.name}_{i}_{j}")
                 st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 
