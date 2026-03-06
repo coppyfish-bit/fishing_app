@@ -4,23 +4,35 @@ import numpy as np
 
 def show_achievements_page(df):
     st.title("🏆 HUNTER RANK & MISSIONS")
-    st.caption("釣果データから自動的に実績を解除します。")
 
     if df is None or df.empty:
         st.info("データがありません。まずは釣果を記録しましょう。")
         return
 
-    # 前処理
+    # 前処理：日付型への変換とエラー回避
     df_calc = df.copy()
     df_calc['datetime_parsed'] = pd.to_datetime(df_calc['datetime'], errors='coerce')
-    df_calc = df_calc.dropna(subset=['datetime_parsed'])
-    df_calc['date_only'] = df_calc['datetime_parsed'].dt.date
-
-    # 釣り人の選択
-    user_col = '釣り人' if '釣り人' in df_calc.columns else '場所'
-    user_list = sorted(df_calc[user_col].unique()) 
-    selected_user = st.selectbox("👤 チャレンジャーを選択", user_list)
-    df_user = df_calc[df_calc[user_col] == selected_user]
+    
+    # --- 釣り人抽出ロジックの強化 ---
+    user_col = '釣り人'
+    
+    if user_col in df_calc.columns:
+        # 空白（NaN）を除去し、文字列としてリスト化
+        raw_user_list = df_calc[user_col].dropna().unique().tolist()
+        user_list = sorted([str(u) for u in raw_user_list if str(u).strip() != ""])
+        
+        if not user_list:
+            st.warning("「釣り人」カラムはありますが、名前が入力されていません。")
+            df_user = df_calc
+            selected_user = "ゲストハンター"
+        else:
+            selected_user = st.selectbox("👤 チャレンジャーを選択", user_list)
+            df_user = df_calc[df_calc[user_col] == selected_user]
+    else:
+        # 万が一カラムが見つからない場合のフォールバック
+        st.error(f"スプレッドシートに『{user_col}』カラムが見つかりません。")
+        df_user = df_calc
+        selected_user = "Unknown"
 
     # --- 実績ロジック ---
     missions = [
@@ -90,4 +102,5 @@ def show_card(ach, is_met, color, is_shame=False):
                 <div style="font-size: 0.7rem; color: #888;">{ach['desc']}</div>
             </div>
         </div>
+
     """, unsafe_allow_html=True)
