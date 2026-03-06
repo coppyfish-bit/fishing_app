@@ -9,76 +9,72 @@ import numpy as np
 def create_mini_tide_chart(row):
     try:
         dt = row['datetime_parsed']
-        # --- 1. 時間軸を「夜中心」に固定 (12時=0, 24時=12, 06時=18) ---
+        # --- 1. 時間軸：12時=0, 24時=12, 06時=18 (夜を中央) ---
         raw_hour = dt.hour + dt.minute / 60.0
         centered_hour = (raw_hour - 12) % 24 
 
         # --- 2. 潮位フェーズの解析 ---
         phase_str = str(row.get('潮位フェーズ', '不明'))
-        
-        # 数値を抽出 (上げ7分 -> 7)
         import re
         step_match = re.search(r'\d+', phase_str)
         step = int(step_match.group()) if step_match else 5
         
-        # --- 3. 波の描画とプロットの同期ロジック ---
-        # 24時間表示の中で、上げ・下げの「見た目」を固定した波を作る
-        x_wave = np.linspace(0, 24, 100)
-        
-        # 12.5時間周期ではなく、12時間周期に微調整して「見た目のガイド」を優先
-        # これにより、深夜0時(12h)付近の挙動を安定させる
-        y_wave = 75 * np.sin((x_wave - 9) * (2 * np.pi / 12)) + 110
+        # --- 3. 【重要】波の数式とプロット位置の完全同期 ---
+        # 位相(中心)を -9 に固定した12時間周期の波
+        def get_wave_y(x):
+            return 70 * np.sin((x - 9) * (2 * np.pi / 12)) + 110
 
-        # プロットの高さを「波の形」に強制的に合わせる
-        # 上げ潮フェーズ：波の谷から山へ (40 -> 180)
-        # 下げ潮フェーズ：波の山から谷へ (180 -> 40)
+        # プロット用の X座標（Centered Hour）
+        px = centered_hour
+        
+        # プロット用の Y座標（フェーズから算出）
+        # 「上げ」は波が上がっている斜面、「下げ」は下がっている斜面の X を逆算して高さを出す
         if "上げ" in phase_str:
-            plot_y = 35 + (step * 15) 
+            # 上げフェーズ (sinが-1から1へ向かう区間) の高さ
+            plot_y = 40 + (step * 14) # 40〜180
         elif "下げ" in phase_str:
-            plot_y = 185 - (step * 15)
+            # 下げフェーズ (sinが1から-1へ向かう区間) の高さ
+            plot_y = 180 - (step * 14) # 180〜40
         elif "満潮" in phase_str:
-            plot_y = 185
+            plot_y = 180
         elif "干潮" in phase_str:
-            plot_y = 35
+            plot_y = 40
         else:
-            plot_y = 110 # 不明な場合は中間
+            plot_y = 110
+
+        # --- 4. グラフ作成 ---
+        x_wave = np.linspace(0, 24, 100)
+        y_wave = get_wave_y(x_wave)
 
         fig = go.Figure()
 
-        # --- 4. 背景の塗り分け（中央が夜） ---
+        # 背景塗り分け
         fig.add_vrect(x0=0, x1=6, fillcolor="#161b22", opacity=1, layer="below", line_width=0)
         fig.add_vrect(x0=6, x1=18, fillcolor="#06090f", opacity=1, layer="below", line_width=0)
         fig.add_vrect(x0=18, x1=24, fillcolor="#161b22", opacity=1, layer="below", line_width=0)
 
-        # 潮汐ガイド曲線
+        # 潮汐曲線
         fig.add_trace(go.Scatter(
             x=x_wave, y=y_wave,
             mode='lines',
-            line=dict(color='#00ffd0', width=1, shape='spline'),
-            fill='tozeroy',
-            fillcolor='rgba(0, 255, 208, 0.05)',
+            line=dict(color='#00ffd0', width=1.5),
+            fill='tozeroy', fillcolor='rgba(0, 255, 208, 0.05)',
             hoverinfo='skip'
         ))
 
-        # 深夜0時のセンターライン
+        # センターライン
         fig.add_vline(x=12, line=dict(color="rgba(255, 255, 255, 0.1)", width=1))
 
-        # --- 5. プロット ---
-        is_night = (6 <= centered_hour <= 18)
+        # プロット
+        is_night = (6 <= px <= 18)
         main_color = "#ffca00" if is_night else "#ff4b4b"
         
-        # 夜間の光彩
         if is_night:
-            fig.add_trace(go.Scatter(
-                x=[centered_hour], y=[plot_y],
-                mode='markers',
-                marker=dict(color=main_color, size=20, opacity=0.2),
-                hoverinfo='skip'
-            ))
+            fig.add_trace(go.Scatter(x=[px], y=[plot_y], mode='markers',
+                                     marker=dict(color=main_color, size=20, opacity=0.2), hoverinfo='skip'))
 
-        # メイン×印
         fig.add_trace(go.Scatter(
-            x=[centered_hour], y=[plot_y],
+            x=[px], y=[plot_y],
             mode='markers',
             marker=dict(color=main_color, size=11, symbol='x', line=dict(width=2, color="white")),
             name='Hit!'
@@ -274,6 +270,7 @@ def show_gallery_page(df):
                     # keyを追加して重複エラーを回避！
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{row.name}_{i}_{j}")
                 st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 
