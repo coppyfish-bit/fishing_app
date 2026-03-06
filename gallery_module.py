@@ -9,40 +9,35 @@ import re
 
 def create_mini_tide_chart(row):
     try:
-        # datetimeが文字列の場合も想定してパースを確認
         dt = row.get('datetime_parsed')
         if pd.isna(dt):
             return None
 
-        # 1. 時間軸：深夜0時を12（中央）にするシフト (12時=0, 24時=12, 12時=24)
+        # 1. 時間軸：深夜0時を12（中央）にするシフト
         raw_hour = dt.hour + dt.minute / 60.0
         centered_hour = (raw_hour - 12) % 24 
 
-        # 2. フェーズ解析（全角数字を半角にし、ステップ値を抽出）
+        # 2. フェーズ解析
         phase_str = str(row.get('潮位フェーズ', '不明')).translate(str.maketrans('０１２３４５６７８９', '0123456789'))
         nums = re.findall(r'\d+', phase_str)
         step_val = max(0, min(10, int(nums[0]))) if nums else 5
         is_up = "下げ" not in phase_str
 
-        # 3. 波の計算（解析ページと完全に同期させる cos 波）
-        # x_base: 干潮(0) -> 満潮(6.25) -> 干潮(12.5) のスケール
+        # 3. 波の計算（解析ページと同期）
         x_base = step_val * 0.625 if not is_up else 6.25 + (step_val * 0.625)
         
-        # グラフの高さを決定する関数
         def get_sync_y(x_pos):
             return 75 * np.cos(x_pos * np.pi / 6.25) + 110
 
-        # プロットの高さ（x_baseから直接算出することで波に吸着）
         plot_y = get_sync_y(x_base)
 
         # 4. グラフ作成
-        #centered_hour(時間)において波がちょうど plot_y(フェーズ高さ) を通るように描画
         x_wave = np.linspace(0, 24, 100)
         y_wave = 75 * np.cos((x_wave - centered_hour + x_base) * np.pi / 6.25) + 110
 
         fig = go.Figure()
 
-        # 背景（夜間強調：中央の18時〜6時を最も暗く）
+        # 背景（夜間強調）
         fig.add_vrect(x0=6, x1=18, fillcolor="#06090f", opacity=1, layer="below", line_width=0)
         fig.add_vrect(x0=0, x1=6, fillcolor="#161b22", opacity=1, layer="below", line_width=0)
         fig.add_vrect(x0=18, x1=24, fillcolor="#161b22", opacity=1, layer="below", line_width=0)
@@ -56,10 +51,10 @@ def create_mini_tide_chart(row):
             hoverinfo='skip'
         ))
 
-        # センターライン（深夜0時）
+        # センターライン
         fig.add_vline(x=12, line=dict(color="rgba(255, 255, 255, 0.1)", width=1))
 
-        # 5. プロット（夜間は黄色い光彩、昼間は赤い印）
+        # 5. プロット
         main_color = "#ffca00" if (6 <= centered_hour <= 18) else "#ff4b4b"
         
         if (6 <= centered_hour <= 18):
@@ -141,6 +136,10 @@ def show_gallery_page(df):
             margin-bottom: 2px;
             color: #cccccc;
         }
+        .lure-info {
+            color: #ffca00; /* ルアーを目立たせる色 */
+            font-weight: bold;
+        }
         .tide-badge {
             display: inline-block;
             background: rgba(0, 255, 208, 0.15);
@@ -152,7 +151,6 @@ def show_gallery_page(df):
             margin-top: 5px;
             border: 1px solid rgba(0, 255, 208, 0.3);
         }
-        /* グラフエリア：スマホでの誤操作を防ぐ設定 */
         .chart-container {
             background: #0e1117;
             border-radius: 0 0 20px 20px;
@@ -160,7 +158,7 @@ def show_gallery_page(df):
             box-shadow: 0 10px 25px rgba(0,0,0,0.6);
             margin-bottom: 25px;
             border-top: 1px solid rgba(255,255,255,0.05);
-            pointer-events: none; /* スマホ操作を無効化 */
+            pointer-events: none;
             user-select: none;
         }
         </style>
@@ -170,8 +168,8 @@ def show_gallery_page(df):
 
     if st.button("🔄 最新データに更新"):
         st.cache_data.clear()
-        st.success("深淵の記憶を更新した。")
-        time.sleep(1)
+        st.success("記憶を更新した。")
+        time.sleep(0.5)
         st.rerun()
     
     if df is None or df.empty:
@@ -198,12 +196,7 @@ def show_gallery_page(df):
         selected_place = col_p.selectbox("📍 FIELD", place_list)
 
         absolute_min = df_gallery['datetime_parsed'].min().date() if not df_gallery.empty else date(2024, 1, 1)
-        date_range = st.date_input(
-            "📅 DATE RANGE", 
-            value=(absolute_min, date.today()), 
-            min_value=absolute_min, 
-            max_value=date.today()
-        )
+        date_range = st.date_input("📅 DATE RANGE", value=(absolute_min, date.today()))
 
     # フィルタリング
     if selected_fish != "すべて":
@@ -236,11 +229,11 @@ def show_gallery_page(df):
                 display_dt = dt_val.strftime('%Y.%m.%d %H:%M')
                 
                 fish_info = f"{row.get('魚種', '-')} / {row.get('全長_cm', '-')}cm"
-                wind_info = f"{row.get('風向', '')}{row.get('風速', '-')}m"
-                weather_info = f"🌡️{row.get('気温', '-')}℃ / 💨{wind_info}"
-                tide_cm = f"{row.get('潮位_cm', '-')}cm"
+                # ルアー情報の取得
+                lure_info = row.get('ルアー', '-')
+                weather_info = f"🌡️{row.get('気温', '-')}℃ / 💨{row.get('風速', '-')}m"
 
-                # カード(HTML)
+                # カード(HTML) - ルアー情報を追加
                 st.markdown(f"""
                 <a href="{map_url}" target="_blank" style="text-decoration: none;">
                     <div class="fish-card">
@@ -249,14 +242,15 @@ def show_gallery_page(df):
                             <div class="fish-title">{fish_info}</div>
                             <div class="info-row">📍 {row.get('場所', '-')}</div>
                             <div class="info-row">📅 {display_dt}</div>
+                            <div class="info-row lure-info">🎣 {lure_info}</div>
                             <div class="info-row">{weather_info}</div>
-                            <div class="tide-badge">🌊 {row.get('潮位フェーズ', '-')} ({tide_cm})</div>
+                            <div class="tide-badge">🌊 {row.get('潮位フェーズ', '-')}</div>
                         </div>
                     </div>
                 </a>
                 """, unsafe_allow_html=True)
                 
-                # グラフ(Plotly)：staticPlot=True でスマホ誤操作を防止
+                # グラフ
                 st.markdown('<div class="chart-container">', unsafe_allow_html=True)
                 fig = create_mini_tide_chart(row)
                 if fig:
