@@ -2,47 +2,103 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
+import streamlit as st
+import pandas as pd
+import numpy as np
+
 def show_achievements_page(df):
     st.title("🏆 HUNTER RANK & MISSIONS")
-    st.caption("釣果データから自動的に実績を解除します。")
 
     if df is None or df.empty:
-        st.info("データがありません。まずは釣果を記録しましょう。")
+        st.info("データがありません。")
         return
 
-    # --- 1. 前処理：計算用データの準備 ---
+    # --- 1. 前処理：カラム名のクリーニング ---
     df_calc = df.copy()
-    # 文字列の日時を変換
+    # カラム名に含まれる改行や空白、不可視文字を完全に除去
+    df_calc.columns = [str(c).replace('\n', '').replace('\r', '').strip() for c in df_calc.columns]
+
+    # 必須カラムの存在チェック（デバッグ用）
+    required_cols = ['datetime', '魚種', '全長_cm', '釣り人']
+    missing = [c for c in required_cols if c not in df_calc.columns]
+    if missing:
+        st.error(f"以下の必須カラムが見つかりません: {missing}")
+        st.write("現在のカラム一覧:", list(df_calc.columns))
+        return
+
+    # 日付型への変換と計算用列の作成
     df_calc['datetime_parsed'] = pd.to_datetime(df_calc['datetime'], errors='coerce')
-    # 日付だけの列を作成（ツ抜け判定用）
+    df_calc = df_calc.dropna(subset=['datetime_parsed'])
     df_calc['date_only'] = df_calc['datetime_parsed'].dt.date
-    # 数値列の型変換（エラー防止）
+    
+    # 数値列の強制変換
     df_calc['全長_cm'] = pd.to_numeric(df_calc['全長_cm'], errors='coerce').fillna(0)
-    df_calc['風速'] = pd.to_numeric(df_calc['風速'], errors='coerce').fillna(0)
-    df_calc['気温'] = pd.to_numeric(df_calc['気温'], errors='coerce').fillna(0)
 
     # --- 2. 釣り人の選択 ---
     user_col = '釣り人'
-    if user_col in df_calc.columns:
-        # 空白セルを除去してリスト化
-        raw_user_list = df_calc[user_col].dropna().unique().tolist()
-        user_list = sorted([str(u) for u in raw_user_list if str(u).strip() != ""])
-        
-        if not user_list:
-            st.warning("「釣り人」カラムに名前が入力されていません。")
-            df_user = df_calc.copy()
-            selected_user = "ゲストハンター"
-        else:
-            selected_user = st.selectbox("👤 チャレンジャーを選択", user_list)
-            df_user = df_calc[df_calc[user_col] == selected_user].copy()
-    else:
-        st.error(f"スプレッドシートに『{user_col}』カラムが見つかりません。")
-        df_user = df_calc.copy()
-        selected_user = "Unknown"
+    raw_user_list = df_calc[user_col].dropna().unique().tolist()
+    user_list = sorted([str(u) for u in raw_user_list if str(u).strip() != ""])
 
-    if df_user.empty:
-        st.warning(f"{selected_user} さんのデータがまだありません。")
-        return
+    if not user_list:
+        selected_user = "メインハンター"
+        df_user = df_calc.copy()
+    else:
+        selected_user = st.selectbox("👤 チャレンジャーを選択", user_list)
+        df_user = df_calc[df_calc[user_col] == selected_user].copy()
+
+    # --- 3. 実績ロジック ---
+    # ラムダ式の中をより安全な記述に変更
+    missions = [
+        {"id": "suz_100", "name": "伝説の化身", "desc": "スズキ 100cmオーバー", "icon": "🌌", 
+         "cond": lambda d: any((d['魚種'].astype(str).str.contains("スズキ|シーバス", na=False)) & (d['全長_cm'] >= 100))},
+        
+        {"id": "tsunuke", "name": "ツ抜け達成", "desc": "1日で同じ魚種を10匹以上", "icon": "🔢", 
+         "cond": lambda d: any(d.groupby(['date_only', '魚種']).size() >= 10) if not d.empty else False},
+        
+        {"id": "tide", "name": "潮の支配者", "desc": "上げ・下げ・満・干 全てで釣果", "icon": "🌀", 
+         "cond": lambda d: all(any(d['潮位フェーズ'].astype(str).str.contains(p, na=False)) for p in ["上げ", "下げ", "満潮", "干潮"])},
+        
+        {"id": "lure", "name": "ルアー・マイスター", "desc": "5種類以上のルアーで釣果", "icon": "🎨", 
+         "cond": lambda d: d['ルアー'].nunique() >= 5},
+    ]
+
+    shames = [
+        {"id": "barashi", "name": "バラシの帝王", "desc": "魚種に『バラシ』が5回以上", "icon": "💸", 
+         "cond": lambda d: d['魚種'].astype(str).str.contains("バラシ", na=False).sum() >= 5},
+        
+        {"id": "sanpo", "name": "ただの散歩", "desc": "備考に『異常なし』が3回以上", "icon": "🚶", 
+         "cond": lambda d: d['備考'].astype(str).str.contains("異常なし|異常無し|ホゲ", na=False).sum() >= 3},
+    ]
+
+    # --- 4. 判定と表示 ---
+    unlocked_m = [m for m in missions if m["cond"](df_user)]
+    unlocked_s = [s for s in shames if s["cond"](df_user)]
+    
+    percent = int((len(unlocked_m) / len(missions)) * 100)
+    
+    # UIの描画（以前のコードと同様）
+    st.markdown(f"""
+        <div style="background: #0e1117; border: 3px solid #00ffd0; padding: 25px; border-radius: 20px; text-align: center;">
+            <h3 style="margin: 0; color: #00ffd0;">RANK PROGRESS: {percent}%</h3>
+            <div style="background: rgba(255,255,255,0.05); border-radius: 10px; height: 15px; width: 100%; margin-top: 15px;">
+                <div style="background: #00ffd0; width: {percent}%; height: 100%; border-radius: 10px;"></div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.write("### ✨ GLORIOUS MISSIONS")
+    cols = st.columns(2)
+    for i, m in enumerate(missions):
+        is_met = m["id"] in [x["id"] for x in unlocked_m]
+        with cols[i % 2]:
+            st.info(f"{m['icon']} {m['name']}\n\n{m['desc']}") if is_met else st.write(f"🔒 {m['name']}")
+
+    st.write("### 💀 HALL OF SHAME")
+    cols_s = st.columns(2)
+    for i, s in enumerate(shames):
+        is_met = s["id"] in [x["id"] for x in unlocked_s]
+        with cols_s[i % 2]:
+            st.warning(f"{s['icon']} {s['name']}\n\n{s['desc']}") if is_met else st.write(f"🔒 {s['name']}")
 
     # --- 3. 実績ロジックの定義 ---
     
@@ -140,3 +196,4 @@ def show_card(ach, is_met, color, is_shame=False):
             </div>
         </div>
     """, unsafe_allow_html=True)
+
