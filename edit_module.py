@@ -85,7 +85,7 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
         except Exception as e:
             st.error(f"再計算エラー: {e}")
 
-    # --- 入力フォーム ---
+# --- 入力フォーム ---
     t_v = st.session_state.get(temp_data_key, {})
     has_new = temp_data_key in st.session_state
 
@@ -96,17 +96,38 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
 
     ver = st.session_state[form_ver_key]
     with st.form(key=f"edit_form_final_{idx}_{ver}"):
+        # --- 1列目: 基本情報 ---
         c1, c2, c3 = st.columns([2, 1, 2])
         new_fish = c1.text_input("🐟 魚種", value=str(df.at[idx, '魚種']))
         new_len = c2.number_input("📏 全長(cm)", value=float(get_v(None, '全長_cm', 0.0)))
         new_place = c3.text_input("📍 場所", value=str(df.at[idx, '場所']))
 
+        # --- 釣り人の編集エリアを追加 ---
+        st.markdown("---")
+        ca, cb = st.columns(2)
+        
+        # 現在保存されている名前を取得
+        current_angler = str(df.at[idx, '釣り人']) if '釣り人' in df.columns else "長元"
+        
+        # 選択肢のリスト（現在の名前がリストにない場合も考慮）
+        angler_options = ["長元", "川口", "山川"]
+        if current_angler not in angler_options:
+            angler_options.append(current_angler)
+        
+        # セレクトボックスで選択
+        selected_angler = ca.selectbox("👤 釣り人を選択", options=angler_options, index=angler_options.index(current_angler))
+        # 自由入力（もしリストにない名前に変えたい場合用）
+        new_angler = cb.text_input("👤 釣り人名を手入力", value=selected_angler)
+        st.markdown("---")
+
+        # --- 2列目: 気象情報 ---
         c_w1, c_w2, c_w3, c_w4 = st.columns(4)
         new_temp = c_w1.number_input("🌡️ 気温", value=float(get_v("気温", "気温", 0.0)))
         new_wind_s = c_w2.number_input("💨 風速", value=float(get_v("風速", "風速", 0.0)))
         new_wind_d = c_w3.text_input("🧭 風向", value=str(get_v("風向", "風向", "不明")))
         new_rain = c_w4.number_input("☔ 降水", value=float(get_v("降水量", "降水量", 0.0)))
 
+        # --- 3列目: 潮汐情報 ---
         c_t1, c_t2, c_t3 = st.columns(3)
         new_tide_cm = c_t1.number_input("🌊 潮位cm", value=int(get_v("潮位_cm", "潮位_cm", 0)))
         new_tide_name = c_t2.text_input("🌊 潮名", value=str(get_v("潮名", "潮名", "不明")))
@@ -124,6 +145,7 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
             latest_df = conn.read(spreadsheet=url, ttl="0s")
             updates = {
                 '魚種': new_fish, '全長_cm': new_len, '場所': new_place,
+                '釣り人': new_angler,  # ← ここを追加
                 '気温': new_temp, '風速': new_wind_s, '風向': new_wind_d, '降水量': new_rain,
                 '潮位_cm': new_tide_cm, '潮名': new_tide_name, '月齢': new_moon_age,
                 '潮位フェーズ': new_phase, 'ルアー': new_lure, '備考': new_memo
@@ -146,3 +168,4 @@ def render_edit_form(df, idx, conn, url, weather_func, station_func, tide_func, 
                 st.rerun()
             else:
                 st.warning("削除する場合はチェックを入れてください。")
+
