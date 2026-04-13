@@ -235,7 +235,8 @@ def show_gallery_page(df):
                 tide_cm_info = f"📏 潮位: {row.get('潮位_cm', '-')} cm"
 
                 # カード(HTML) - ルアー情報を追加
-                 st.markdown(f"""
+               # --- カード(HTML) の修正 ---
+                st.markdown(f"""
                 <a href="{map_url}" target="_blank" style="text-decoration: none;">
                     <div class="fish-card">
                         <img src="{img_url}" class="fish-img">
