@@ -232,6 +232,7 @@ def show_gallery_page(df):
                 # ルアー情報の取得
                 lure_info = row.get('ルアー', '-')
                 weather_info = f"🌡️{row.get('気温', '-')}℃ / 💨{row.get('風速', '-')}m"
+                tide_cm_info = f"📏 潮位: {row.get('潮位_cm', '-')} cm"
 
                 # カード(HTML) - ルアー情報を追加
                 st.markdown(f"""
@@ -244,7 +245,7 @@ def show_gallery_page(df):
                             <div class="info-row">📅 {display_dt}</div>
                             <div class="info-row lure-info">🎣 {lure_info}</div>
                             <div class="info-row">{weather_info}</div>
-                            <div class="tide-badge">🌊 {row.get('潮位フェーズ', '-')}</div>
+                            <div class="info-row">{tide_cm_info}</div> <div class="tide-badge">🌊 {row.get('潮位フェーズ', '-')}</div>
                         </div>
                     </div>
                 </a>
