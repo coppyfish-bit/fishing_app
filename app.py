@@ -374,8 +374,8 @@ def main():
     df, df_master = get_all_data(conn, url)
     
     # --- タブ設定 ---
-    tabs = st.tabs(["記録", "編集", "ギャラリー", "分析", "統計", "戦略", "マッチング", "デーモン佐藤","🏆 実績解除"])
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = tabs
+    tabs = st.tabs(["記録", "編集", "ギャラリー", "分析", "統計", "戦略", "マッチング", "デーモン佐藤"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, = tabs
     with tab1:
         # --- ロゴとタイトルのデザイン ---
         st.markdown(f"""
@@ -668,9 +668,7 @@ def main():
     with tab8:  # ここが tabs8 になっていたりしませんか？
         import ai_module
         ai_module.show_ai_page(conn, url, df) # 前回の修正で df を追加した形
-        
-    with tab9:
-        show_achievements_page(df) # ← 半角スペース4つ分、右にずらす
+
             
 # --- ファイルの最後（一番下）にこれを追記 ---
 if __name__ == "__main__":
