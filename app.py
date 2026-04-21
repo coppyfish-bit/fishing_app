@@ -9,94 +9,75 @@ from datetime import datetime
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1x7pDDkRpf4EO2x-T-T68vqoVc3i0WUXz07kG0sW3G6k/edit"
 
 def main():
-    st.set_page_config(page_title="Tide Force Parser", layout="wide")
-    st.title("🌊 潮汐データ解析 (最終デバッグ版)")
+    st.set_page_config(page_title="Tide Direct Reader", layout="centered")
+    st.title("🌊 スプレッドシート直接解析 (A列結合型)")
 
+    # GSheets接続
     conn = st.connection("gsheets", type=GSheetsConnection)
 
+    # 地点（タブ名）と日時の選択
     target_point = st.selectbox("地点コード", ["HS", "KUMAMOTO"])
     target_dt = st.datetime_input("釣行日時", datetime.now())
 
-    if st.button("📡 データを強制解析"):
+    if st.button("📡 スプレッドシートを直接読み込む"):
         try:
-            # 1. スプレッドシート読み込み (キャッシュを完全に切り、全行読む)
+            # 1. A列の全データを取得（ヘッダーなし）
             df = conn.read(spreadsheet=SPREADSHEET_URL, worksheet=target_point, ttl=0, header=None)
             
-            if df.empty:
-                st.error("シートが空です。データが正しく貼り付けられているか確認してください。")
-                return
+            # 2. A列の全行を一つの文字列に合体させる
+            # 画像のように行が分かれている場合、これをしないとJSONとして成立しません
+            full_text = "".join(df[0].astype(str).tolist())
+            
+            # 3. 日付で対象のブロックを探す
+            date_str = target_dt.strftime('%Y-%m-%d')
+            
+            # JSONの「塊」を抽出するための正規表現
+            # {"date":"2026-01-01" ... } のようなパターンを探します
+            # ※ A列に複数の日のデータが連続して入っている場合に対応
+            pattern = r'\{[^{]*"date"\s*:\s*"' + date_str + r'"[^}]*\}'
+            match = re.search(pattern, full_text)
 
-            # 2. 検索用の日付パターンを複数用意
-            d = target_dt
-            patterns = [
-                d.strftime('%Y-%m-%d'),  # 2026-01-01
-                d.strftime('%Y/%m/%d'),  # 2026/01/01
-                f'"{d.year}-{d.month:02d}-{d.day:02d}"', # "2026-01-01"
-                f'"{d.year}/{d.month:02d}/{d.day:02d}"'  # "2026/01/01"
-            ]
-            
-            found_row_text = None
-            for index, row in df.iterrows():
-                cell_text = str(row[0])
-                # いずれかの日付パターンが含まれているか
-                if any(p in cell_text for p in patterns):
-                    found_row_text = cell_text
-                    break
-            
-            if not found_row_text:
-                st.warning(f"シート '{target_point}' 内に該当する日付のデータが見つかりません。")
-                st.info("【確認用】シートの最初の1行の内容を表示します:")
-                st.code(df.iloc[0, 0][:500] + "...") # 先頭500文字を表示
-                return
-
-            # 3. JSON部分を無理やり切り出す
-            # 最初の '{' から 最後の '}' までを抽出
-            start_idx = found_row_text.find('{')
-            end_idx = found_row_text.rfind('}')
-            
-            if start_idx == -1 or end_idx == -1:
-                st.error("JSONの波括弧 { } が見つかりませんでした。")
-                return
-            
-            json_str = found_row_text[start_idx:end_idx+1]
-
-            # 4. JSONの超強力補正 (JavaScript風の未クォートキーに対応)
-            # 全角スペースの削除
-            json_str = json_str.replace('　', ' ')
-            # シングルクォートをダブルクォートへ
-            json_str = json_str.replace("'", '"')
-            # キー名（例 data:）をダブルクォートで囲む
-            json_str = re.sub(r'([{,])\s*(\w+)\s*:', r'\1"\2":', json_str)
-            
-            # 5. パース実行
-            data_obj = json.loads(json_str)
-            
-            # {data: [{...}]} 構造の処理
-            if "data" in data_obj and isinstance(data_obj["data"], list):
-                day_data = data_obj["data"][0]
+            if not match:
+                # 正規表現でダメな場合、簡易的な切り出しを試行
+                search_term = f'"date":"{date_str}"'
+                if search_term in full_text:
+                    start_idx = full_text.find('{', full_text.rfind('{', 0, full_text.find(search_term)))
+                    end_idx = full_text.find('}', start_idx) + 1
+                    json_str = full_text[start_idx:end_idx]
+                else:
+                    st.warning(f"{date_str} のデータが見つかりません。")
+                    return
             else:
-                day_data = data_obj
+                json_str = match.group()
 
-            # 6. 潮位の取得
+            # 4. JSONの形式補正（クォートなしキーへの対応）
+            # キー名をダブルクォートで囲む
+            json_str = re.sub(r'(\w+):', r'"\1":', json_str).replace("'", '"')
+            
+            # 5. パースして潮位を取り出す
+            day_data = json.loads(json_str)
+            
             hour = target_dt.hour
             tide_cm = day_data['hourly'][hour]
             
-            st.success(f"✅ 解析成功: {target_dt.strftime('%Y-%m-%d %H時')}")
-            
             # 結果表示
-            col1, col2 = st.columns(2)
-            col1.metric("推定潮位", f"{tide_cm} cm")
+            st.success(f"✅ {date_str} のデータを読み込みました")
             
-            # フェーズ（上げ・下げ）の簡易計算
-            next_hour_tide = day_data['hourly'][(hour + 1) % 24]
-            phase = "上げ潮" if next_hour_tide > tide_cm else "下げ潮"
-            col2.metric("潮の状態", phase)
+            c1, c2 = st.columns(2)
+            c1.metric("推定潮位", f"{tide_cm} cm")
+            
+            # 簡易フェーズ判定（次の時間との比較）
+            next_hour = (hour + 1) % 24
+            next_tide = day_data['hourly'][next_hour]
+            phase = "上げ潮" if next_tide > tide_cm else "下げ潮"
+            c2.metric("潮の状態", phase)
+
+            with st.expander("抽出されたJSONを確認"):
+                st.code(json.dumps(day_data, indent=2, ensure_ascii=False))
 
         except Exception as e:
-            st.error(f"解析に失敗しました: {e}")
-            if 'json_str' in locals():
-                st.subheader("解析しようとしたテキスト:")
-                st.code(json_str[:1000])
+            st.error(f"解析エラー: {e}")
+            st.info("スプレッドシートの共有設定と、データの形式を再確認してください。")
 
 if __name__ == "__main__":
     main()
