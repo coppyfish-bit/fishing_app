@@ -646,10 +646,7 @@ def main():
         )
     
     with tab3:
-        # 保存時にキャッシュをクリアする設定にしていれば、ここは ttl="10m" のままでも
-        # 保存直後は最新が表示されます。念を入れるなら今のまま ttl="0s" でもOKです。
-        df_for_gallery = conn.read(spreadsheet=url, ttl="0s")
-       show_gallery_page(df)
+        show_gallery_page(df)
     
     with tab4:
         show_analysis_page(df)
