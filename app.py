@@ -1,77 +1,86 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+import json
 from datetime import datetime
 
 # --- 設定 ---
-# 共有設定済みのスプレッドシートURL
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1x7pDDkRpf4EO2x-T-T68vqoVc3i0WUXz07kG0sW3G6k/edit"
 
 def main():
-    st.set_page_config(page_title="Tide Read Test", layout="centered")
-    st.title("🔍 潮汐データ読み取りテスト")
+    st.set_page_config(page_title="Tide JSON Parser", layout="centered")
+    st.title("🌊 潮汐データ解析テスト (JSONベタ貼り対応)")
 
-    # GSheets接続
     conn = st.connection("gsheets", type=GSheetsConnection)
 
-    # 地点（タブ名）を選択
-    target_point = st.selectbox("読み込む地点（タブ名）", ["HS", "KUMAMOTO"])
-    target_dt = st.datetime_input("シミュレート日時", datetime.now())
+    # 地点と日時の選択
+    target_point = st.selectbox("地点コード", ["HS", "KUMAMOTO"])
+    target_dt = st.datetime_input("釣行日時", datetime.now())
 
-    if st.button("📡 データを読み込んで解析"):
+    if st.button("📡 スプレッドシートから取得・解析"):
         try:
-            # 1. 指定されたタブを読み込み
-            # ttl=0 でキャッシュを無効化し、常に最新のシートを読みます
-            df = conn.read(spreadsheet=SPREADSHEET_URL, worksheet=target_point, ttl=0)
+            # 1. スプレッドシート読み込み（ヘッダーなし前提で列番号指定）
+            df = conn.read(spreadsheet=SPREADSHEET_URL, worksheet=target_point, ttl=0, header=None)
             
-            # 2. 列名の不一致を強制解決 (1行目を「日付」「時刻」「潮位」とみなす)
-            # 4列目以降に「タイプ」などがある場合も考慮
-            new_columns = ["日付", "時刻", "潮位"]
-            remaining_cols = [f"col_{i}" for i in range(len(df.columns) - 3)]
-            df.columns = new_columns + (["タイプ"] if len(df.columns) > 3 else remaining_cols)
-            
-            # 3. データのクレンジング
-            # 日付と時刻を文字列として正規化
-            df['日付'] = df['日付'].astype(str).str.strip()
-            df['時刻'] = df['時刻'].astype(str).str.strip()
-            
-            # 4. 日付でフィルタリング
+            # A列(0):日付, B列(1):地点, C列(2):JSONテキスト と仮定
             date_str = target_dt.strftime('%Y-%m-%d')
-            # 2026-01-01 でも 2026/01/01 でも引っかかるように調整
-            date_query = date_str.replace('-', '[/-]') 
-            df_day = df[df['日付'].str.contains(date_query, regex=True)].copy()
+            
+            # 2. 該当日付の行を探す
+            row = df[df[0].astype(str).str.contains(date_str)]
+            
+            if row.empty:
+                st.warning(f"{date_str} のデータが見つかりません。")
+                return
 
-            if df_day.empty:
-                st.warning(f"シート '{target_point}' 内に {date_str} のデータが見つかりませんでした。")
-                st.write("シート内の日付の例:", df['日付'].unique()[:3])
-            else:
-                # 5. 最も近い時刻のデータを特定
-                # 時刻を計算用に変換
-                df_day['time_obj'] = pd.to_datetime(df_day['時刻'], format='%H:%M', errors='coerce')
-                target_time_obj = datetime.strptime(target_dt.strftime('%H:%M'), '%H:%M')
-                
-                # 無効な時刻行を除外
-                df_day = df_day.dropna(subset=['time_obj'])
-                
-                # 最も近い行を取得
-                idx = (df_day['time_obj'] - target_time_obj).abs().idxmin()
-                res = df_day.loc[idx]
+            # 3. C列(2)に入っているJSON文字列を解析
+            raw_json_str = row.iloc[0, 2] # 3列目を取得
+            # シングルクォートをダブルクォートに直すなどの整形が必要な場合があるため
+            json_str = raw_json_str.replace("'", '"') 
+            day_data = json.loads(json_str)
+            
+            # --- 潮汐計算 ---
+            target_hour = target_dt.hour
+            target_min = target_dt.minute
+            current_time_val = target_hour + (target_min / 60.0)
 
-                # 6. 結果表示
-                st.success(f"✅ {target_point} のデータ読み取りに成功")
-                
-                col1, col2, col3 = st.columns(3)
-                col1.metric("取得潮位", f"{res['潮位']} cm")
-                col2.metric("参照時刻", res['時刻'])
-                col3.metric("フェーズ", res.get('タイプ', 'データなし'))
+            # 1. 現在の潮位（hourlyデータから取得）
+            tide_cm = day_data['hourly'][target_hour]
 
-                st.write("---")
-                st.write("▼ 読み込んだ当日の全データ（確認用）")
-                st.dataframe(df_day[['日付', '時刻', '潮位', 'タイプ']])
+            # 2. フェーズ判定（eventsデータから満干潮を探す）
+            events = day_data['events']
+            # 時刻を数値化して比較
+            parsed_events = []
+            for ev in events:
+                h, m = map(int, ev['time'].split(':'))
+                parsed_events.append({"time": h + (m/60.0), "type": ev['type'], "cm": ev['cm']})
+            
+            # 前後のイベントを探す
+            past_events = [e for e in parsed_events if e['time'] <= current_time_val]
+            future_events = [e for e in parsed_events if e['time'] > current_time_val]
+            
+            phase = "不明"
+            if past_events and future_events:
+                last_ev = past_events[-1]
+                next_ev = future_events[0]
+                if last_ev['type'] == 'low' and next_ev['type'] == 'high':
+                    phase = "上げ潮"
+                elif last_ev['type'] == 'high' and next_ev['type'] == 'low':
+                    phase = "下げ潮"
+            
+            # --- 結果表示 ---
+            st.success("✅ データの解析に成功しました")
+            
+            c1, c2 = st.columns(2)
+            c1.metric("推定潮位", f"{tide_cm} cm")
+            c2.metric("潮汐状態", phase)
+            
+            with st.expander("詳細なイベント情報"):
+                st.write(f"直前のイベント: {past_events[-1] if past_events else 'なし'}")
+                st.write(f"次回のイベント: {future_events[0] if future_events else 'なし'}")
 
         except Exception as e:
-            st.error(f"エラーが発生しました: {e}")
-            st.info("スプレッドシートの1行目が '日付', '時刻', '潮位' の順になっているか確認してください。")
+            st.error(f"解析エラー: {e}")
+            st.info("スプレッドシートのC列に正しいJSON形式でデータが入っているか確認してください。")
 
 if __name__ == "__main__":
     main()
