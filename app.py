@@ -9,97 +9,94 @@ from datetime import datetime
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1x7pDDkRpf4EO2x-T-T68vqoVc3i0WUXz07kG0sW3G6k/edit"
 
 def main():
-    st.set_page_config(page_title="Tide Parser Pro", layout="centered")
-    st.title("🌊 潮汐データ解析 (A列全探索版)")
+    st.set_page_config(page_title="Tide Force Parser", layout="wide")
+    st.title("🌊 潮汐データ解析 (最終デバッグ版)")
 
     conn = st.connection("gsheets", type=GSheetsConnection)
 
-    # 地点と日時の選択
     target_point = st.selectbox("地点コード", ["HS", "KUMAMOTO"])
     target_dt = st.datetime_input("釣行日時", datetime.now())
 
-    if st.button("📡 解析を実行"):
+    if st.button("📡 データを強制解析"):
         try:
-            # 1. スプレッドシート読み込み
-            # header=Noneを使い、全ての行をフラットに読み込みます
+            # 1. スプレッドシート読み込み (キャッシュを完全に切り、全行読む)
             df = conn.read(spreadsheet=SPREADSHEET_URL, worksheet=target_point, ttl=0, header=None)
             
-            # 2. 検索する日付
-            date_str = target_dt.strftime('%Y-%m-%d')
-            
-            # 3. A列(0番目)を1行ずつループして、日付とJSONの両方を含む行を探す
-            found_data = None
-            for index, row in df.iterrows():
-                cell_value = str(row[0])
-                # 日付が含まれているかチェック
-                if date_str in cell_value:
-                    # 波括弧が含まれているかチェック
-                    if '{' in cell_value:
-                        found_data = cell_value
-                        break
-            
-            if not found_data:
-                st.warning(f"シート '{target_point}' 内に {date_str} と JSON を含む行が見つかりませんでした。")
-                st.info("シートの先頭数行の生データ:")
-                st.write(df.head(5))
+            if df.empty:
+                st.error("シートが空です。データが正しく貼り付けられているか確認してください。")
                 return
 
-            # 4. JSON部分の切り出し
-            json_start_idx = found_data.find('{')
-            json_str_raw = found_data[json_start_idx:]
+            # 2. 検索用の日付パターンを複数用意
+            d = target_dt
+            patterns = [
+                d.strftime('%Y-%m-%d'),  # 2026-01-01
+                d.strftime('%Y/%m/%d'),  # 2026/01/01
+                f'"{d.year}-{d.month:02d}-{d.day:02d}"', # "2026-01-01"
+                f'"{d.year}/{d.month:02d}/{d.day:02d}"'  # "2026/01/01"
+            ]
             
-            # 5. 特殊なJSON形式の補正
-            # キーをダブルクォートで囲み、シングルクォートを置換
-            # 提示された形式に合わせて re.sub を調整
-            formatted_json = json_str_raw.replace("'", '"')
-            # キー名（英字:）を "キー名": に変換
-            formatted_json = re.sub(r'(\s*)(\w+):', r'\1"\2":', formatted_json)
+            found_row_text = None
+            for index, row in df.iterrows():
+                cell_text = str(row[0])
+                # いずれかの日付パターンが含まれているか
+                if any(p in cell_text for p in patterns):
+                    found_row_text = cell_text
+                    break
             
-            # 最後のカンマなど、JSONとして不正な文字があれば削るための処理
-            formatted_json = formatted_json.strip()
-            if formatted_json.endswith('}'): # 念のため
-                pass 
+            if not found_row_text:
+                st.warning(f"シート '{target_point}' 内に該当する日付のデータが見つかりません。")
+                st.info("【確認用】シートの最初の1行の内容を表示します:")
+                st.code(df.iloc[0, 0][:500] + "...") # 先頭500文字を表示
+                return
 
-            day_data = json.loads(formatted_json)
+            # 3. JSON部分を無理やり切り出す
+            # 最初の '{' から 最後の '}' までを抽出
+            start_idx = found_row_text.find('{')
+            end_idx = found_row_text.rfind('}')
             
-            # トップレベルの構造が {data: [...]} かチェック
-            if "data" in day_data and isinstance(day_data["data"], list):
-                day_data = day_data["data"][0]
-
-            # --- 6. 潮汐計算 ---
-            target_hour = target_dt.hour
-            tide_cm = day_data['hourly'][target_hour]
-
-            # フェーズ判定
-            events = day_data['events']
-            current_time_val = target_hour + (target_dt.minute / 60.0)
+            if start_idx == -1 or end_idx == -1:
+                st.error("JSONの波括弧 { } が見つかりませんでした。")
+                return
             
-            parsed_events = []
-            for ev in events:
-                time_part = ev['time'].replace(' ', '')
-                h, m = map(int, time_part.split(':'))
-                parsed_events.append({"time": h + (m/60.0), "type": ev['type']})
-            
-            past = [e for e in parsed_events if e['time'] <= current_time_val]
-            future = [e for e in parsed_events if e['time'] > current_time_val]
-            
-            phase = "判定中"
-            if past and future:
-                if past[-1]['type'] == 'low': phase = "上げ潮"
-                else: phase = "下げ潮"
+            json_str = found_row_text[start_idx:end_idx+1]
 
-            # --- 7. 結果表示 ---
-            st.success(f"✅ {date_str} のデータを解析しました")
-            c1, c2 = st.columns(2)
-            c1.metric("推定潮位", f"{tide_cm} cm")
-            c2.metric("潮汐状態", phase)
+            # 4. JSONの超強力補正 (JavaScript風の未クォートキーに対応)
+            # 全角スペースの削除
+            json_str = json_str.replace('　', ' ')
+            # シングルクォートをダブルクォートへ
+            json_str = json_str.replace("'", '"')
+            # キー名（例 data:）をダブルクォートで囲む
+            json_str = re.sub(r'([{,])\s*(\w+)\s*:', r'\1"\2":', json_str)
+            
+            # 5. パース実行
+            data_obj = json.loads(json_str)
+            
+            # {data: [{...}]} 構造の処理
+            if "data" in data_obj and isinstance(data_obj["data"], list):
+                day_data = data_obj["data"][0]
+            else:
+                day_data = data_obj
 
-        except json.JSONDecodeError as e:
-            st.error(f"JSON形式が正しくありません: {e}")
-            st.text("整形後のデータ:")
-            st.code(formatted_json)
+            # 6. 潮位の取得
+            hour = target_dt.hour
+            tide_cm = day_data['hourly'][hour]
+            
+            st.success(f"✅ 解析成功: {target_dt.strftime('%Y-%m-%d %H時')}")
+            
+            # 結果表示
+            col1, col2 = st.columns(2)
+            col1.metric("推定潮位", f"{tide_cm} cm")
+            
+            # フェーズ（上げ・下げ）の簡易計算
+            next_hour_tide = day_data['hourly'][(hour + 1) % 24]
+            phase = "上げ潮" if next_hour_tide > tide_cm else "下げ潮"
+            col2.metric("潮の状態", phase)
+
         except Exception as e:
-            st.error(f"エラー: {e}")
+            st.error(f"解析に失敗しました: {e}")
+            if 'json_str' in locals():
+                st.subheader("解析しようとしたテキスト:")
+                st.code(json_str[:1000])
 
 if __name__ == "__main__":
     main()
