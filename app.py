@@ -1,119 +1,105 @@
 import streamlit as st
-import requests
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime, timedelta
-import traceback
 
 # --- 設定 ---
-SPREADSHEET_URL = st.secrets.get("private_gsheets_url", "") # 自身のURLに書き換えてください
+# スプレッドシートのURL（自身のものに書き換えてください）
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1x7pDDkRpf4EO2x-T-T68vqoVc3i0WUXz07kG0sW3G6k/edit"
 
-def get_tide_details(dt, station_code="HS"):
+# 地点コードと座標の対応表（ここに全国の地点を追加していきます）
+# lat/lon はおおよその位置でOKです。現在地から一番近い地点が選ばれます。
+LOCATIONS = {
+    "HS": {"name": "本渡瀬戸", "lat": 32.45, "lon": 130.19},
+    "KUMAMOTO": {"name": "熊本港", "lat": 32.76, "lon": 130.59},
+    # "OITA": {"name": "大分港", "lat": 33.26, "lon": 131.67}, # 例
+}
+
+def get_nearest_point(lat, lon):
     """
-    GitHubの HS.json から潮汐データを取得し、全項目を計算する
+    現在地（緯度・経度）から最も近い地点コードを返す
     """
-    d = dt.date()
-    # 2026年フォルダの HS.json を参照
-    url = f"https://raw.githubusercontent.com/coppyfish-bit/fishing_app/main/data/{d.year}/HS.json"
+    if lat is None or lon is None:
+        return "HS" # 位置情報が取れない場合のデフォルト
     
-    try:
-        response = requests.get(url, timeout=5)
-        response.raise_for_status()
-        data = response.json()
-        
-        # 時刻の照合
-        t_str = dt.strftime('%H:%M')
-        times = sorted(data.keys())
-        closest_t = min(times, key=lambda x: abs(datetime.strptime(x, '%H:%M') - datetime.strptime(t_str, '%H:%M')))
-        tide_cm = float(data[closest_t])
-        
-        # --- 潮汐解析ロジック ---
-        # 簡易的に前後12時間の極値（山・谷）を計算するロジック（実際はループで判定）
-        # ここでは計算結果の辞書構造を正しく作ることが優先
-        
-        res = {
-            "tide_cm": round(tide_cm, 1),
-            "tide_name": "中潮",       # 本来は月齢から計算
-            "moon_age": 12.5,          # 本来は日付から計算
-            "tide_phase": "下げ7分",    # 潮位の変化から判定
-            "next_h_min": 140,         # 次の満潮まで(分)
-            "next_l_min": 320,         # 次の干潮まで(分)
-            "p_high_t": "09:45",       # 直前の満潮時刻
-            "p_low_t": "03:20"         # 直前の干潮時刻
-        }
-        return res
-
-    except Exception as e:
-        st.error(f"潮汐取得エラー: {e}")
-        return None
+    nearest_code = min(
+        LOCATIONS.keys(),
+        key=lambda k: (LOCATIONS[k]["lat"] - lat)**2 + (LOCATIONS[k]["lon"] - lon)**2
+    )
+    return nearest_code
 
 def main():
-    st.set_page_config(page_title="Fishing App - Tide Test", layout="wide")
-    st.title("🌊 潮汐データ取得システム (HS.json版)")
+    st.set_page_config(page_title="Fishing App - National Tide", layout="wide")
+    st.title("🌊 全国対応・潮汐自動取得システム")
 
-    # 1. セッション状態の初期化
-    if 'tide_cm' not in st.session_state:
-        st.session_state.tide_cm = 0.0
-    if 'tide_phase' not in st.session_state:
-        st.session_state.tide_phase = "-"
+    # GSheets接続設定
+    conn = st.connection("gsheets", type=GSheetsConnection)
 
-    # 2. メイン操作エリア
-    st.info("ボタンを押すと GitHub の `data/2026/HS.json` を読み込みます。")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        target_dt = st.datetime_input("取得対象日時", datetime.now())
-        if st.button("🔴 潮汐情報を取得"):
-            with st.spinner("取得中..."):
-                tide_info = get_tide_details(target_dt, "HS")
-                
-                if tide_info:
-                    st.success("取得成功！")
-                    # session_state を一気に更新
-                    st.session_state.tide_cm = tide_info["tide_cm"]
-                    st.session_state.tide_name = tide_info["tide_name"]
-                    st.session_state.tide_phase = tide_info["tide_phase"]
-                    st.session_state.moon_age = tide_info["moon_age"]
-                    st.session_state.next_high_m = tide_info["next_h_min"]
-                    st.session_state.next_low_m = tide_info["next_l_min"]
-                    st.session_state.prev_high_t = tide_info["p_high_t"]
-                    st.session_state.prev_low_t = tide_info["p_low_t"]
-                else:
-                    st.error("データの取得に失敗しました。URLを確認してください。")
+    # 1. 位置情報と日時の設定
+    # ※実際にはGPS連携ライブラリを使いますが、ここでは手入力・シミュレート用にします
+    col_input1, col_input2 = st.columns(2)
+    with col_input1:
+        st.subheader("📍 釣行地点の設定")
+        # 簡易的な位置情報シミュレーター
+        lat = st.number_input("現在地の緯度", value=32.45, format="%.5f")
+        lon = st.number_input("現在地の経度", value=130.19, format="%.5f")
+        
+        target_point = get_nearest_point(lat, lon)
+        st.success(f"判定された地点: **{LOCATIONS[target_point]['name']} ({target_point})**")
 
-    with col2:
-        st.write("### 📋 取得済みデータ一覧")
-        # 取得した値を表示
-        data_to_show = {
-            "項目": ["潮位(cm)", "潮位フェーズ", "次の満潮まで(分)", "次の干潮まで(分)", "直前の満潮時刻", "直前の干潮時刻"],
-            "現在の値": [
-                st.session_state.get('tide_cm', '-'),
-                st.session_state.get('tide_phase', '-'),
-                st.session_state.get('next_high_m', '-'),
-                st.session_state.get('next_low_m', '-'),
-                st.session_state.get('prev_high_t', '-'),
-                st.session_state.get('prev_low_t', '-')
-            ]
-        }
-        st.table(pd.DataFrame(data_to_show))
+    with col_input2:
+        st.subheader("📅 日時の設定")
+        target_dt = st.datetime_input("釣行日時", datetime.now())
 
     st.divider()
-    
-    # 3. 保存エリア（スプレッドシート連携用）
-    st.subheader("💾 スプレッドシートへの保存確認")
-    if st.button("この内容で保存（シミュレート）"):
-        # 実際に保存する際のデータ構造
-        save_data = {
-            "日付": target_dt.strftime('%Y-%m-%d %H:%M'),
-            "潮位_cm": st.session_state.tide_cm,
-            "潮位フェーズ": st.session_state.tide_phase,
-            "次の満潮まで_分": st.session_state.get('next_high_m'),
-            "次の干潮まで_分": st.session_state.get('next_low_m'),
-            "直前の満潮_時刻": st.session_state.get('prev_high_t'),
-            "直前の干潮_時刻": st.session_state.get('prev_low_t')
-        }
-        st.json(save_data)
-        st.info("※ここに `conn.create` を入れることでスプレッドシートに書き込まれます。")
+
+    # 2. 潮汐取得ボタン
+    if st.button("🚀 この地点の潮汐を取得"):
+        try:
+            # 指定された地点コード（タブ名）のシートを読み込む
+            df = conn.read(spreadsheet=SPREADSHEET_URL, worksheet=target_point)
+            
+            # 日付でフィルタリング
+            date_str = target_dt.strftime('%Y-%m-%d')
+            df_day = df[df['日付'] == date_str].copy()
+
+            if df_day.empty:
+                st.error(f"指定された日付 ({date_str}) のデータが '{target_point}' シートにありません。")
+            else:
+                # 時刻の検索
+                target_time_str = target_dt.strftime('%H:%M')
+                df_day['time_dt'] = pd.to_datetime(df_day['時刻'], format='%H:%M')
+                target_time_dt = datetime.strptime(target_time_str, '%H:%M')
+                
+                # 最も近い時刻の行を特定
+                idx = (df_day['time_dt'] - target_time_dt).abs().idxmin()
+                res = df_day.loc[idx]
+
+                # --- 潮汐解析ロジック（簡易版） ---
+                # 前後の「タイプ」列を見て、上げ・下げや満干潮時刻を特定
+                events = df_day[df_day['タイプ'].isin(['high', 'low'])].copy()
+                
+                # 画面表示
+                st.subheader(f"📊 {LOCATIONS[target_point]['name']} の潮汐情報")
+                
+                res_cols = st.columns(4)
+                res_cols[0].metric("現在の潮位", f"{res['潮位']} cm")
+                res_cols[1].metric("時刻", target_time_str)
+                
+                # 5項目の表示
+                st.table(pd.DataFrame({
+                    "項目": ["潮位", "フェーズ", "地点コード", "参照時刻"],
+                    "値": [f"{res['潮位']}cm", res.get('タイプ', '-'), target_point, res['時刻']]
+                }))
+
+                # セッションへの保存
+                st.session_state.tide_cm = res['潮位']
+                st.session_state.point_code = target_point
+                st.info("📌 データをセッションに格納しました。そのまま記録保存が可能です。")
+
+        except Exception as e:
+            st.error(f"読み込みエラー: {e}")
+            st.info("スプレッドシートのタブ名が地点コード（HSなど）と完全に一致しているか確認してください。")
 
 if __name__ == "__main__":
     main()
