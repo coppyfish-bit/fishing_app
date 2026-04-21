@@ -177,7 +177,7 @@ def show_gallery_page(df):
         return
 
     df_gallery = df.copy()
-
+    df.columns = [str(c).replace('\n', '').replace('\r', '').strip() for c in df.columns]
     # --- 2. 前処理 ---
     def clean_datetime_str(x):
         if pd.isna(x): return x
