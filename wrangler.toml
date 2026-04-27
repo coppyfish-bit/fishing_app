@@ -1,0 +1,7 @@
+name = "fishing-app"
+compatibility_date = "2026-04-27"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "d1-template-database" # あなたのD1データベース名
+database_id = "a65c6a0a-1955-4330-99bf-c7355f11d75b" # D1のOverviewページにあるID
